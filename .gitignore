@@ -1,0 +1,10 @@
+*.pyc
+pypilot.egg-info
+build
+dist
+hat/ugfx/ugfx.py
+hat/ugfx/ugfx_wrap.cpp
+deps
+*.mo
+arduino_secrets.h
+.idea/
