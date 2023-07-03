@@ -174,7 +174,6 @@ void read_debug(AutoPilot& autoPilot, WiFiClient client) {
   }
 }
 
-
 void check_command(AutoPilot& autoPilot) {
   // wait for a new client on command server:
   //Serial.println("Checking command");
