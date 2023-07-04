@@ -1,0 +1,289 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the pypilot_hat package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: pypilot_hat\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2021-05-05 23:30-0400\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1)\n"
+
+#: ../menu.py:278
+msgid "gain"
+msgstr "krijgen"
+
+#: ../menu.py:311
+msgid "rudder"
+msgstr "roer"
+
+#: ../menu.py:331
+msgid "calibrate"
+msgstr "ijken"
+
+#: ../menu.py:332
+msgid "level"
+msgstr "niveau"
+
+#: ../menu.py:333
+msgid "heading"
+msgstr "rubriek"
+
+#: ../menu.py:334
+msgid "lock"
+msgstr "slot"
+
+#: ../menu.py:363
+msgid "motor"
+msgstr "motor"
+
+#: ../menu.py:364
+msgid "min speed"
+msgstr "min snelheid"
+
+#: ../menu.py:364 ../menu.py:365
+msgid "relative"
+msgstr "familielid"
+
+#: ../menu.py:365
+msgid "max speed"
+msgstr "max snelheid"
+
+#: ../menu.py:366
+msgid "max current"
+msgstr "max stroom"
+
+#: ../menu.py:366
+msgid "amps"
+msgstr "versterkers"
+
+#: ../menu.py:367
+msgid "period"
+msgstr "periode"
+
+#: ../menu.py:367
+msgid "seconds"
+msgstr "seconden"
+
+#: ../menu.py:368
+msgid "clutch pwm"
+msgstr "koppeling pwm"
+
+#: ../menu.py:368
+msgid "percent"
+msgstr "procent"
+
+#: ../menu.py:419
+msgid "defaults"
+msgstr "standaardwaarden"
+
+#: ../menu.py:429
+msgid "Wifi not managed"
+msgstr "Wifi niet beheerd"
+
+#: ../menu.py:435
+msgid "No Connetion"
+msgstr "Geen verbinding"
+
+#: ../menu.py:463
+msgid "control"
+msgstr "controle"
+
+#: ../menu.py:465
+msgid "small step"
+msgstr "kleine stap"
+
+#: ../menu.py:465 ../menu.py:466
+msgid "degrees"
+msgstr "graden"
+
+#: ../menu.py:466
+msgid "big step"
+msgstr "grote stap"
+
+#: ../menu.py:482
+msgid "hue"
+msgstr "tint"
+
+#: ../menu.py:484
+msgid "backlight"
+msgstr "verlichting"
+
+#: ../menu.py:485
+msgid "display"
+msgstr "scherm"
+
+#: ../menu.py:486
+msgid "contrast"
+msgstr "contrast"
+
+#: ../menu.py:487
+msgid "invert"
+msgstr "omkeren"
+
+#: ../menu.py:487
+msgid "flip"
+msgstr "omdraaien"
+
+#: ../menu.py:515
+msgid "language"
+msgstr "taal"
+
+#: ../menu.py:534
+msgid "settings"
+msgstr "instellingen"
+
+#: ../menu.py:535
+msgid "mode"
+msgstr "modus"
+
+#: ../menu.py:536
+msgid "pilot"
+msgstr "piloot"
+
+#: ../menu.py:541
+msgid "Menu"
+msgstr "Menu"
+
+#: ../menu.py:559
+msgid "Loading"
+msgstr "Bezig met laden"
+
+#: ../menu.py:568
+msgid "timeout"
+msgstr "time-out"
+
+#: ../page.py:286
+msgid "info"
+msgstr "info"
+
+#: ../page.py:300
+msgid "Info"
+msgstr "Info"
+
+#: ../page.py:308
+msgid "Watts"
+msgstr "Watts"
+
+#: ../page.py:308
+msgid "Amp Hours"
+msgstr "Ampère-uren"
+
+#: ../page.py:308
+msgid "runtime"
+msgstr "looptijd"
+
+#: ../page.py:314
+msgid "voltage"
+msgstr "Spanning"
+
+#: ../page.py:314
+msgid "rate"
+msgstr "tarief"
+
+#: ../page.py:314
+msgid "uptime"
+msgstr "uptime"
+
+#: ../page.py:320
+msgid "cont temp"
+msgstr "cont temp"
+
+#: ../page.py:320
+msgid "motor temp"
+msgstr "motortemp"
+
+#: ../page.py:320
+msgid "faults"
+msgstr "fouten"
+
+#: ../page.py:325
+msgid "version"
+msgstr "versie"
+
+#: ../page.py:325
+msgid "author"
+msgstr "auteur"
+
+#: ../page.py:347
+msgid "Calibrate Info"
+msgstr "Info kalibreren"
+
+#: ../page.py:358
+msgid "incomplete"
+msgstr "incompleet"
+
+#: ../page.py:358
+msgid "excellent"
+msgstr "uitstekend"
+
+#: ../page.py:358
+msgid "good"
+msgstr "goed"
+
+#: ../page.py:359
+msgid "fair"
+msgstr "eerlijk"
+
+#: ../page.py:359
+msgid "poor"
+msgstr "arm"
+
+#: ../page.py:359
+msgid "bad"
+msgstr "slecht"
+
+#: ../page.py:367
+msgid "compass"
+msgstr "kompas"
+
+#: ../page.py:598
+msgid "ERROR"
+msgstr "FOUT"
+
+#: ../page.py:598
+msgid "compass or gyro failure!"
+msgstr "kompas of gyro-storing!"
+
+#: ../page.py:634
+msgid "GPS not detected"
+msgstr "GPS niet gedetecteerd"
+
+#: ../page.py:638
+msgid "WIND not detected"
+msgstr "WIND niet gedetecteerd"
+
+#: ../page.py:642
+msgid "WARNING no motor controller"
+msgstr "WAARSCH geen motorcontroller"
+
+#: ../page.py:653
+msgid "standby"
+msgstr "standby"
+
+#: ../page.py:674
+msgid "No Cal"
+msgstr "Geen Cal"
+
+#: ../page.py:677
+msgid "Bad Cal"
+msgstr "Slechte cal"
+
+#: ../page.py:767
+msgid "connect to server"
+msgstr "Connecteer met de server"
+
+#~ msgid "remote"
+#~ msgstr "afgelegen"
+
+#~ msgid "No Wifi detected"
+#~ msgstr "Geen wifi gedetecteerd"

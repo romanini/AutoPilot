@@ -1,0 +1,289 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the pypilot_hat package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: pypilot_hat\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2021-05-05 23:30-0400\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1)\n"
+
+#: ../menu.py:278
+msgid "gain"
+msgstr "guadagno"
+
+#: ../menu.py:311
+msgid "rudder"
+msgstr "timone"
+
+#: ../menu.py:331
+msgid "calibrate"
+msgstr "calibrare"
+
+#: ../menu.py:332
+msgid "level"
+msgstr "livello"
+
+#: ../menu.py:333
+msgid "heading"
+msgstr "intestazione"
+
+#: ../menu.py:334
+msgid "lock"
+msgstr "serratura"
+
+#: ../menu.py:363
+msgid "motor"
+msgstr "il motore"
+
+#: ../menu.py:364
+msgid "min speed"
+msgstr "velocità min"
+
+#: ../menu.py:364 ../menu.py:365
+msgid "relative"
+msgstr "parente"
+
+#: ../menu.py:365
+msgid "max speed"
+msgstr "velocità mas"
+
+#: ../menu.py:366
+msgid "max current"
+msgstr "corrente mas"
+
+#: ../menu.py:366
+msgid "amps"
+msgstr "amplificatori"
+
+#: ../menu.py:367
+msgid "period"
+msgstr "periodo"
+
+#: ../menu.py:367
+msgid "seconds"
+msgstr "secondi"
+
+#: ../menu.py:368
+msgid "clutch pwm"
+msgstr "frizione pwm"
+
+#: ../menu.py:368
+msgid "percent"
+msgstr "per cento"
+
+#: ../menu.py:419
+msgid "defaults"
+msgstr "default"
+
+#: ../menu.py:429
+msgid "Wifi not managed"
+msgstr "Wifi non gestito"
+
+#: ../menu.py:435
+msgid "No Connetion"
+msgstr "Nessuna connessione"
+
+#: ../menu.py:463
+msgid "control"
+msgstr "controllo"
+
+#: ../menu.py:465
+msgid "small step"
+msgstr "piccolo passo"
+
+#: ../menu.py:465 ../menu.py:466
+msgid "degrees"
+msgstr "gradi"
+
+#: ../menu.py:466
+msgid "big step"
+msgstr "grande passo"
+
+#: ../menu.py:482
+msgid "hue"
+msgstr "tonalità"
+
+#: ../menu.py:484
+msgid "backlight"
+msgstr "controluce"
+
+#: ../menu.py:485
+msgid "display"
+msgstr "schermo"
+
+#: ../menu.py:486
+msgid "contrast"
+msgstr "contrasto"
+
+#: ../menu.py:487
+msgid "invert"
+msgstr "invertire"
+
+#: ../menu.py:487
+msgid "flip"
+msgstr "flip"
+
+#: ../menu.py:515
+msgid "language"
+msgstr "linguaggio"
+
+#: ../menu.py:534
+msgid "settings"
+msgstr "impostazioni"
+
+#: ../menu.py:535
+msgid "mode"
+msgstr "modalità"
+
+#: ../menu.py:536
+msgid "pilot"
+msgstr "pilota"
+
+#: ../menu.py:541
+msgid "Menu"
+msgstr "Menù"
+
+#: ../menu.py:559
+msgid "Loading"
+msgstr "Caricamento in corso"
+
+#: ../menu.py:568
+msgid "timeout"
+msgstr "tempo scaduto"
+
+#: ../page.py:286
+msgid "info"
+msgstr "Informazioni"
+
+#: ../page.py:300
+msgid "Info"
+msgstr "Informazioni"
+
+#: ../page.py:308
+msgid "Watts"
+msgstr "Watts"
+
+#: ../page.py:308
+msgid "Amp Hours"
+msgstr "Amp Hours"
+
+#: ../page.py:308
+msgid "runtime"
+msgstr "runtime"
+
+#: ../page.py:314
+msgid "voltage"
+msgstr "voltaggio"
+
+#: ../page.py:314
+msgid "rate"
+msgstr "Vota"
+
+#: ../page.py:314
+msgid "uptime"
+msgstr "uptime"
+
+#: ../page.py:320
+msgid "cont temp"
+msgstr "cont temp"
+
+#: ../page.py:320
+msgid "motor temp"
+msgstr "temp. motore"
+
+#: ../page.py:320
+msgid "faults"
+msgstr "difetti"
+
+#: ../page.py:325
+msgid "version"
+msgstr "versione"
+
+#: ../page.py:325
+msgid "author"
+msgstr "autore"
+
+#: ../page.py:347
+msgid "Calibrate Info"
+msgstr "Calibra informazioni"
+
+#: ../page.py:358
+msgid "incomplete"
+msgstr "incompleto"
+
+#: ../page.py:358
+msgid "excellent"
+msgstr "eccellente"
+
+#: ../page.py:358
+msgid "good"
+msgstr "bene"
+
+#: ../page.py:359
+msgid "fair"
+msgstr "giusto"
+
+#: ../page.py:359
+msgid "poor"
+msgstr "povero"
+
+#: ../page.py:359
+msgid "bad"
+msgstr "male"
+
+#: ../page.py:367
+msgid "compass"
+msgstr "bussola"
+
+#: ../page.py:598
+msgid "ERROR"
+msgstr "ERRORE"
+
+#: ../page.py:598
+msgid "compass or gyro failure!"
+msgstr "guasto alla bussola o al giroscopio!"
+
+#: ../page.py:634
+msgid "GPS not detected"
+msgstr "GPS non rilevato"
+
+#: ../page.py:638
+msgid "WIND not detected"
+msgstr "VENTO non rilevato"
+
+#: ../page.py:642
+msgid "WARNING no motor controller"
+msgstr "ATTENZIONE nessun controllore"
+
+#: ../page.py:653
+msgid "standby"
+msgstr "pausa"
+
+#: ../page.py:674
+msgid "No Cal"
+msgstr "No Cal"
+
+#: ../page.py:677
+msgid "Bad Cal"
+msgstr "Bad Cal"
+
+#: ../page.py:767
+msgid "connect to server"
+msgstr "connettersi al server"
+
+#~ msgid "remote"
+#~ msgstr "a distanza"
+
+#~ msgid "No Wifi detected"
+#~ msgstr "Nessun Wifi rilevato"

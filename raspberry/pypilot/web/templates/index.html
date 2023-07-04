@@ -1,0 +1,154 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+    <title>pypilot control</title>
+    <link rel="stylesheet" type="text/css" href="static/index.css" media="screen" />
+    <link rel="stylesheet" type="text/css" href="static/dark_theme.css" media="screen" />
+    <link rel="stylesheet" type="text/css" href="static/w3.css" />
+    <script type="text/javascript" src="static/jquery.min.js"></script>
+    <script type="text/javascript" src="static/socket.io.min.js"></script>
+    <script type="text/javascript" src="static/pypilot_control.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script>
+      var pypilot_web_port = {{pypilot_web_port}};
+      var tinypilot = {{tinypilot}};
+      var translations = {};
+      {% for s in translations %}
+      translations['{{s}}'] = '{{_(s)}}';
+      {% endfor %}
+      var _ = function(msg) {
+          if(msg in translations)
+              return translations[msg];
+          return msg;
+      }
+    </script>
+</head>
+<body>
+  <div class="w3-container font-resizable3">
+    <div id="headerTab" class="w3-row tabRow">
+      <a class="tabItem" href="javascript:void(0)" onclick="openTab(event, 'Control');">
+        <div class="w3-col tablink w3-red font-resizable active">{{_('Control')}}</div>
+      </a>
+      <a class="tabItem" href="javascript:void(0)" onclick="openTab(event, 'Gain');">
+        <div class="w3-col tablink font-resizable">{{_('Gain')}}</div>
+      </a>
+      <a class="tabItem" href="javascript:void(0)" onclick="openTab(event, 'Calibration');">
+        <div class="w3-col tablink font-resizable">{{_('Calibration')}}</div>
+      </a>
+      <a class="tabItem" href="javascript:void(0)" onclick="openTab(event, 'Configuration');">
+        <div class="w3-col tablink font-resizable">{{_('Configuration')}}</div>
+      </a>
+      <a class="tabItem" href="javascript:void(0)" onclick="openTab(event, 'Statistics');" st>
+        <div class="w3-col tablink font-resizable">{{_('Statistics')}}</div>
+      </a>
+    </div>
+    <br>
+    <div id="Control" class="w3-container tab">
+      <div id="heading_info" class="w3-row heading_info">
+          <div class="toggle-button button-resizable1" id="tb_engaged" >
+            <button id="engaged" class="font-resizable2 button-resizable2">AP</button>
+          </div>
+            <div class="data_label" style="flex-grow: 1;">{{_('Heading')}}</div>
+            <div class="data_value" style="font-size: 2em; flex-grow: 2;" id="heading">---</div>
+            <div class="data_label" style="flex-grow: 1;">{{_('Command')}}</div>
+            <div class="data_value" style="font-size: 2em; flex-grow: 2;" id="heading_command">---</div>
+      </div>
+      <div id="steer_buttons_container" class="w3-row" >
+          <button id="port10" class="button font-resizable1 button-resizable">
+            <span id="port10">--</span>
+          </button>
+          <button id="port2" class="button font-resizable1 button-resizable"> <!-- force no space between buttons-->
+            <span id="port2">--</span>
+          </button>
+          <button id="star10" class="button font-resizable1 button-resizable" style="float:right">
+            <span id="star10">--</span>
+          </button>
+          <button id="star2" class="button font-resizable1 button-resizable" style="float:right">
+            <span id="star2">--</span>
+          </button>
+      </div>
+      <br>
+      <br>
+      <div class="w3-row" style="display: flex; align-items: center;">
+        <select id="mode">
+          <option value="compass">compass</option>
+          <option value="gps">gps</option>
+          <option value="wind">wind</option>
+          <option value="true wind">true wind</option>
+        </select>
+        <div style="flex-grow: 1"></div>
+        <button id="tack_button" class="button button-resizable1 font-resizable2">      </button>
+        <div style="flex-grow: 1"></div>
+        <div id="tack_timeout" style="flex-grow: 1"></div>
+        <div id="tack_state" style="flex-grow: 3"></div>
+        <select id="tack_direction">
+          <option value="port">--&gt; starboard</option>
+          <option value="starboard">&lt;-- port</option>
+        </select>
+      </div>
+    </div>
+    
+    <div id="Gain" class="w3-container tab">
+      <div id="gain_container"></div>
+    </div>
+    
+    <div id="Calibration" class="w3-container tab">
+      {{_('Magnetic Heading')}} <span id="imu_heading"></span>
+      {{_('Pitch')}} <span id="pitch"></span>
+      {{_('Roll')}} <span id="roll"></span>
+      <p>{{_('Press')}} <button id="level" class="button">{{_('here')}}</button>
+        {{_('when the boat is level to align the inertial sensors.')}}
+      </p>
+      <div class="myProgress">
+        <div class="myBar" id="progress"> </div>
+      </div>
+      {{_('Magnetic Heading Offset')}}
+      <input type="spin" id="imu_heading_offset" min=-180 max=180 value=0>Degrees</input>
+      <p><input type="checkbox" id="calibration_locked">{{_('Lock Calibration')}}</input>
+      </p>
+      <br><a href="/calibrationplot">{{_('calibration plot')}}</a>
+      <br>
+      <p>{{_('Rudder')}} <span id="rudder"></span></p>
+      <p>
+        <button id="rudder_centered" class="button">{{_('centered')}}</button>
+        <button id="rudder_port_range" class="button">{{_('port range')}}</button>
+        <button id="rudder_starboard_range" class="button">{{_('starboard range')}}</button>
+        <button id="rudder_reset" class="button">{{_('reset')}}</button>
+      </p>
+      <p>
+        {{_('Rudder Range')}} 
+       <input type="number" id="rudder_range" min=10 max=100 value=30 style="text-align: right;"></input>&nbsp;{{_('Degrees')}}
+      </p>
+    </div>
+
+    <div id="Configuration" class="w3-container tab">
+      <div id='theme_selector' class="configuration_item">
+          <spawn calss="value_name">{{_('Display')}}:</spawn>
+          <label for="theme_clear" class="theme_name">{{_('Clear')}}&nbsp;</label><input type="radio" name="theme" class="theme_option" id="theme_clear" value="clear">
+          <label for="theme_dark"  class="theme_name">{{_('Dark')}}&nbsp;</label><input type="radio" name="theme" class="theme_option" id="theme_dark"  value="dark" >
+      </div>
+      <div id="configuration_container"></div>
+      <p><a href=":33333">{{_('Configure LCD Keypad and Remotes')}}</a>
+      <p>
+      {{_('NMEA Client host:port (leave blank for none) eg: 192.168.0.1:10110')}}
+      <p><input type="text" id="nmea_client"></input>
+    </div>
+
+    <div id="Statistics" class="w3-container tab">
+      <br>{{_('Amp Hours')}}
+      <span id="amp_hours"></span>
+      <button id="reset_amp_hours" class="button">{{_('reset')}}</button>
+      <br>{{_('Voltage')}} <span id="voltage"></span>
+      <br>{{_('Controller temperature')}} <span id="controller_temp"></span> C
+      <br>{{_('Runtime')}} <span id="runtime"></span>
+      <br>{{_('Servo')}}: <b><span id="servo_engaged"></span></b>
+        <div id="log"></div>
+    </div>
+    <div id="status_container" class="data_block" style="position:fixed;bottom:-10">
+      <br>pypilot {{_('Server')}}: <b><span id="connection"></span></b>
+      <br>Servo Flags: <b><span id="servoflags"></span></b>
+      <br>Autopilot {{_('Errors')}}: <b><span id="aperrors0"></span> <span id="aperrors1"></span></b>
+      <br>{{_('Web Server Latency')}}: <b><span id="ping-pong"></span> ms</b>
+    </div>
+</body>
+</html>
