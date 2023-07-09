@@ -8,12 +8,12 @@
 // int average_loop_time = 0;
 // uint32_t last_display_loop_average = millis();
 
-AutoPilot autoPilot = AutoPilot(&Serial);
+static AutoPilot autoPilot = AutoPilot(&Serial);
 
 void setup() {
   //Initialize serial 
   Serial.begin(38400);
-
+  Wire.begin();
   setup_wifi();
   setup_display();
   setup_gps();
@@ -30,7 +30,7 @@ void loop() {
   check_compass(autoPilot);
   check_gps(autoPilot);
   check_motor(autoPilot);
-  display(autoPilot);
+  display();
   // calculage_average_loop_time(millis() - start_time);
   // if (millis() - last_display_loop_average > DISAPLY_AVERAGE_RATE) {
   //   last_display_loop_average = millis();

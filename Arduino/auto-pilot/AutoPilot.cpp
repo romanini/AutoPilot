@@ -39,9 +39,10 @@ AutoPilot::AutoPilot(HardwareSerial* ser) {
   heading_short_average_size = 0;
   heading_long_average_size = 0;
 
-  filtered_magnetometer_data = new float[3]{ 0.0, 0.0, 0.0 };
-  filtered_accelerometer_data = new float[3]{ 0.0, 0.0, 0.0 };
-
+  for (int i = 0; i < 3; i++) {
+    filtered_magnetometer_data[i] = 0.0;
+    filtered_accelerometer_data[i] = 0.0;
+  }
   waypoint_set = false;
   waypoint_lat = 0.0;
   waypoint_lon = 0.0;
@@ -61,7 +62,6 @@ void AutoPilot::setDateTime(time_t dateTime) {
 
 time_t AutoPilot::getDateTime() {
   return this->dateTime;
-  ;
 }
 
 int AutoPilot::getMotorStopTime() {
@@ -198,16 +198,20 @@ float* AutoPilot::getFilteredAccelerometerData() {
   return this->filtered_accelerometer_data;
 }
 
-void AutoPilot::setFilteredAccelerometerData(float* data) {
-  this->filtered_accelerometer_data = data;
+void AutoPilot::setFilteredAccelerometerData(float data[3]) {
+  for (int i = 0; i < 3; i++) {
+    this->filtered_accelerometer_data[i] = data[i];
+  }
 }
 
 float* AutoPilot::getFilteredMagentometerData() {
   return this->filtered_magnetometer_data;
 }
 
-void AutoPilot::setFilteredMagnetometerData(float* data) {
-  this->filtered_magnetometer_data = data;
+void AutoPilot::setFilteredMagnetometerData(float data[3]) {
+  for (int i = 0; i < 3; i++) {
+    this->filtered_magnetometer_data[i] = data[i];
+  }
 }
 
 bool AutoPilot::isWaypointSet() {

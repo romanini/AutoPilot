@@ -32,8 +32,8 @@ private:
   int heading_short_average_size;
   int heading_long_average_size;
 
-  float* filtered_magnetometer_data; // // Filtered Magnetometer measurements
-  float* filtered_accelerometer_data; // // Filtered Accelerometer measurements
+  float filtered_magnetometer_data[3]; // // Filtered Magnetometer measurements
+  float filtered_accelerometer_data[3]; // // Filtered Accelerometer measurements
 
   bool waypoint_set;    // flag indicating if the waypoint has been set
   float waypoint_lat;   // desired waypoint latitide
@@ -80,9 +80,9 @@ public:
   float getHeadingLongAverageChange();
   float getHeadingShortAverageChange();
   float* getFilteredAccelerometerData();
-  void setFilteredAccelerometerData(float* data);
+  void setFilteredAccelerometerData(float data[3]);
   float* getFilteredMagentometerData();
-  void setFilteredMagnetometerData(float* data);
+  void setFilteredMagnetometerData(float data[3]);
   bool isWaypointSet();
   float getWaypointLat();
   float getWaypointLon();

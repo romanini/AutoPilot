@@ -134,7 +134,7 @@ void process_command(AutoPilot& autoPilot, WiFiClient client, char buffer[]) {
   }
 }
 
-void read_command(AutoPilot& autoPilot, WiFiClient client) {
+void read_command(AutoPilot& autoPilot, WiFiClient& client) {
   // when the client sends the first byte, say hello:
   if (client) {
     if (client.available() > 0) {
@@ -154,7 +154,7 @@ void read_command(AutoPilot& autoPilot, WiFiClient client) {
   }
 }
 
-void read_debug(AutoPilot& autoPilot, WiFiClient client) {
+void read_debug(AutoPilot& autoPilot, WiFiClient& client) {
   // when the client sends the first byte, say hello:
   if (client) {
     if (client.available() > 0) {

@@ -14,19 +14,20 @@
 #define NUMBER_OF_BUTTONS 4
 #define PCF8575_ADDRESS 0x20
 
-Adafruit_PCF8575 pcf;
+Adafruit_PCF8575 pcf = Adafruit_PCF8575();
 
-bool button_down[4] = { false, false, false, false };
+bool button_down[4];
 bool buttons_setup = false;
 
 void setup_button() {
   Wire.begin();
-  if (!pcf.begin(PCF8575_ADDRESS)) {
+  if (!pcf.begin(PCF8575_ADDRESS, &Wire)) {
     Serial.println("Couldn't find PCF8575");
     return;
   }
   for (uint8_t p = 0; p < NUMBER_OF_BUTTONS; p++) {
     pcf.pinMode(p, INPUT_PULLUP);
+    button_down[p] = false;
   }
   buttons_setup = true;
 }
@@ -34,7 +35,8 @@ void setup_button() {
 void check_button(AutoPilot& autoPilot) {
   if (buttons_setup) {
     for (uint8_t p = 0; p < NUMBER_OF_BUTTONS; p++) {
-      if (!pcf.digitalRead(p) && !button_down[p]) {
+      bool pinValue = pcf.digitalRead(p);
+      if (!pinValue && !button_down[p]) {
         button_down[p] = true;
         switch (p) {
           case PORT_ADJUST_BUTTON:
@@ -54,7 +56,7 @@ void check_button(AutoPilot& autoPilot) {
             Serial.println("Compass Mode");
             break;
         }
-      } else if (pcf.digitalRead(p) && button_down[p]) {
+      } else if (pinValue && button_down[p]) {
         button_down[p] = false;
       }
     }

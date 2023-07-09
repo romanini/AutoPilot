@@ -9,8 +9,8 @@
 // Connect to the GPS on the hardware port
 Adafruit_GPS gps = Adafruit_GPS(&GPSSerial);
 
-TimeChangeRule usPDT = {"PDT", Second, Sun, Mar, 2, -420};  //UTC - 4 hours
-TimeChangeRule usPST = {"PST", First, Sun, Nov, 2, -480};   //UTC - 5 hours
+TimeChangeRule usPDT = {"PDT", Second, Sun, Mar, 2, -420};  //UTC - 7 hours
+TimeChangeRule usPST = {"PST", First, Sun, Nov, 2, -480};   //UTC - 8 hours
 Timezone pacificTz(usPDT, usPST);
 
 uint32_t gps_timer = millis();
@@ -19,9 +19,9 @@ void setup_gps() {
   // 9600 NMEA is the default baud rate for Adafruit MTK GPS's- some use 4800
   gps.begin(9600);
   // uncomment this line to turn on RMC (recommended minimum) and GGA (fix data) including altitude
-  gps.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);
+  //gps.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);
   // uncomment this line to turn on only the "minimum recommended" data
-  //gps.sendCommand(PMTK_SET_NMEA_OUTPUT_ALLDATA);
+  gps.sendCommand(PMTK_SET_NMEA_OUTPUT_ALLDATA);
   // For parsing data, we don't suggest using anything but either RMC only or RMC+GGA since
   // the parser doesn't care about other sentences at this time
   // Set the update rate
@@ -57,18 +57,21 @@ void check_gps(AutoPilot& autoPilot) {
       timeComponents.Day = gps.day;
       timeComponents.Hour = gps.hour;
       timeComponents.Minute = gps.minute;
-      timeComponents.Second = 0;
+      timeComponents.Second = gps.seconds;
       time_t currentTime = makeTime(timeComponents);
-      autoPilot.setDateTime(pacificTz.toLocal(currentTime));
+      time_t localTime = pacificTz.toLocal(currentTime); 
+      autoPilot.setDateTime(localTime);
       autoPilot.setFixquality(gps.fixquality, gps.satellites);
       autoPilot.setSpeed(gps.speed);
       autoPilot.setLoation(gps.latitudeDegrees, gps.longitudeDegrees, gps.angle);
     }
+    print_gps();
+    autoPilot.printAutoPilot();
   }
 }
 
 void print_gps() {
-  Serial.println("GPS fix");
+  Serial.println("RAW GPS::");
   Serial.print(gps.year);
   Serial.print("/");
   Serial.print(gps.month);
@@ -77,7 +80,9 @@ void print_gps() {
   Serial.print(" ");
   Serial.print(gps.hour);
   Serial.print(":");
-  Serial.println(gps.minute);
+  Serial.print(gps.minute);
+  Serial.print(":");
+  Serial.println(gps.seconds);
   Serial.print(gps.fix);
   Serial.print(" / ");
   Serial.print(gps.fixquality);

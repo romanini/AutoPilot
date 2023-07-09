@@ -112,61 +112,61 @@ void initialize_refresh_rates() {
 // this makes the whole thing unresponsive.  Since we are single threaded and can't refresh the display in its own thread what we do is
 // effectively time-slice the display() function by having it refresh a small part of the display each time.  For the distination we special case
 // that one since it changes so infrequently that we only refresh it when it changes.
-void display(AutoPilot& autoPilot) {
+void display() {
   if (autoPilot.hasModeChanged()) {
-    display_mode(autoPilot);
+    // display_mode(autoPilot);
   } else if (autoPilot.hasDestinationChanged()) {
     // as this takes more than 300ms to display we can just do it when something changes.
-    display_destination(autoPilot);
+    // display_destination(autoPilot);
   } else if (millis() - display_refresh_timer[display_refresh_selector] > display_refresh_rate[display_refresh_selector]) {
     display_refresh_timer[display_refresh_selector] = millis();
-    switch (display_refresh_selector) {
-      case 0:
-        display_speed(autoPilot);
-        break;
-      case 1:
-        display_heading_long_average(autoPilot);
-        break;
-      case 2:
-        display_heading_long_average_change(autoPilot);
-        break;
-      case 3:
-        display_heading_short_average(autoPilot);
-        break;
-      case 4:
-        display_heading_short_average_change(autoPilot);
-        break;
-      case 5:
-        display_heading(autoPilot);
-        break;
-      case 6:
-        display_bearing(autoPilot);
-        break;
-      case 7:
-        display_bearing_correction(autoPilot);
-        break;
-      case 8:
-        display_motor(autoPilot);
-        break;
-      case 9:
-        display_distance(autoPilot);
-        break;
-      case 10:
-        display_course(autoPilot);
-        break;
-      case 11:
-        display_location_lat(autoPilot);
-        break;
-      case 12:
-        display_location_lon(autoPilot);
-        break;
-      case 13:
-        display_datetime(autoPilot);
-        break;
-      case 14:
-        display_fix(autoPilot);
-        break;
-    }
+    // switch (display_refresh_selector) {
+    //   case 0:
+    //     display_speed(autoPilot);
+    //     break;
+    //   case 1:
+    //     display_heading_long_average(autoPilot);
+    //     break;
+    //   case 2:
+    //     display_heading_long_average_change(autoPilot);
+    //     break;
+    //   case 3:
+    //     display_heading_short_average(autoPilot);
+    //     break;
+    //   case 4:
+    //     display_heading_short_average_change(autoPilot);
+    //     break;
+    //   case 5:
+    //     display_heading(autoPilot);
+    //     break;
+    //   case 6:
+    //     display_bearing(autoPilot);
+    //     break;
+    //   case 7:
+    //     display_bearing_correction(autoPilot);
+    //     break;
+    //   case 8:
+    //     display_motor(autoPilot);
+    //     break;
+    //   case 9:
+    //     display_distance(autoPilot);
+    //     break;
+    //   case 10:
+    //     display_course(autoPilot);
+    //     break;
+    //   case 11:
+    //     display_location_lat(autoPilot);
+    //     break;
+    //   case 12:
+    //     display_location_lon(autoPilot);
+    //     break;
+    //   case 13:
+    //     display_datetime(autoPilot);
+    //     break;
+    //   case 14:
+    //     display_fix(autoPilot);
+    //     break;
+    // }
   }
   display_refresh_selector = ((display_refresh_selector + 1) % DISPLAY_SEGMENTS);
 }
@@ -405,6 +405,8 @@ void display_datetime(AutoPilot& autoPilot) {
   char dateTimeString[13];
   time_t currentTime = autoPilot.getDateTime();
   sprintf(dateTimeString, "%d/%d/%02d %d:%02d", month(currentTime), day(currentTime), year(currentTime) % 100, hour(currentTime), minute(currentTime));
+  Serial.print("Display Time: ");
+  Serial.println(dateTimeString);
   date_time_value_canvas.print(dateTimeString);
   tft.drawBitmap(181, 293, date_time_value_canvas.getBuffer(), 165, 22, HX8357_WHITE, HX8357_BLACK);
 }

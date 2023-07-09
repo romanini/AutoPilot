@@ -12,6 +12,7 @@ int motor_stop_time_mills = 0;
 int wheel = 0;
 
 void setup_motor() {
+  Wire.begin();
   pinMode(MOTOR_PLUS_PIN, OUTPUT);
   pinMode(MOTOR_NEG_PIN, OUTPUT);
   analogWrite(MOTOR_PLUS_PIN, 0);
