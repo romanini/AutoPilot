@@ -18,9 +18,10 @@ void setup_motor() {
   analogWrite(MOTOR_PLUS_PIN, 0);
   analogWrite(MOTOR_NEG_PIN, 0);
   Serial.println("Motor all setup.");
+  delay(500);
 }
 
-void start_motor(AutoPilot& autoPilot, int run_millis) {
+void start_motor(int run_millis) {
   analogWrite(MOTOR_PLUS_PIN, 0);
   analogWrite(MOTOR_NEG_PIN, 0);
   int direction = 0;
@@ -37,7 +38,7 @@ void start_motor(AutoPilot& autoPilot, int run_millis) {
   autoPilot.setMotor(millis() + (run_millis * direction), direction);
 }
 
-void stop_motor(AutoPilot& autoPilot) {
+void stop_motor() {
   analogWrite(MOTOR_PLUS_PIN, 0);
   analogWrite(MOTOR_NEG_PIN, 0);
   autoPilot.setMotor(0, 0);
@@ -47,20 +48,20 @@ void stop_motor(AutoPilot& autoPilot) {
 /*
  * See if the motor is running and needs to stop
  */
-void check_motor(AutoPilot& autoPilot) {
+void check_motor() {
   unsigned int cur_millis = millis();
   // if we have a stop time we are/should be running the motor
   if (autoPilot.getMotorStopTime()) {
     // if the stop time is in the past, it's time to stop the motor
     if (autoPilot.getMotorStopTime() < cur_millis) {
-      stop_motor(autoPilot);
+      stop_motor();
     }
     // we don't have a stop time so as long as we have not run the motor
     // within MIN_MOTOR_OFF_TIME
   } else if ((cur_millis - autoPilot.getMotorLastRunTime()) > MIN_MOTOR_OFF_TIME) {
     if (autoPilot.getBearingCorrection() != 0) {
       int run_millis = floor(autoPilot.getBearingCorrection() * MILLIS_PER_DEGREE_CORRECTION);
-      start_motor(autoPilot, run_millis);
+      start_motor(run_millis);
     }
   }
 }

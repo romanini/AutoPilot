@@ -56,14 +56,14 @@ void setup_wifi() {
   print_wifi_status();
 }
 
-void process_adjust_bearing(AutoPilot& autoPilot, WiFiClient client, char buffer[]) {
+void process_adjust_bearing(WiFiClient client, char buffer[]) {
   float bearing_adjustment = atof(&buffer[1]);
   autoPilot.adjustHeadingDesired(bearing_adjustment);
   client.println("ok");
 }
 
 // TODO check MODE is valid
-void process_mode(AutoPilot& autoPilot, WiFiClient client, char buffer[]) {
+void process_mode(WiFiClient client, char buffer[]) {
   int new_mode = atoi(&buffer[1]);
   if (new_mode >= 0 && new_mode <= 2) {
     int ret = autoPilot.setMode(new_mode);
@@ -77,7 +77,7 @@ void process_mode(AutoPilot& autoPilot, WiFiClient client, char buffer[]) {
   }
 }
 
-void process_waypoint(AutoPilot& autoPilot, WiFiClient client, char buffer[]) {
+void process_waypoint(WiFiClient client, char buffer[]) {
   char* coordinates = strtok(buffer, ",");
   Serial.print("Settnig waypoint ");
   Serial.print(buffer);
@@ -113,17 +113,17 @@ void process_help(WiFiClient client) {
   client.println("\t? \t\t\t- Print this help screen");
 }
 
-void process_command(AutoPilot& autoPilot, WiFiClient client, char buffer[]) {
+void process_command(WiFiClient client, char buffer[]) {
   char command = buffer[0];
   switch (command) {
     case 'a':
-      process_adjust_bearing(autoPilot, client, buffer);
+      process_adjust_bearing(client, buffer);
       break;
     case 'm':
-      process_mode(autoPilot, client, buffer);
+      process_mode(client, buffer);
       break;
     case 'w':
-      process_waypoint(autoPilot, client, buffer);
+      process_waypoint(client, buffer);
       break;
     case '?':
       process_help(client);
@@ -134,7 +134,7 @@ void process_command(AutoPilot& autoPilot, WiFiClient client, char buffer[]) {
   }
 }
 
-void read_command(AutoPilot& autoPilot, WiFiClient& client) {
+void read_command(WiFiClient& client) {
   // when the client sends the first byte, say hello:
   if (client) {
     if (client.available() > 0) {
@@ -142,7 +142,7 @@ void read_command(AutoPilot& autoPilot, WiFiClient& client) {
       char thisChar = client.read();
       if (thisChar == '\n') {
         command_buffer[BUF_SIZE - command_count] = 0;
-        process_command(autoPilot, client, command_buffer);
+        process_command(client, command_buffer);
         command_count = BUF_SIZE;
       } else {
         if (command_count > 0) {
@@ -154,7 +154,7 @@ void read_command(AutoPilot& autoPilot, WiFiClient& client) {
   }
 }
 
-void read_debug(AutoPilot& autoPilot, WiFiClient& client) {
+void read_debug(WiFiClient& client) {
   // when the client sends the first byte, say hello:
   if (client) {
     if (client.available() > 0) {
@@ -162,7 +162,7 @@ void read_debug(AutoPilot& autoPilot, WiFiClient& client) {
       char thisChar = client.read();
       if (thisChar == '\n') {
         debug_buffer[BUF_SIZE - debug_count] = 0;
-        process_command(autoPilot, client, debug_buffer);
+        process_command(client, debug_buffer);
         debug_count = BUF_SIZE;
       } else {
         if (debug_count > 0) {
@@ -174,7 +174,7 @@ void read_debug(AutoPilot& autoPilot, WiFiClient& client) {
   }
 }
 
-void check_command(AutoPilot& autoPilot) {
+void check_command() {
   // wait for a new client on command server:
   //Serial.println("Checking command");
   WiFiClient command_client = command_server.available();
@@ -185,7 +185,7 @@ void check_command(AutoPilot& autoPilot) {
       command_client.flush();
       command_client_already_connected = true;
     }
-    read_command(autoPilot, command_client);
+    read_command(command_client);
   }
   // wait for a new client on debug server:
   WiFiClient debug_client = debug_server.available();
@@ -196,7 +196,7 @@ void check_command(AutoPilot& autoPilot) {
       debug_client.flush();
       debug_client_already_connected = true;
     }
-    read_debug(autoPilot, debug_client);
+    read_debug(debug_client);
   }
 }
 

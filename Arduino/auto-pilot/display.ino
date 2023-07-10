@@ -23,6 +23,25 @@ int display_refresh_selector = 0;
 // Use hardware SPI (on Uno, #13, #12, #11) and the above for CS/DC
 Adafruit_HX8357 tft = Adafruit_HX8357(TFT_CS, TFT_DC, TFT_RST);
 
+static GFXcanvas1 speed_value_canvas(90, 42);
+static GFXcanvas1 compass_la_value_canvas(107, 32);
+static GFXcanvas1 compass_la_change_value_canvas(95, 32);
+static GFXcanvas1 compass_sa_value_canvas(107, 32);
+static GFXcanvas1 compass_sa_change_value_canvas(95, 32);
+static GFXcanvas1 compass_value_canvas(107, 32);
+static GFXcanvas1 mode_value_canvas(115, 24);
+static GFXcanvas1 destination_value_canvas(139, 50);
+static GFXcanvas1 bearing_value_canvas(115, 42);
+static GFXcanvas1 bearing_correction_value_canvas(107, 32);
+static GFXcanvas1 motor_value_canvas(105, 18);
+static GFXcanvas1 distance_value_canvas(90, 42);
+static GFXcanvas1 course_value_canvas(115, 42);
+static GFXcanvas1 location_lat_value_canvas(115, 22);
+static GFXcanvas1 location_lon_value_canvas(139, 22);
+static GFXcanvas1 date_time_value_canvas(165, 22);
+static GFXcanvas1 gps_fix_value_canvas(110, 22);
+
+
 void setup_display() {
   tft.begin();
 
@@ -51,6 +70,7 @@ void setup_display() {
   for (int i = 0; i < DISPLAY_SEGMENTS; i++) {
     display_refresh_timer[i] = millis();
   }
+  delay(500);
 }
 
 // You would think we can do this in a static initializtion but for some odd reasosn that causes very strange warnings about being offset by 4 bytes
@@ -114,65 +134,64 @@ void initialize_refresh_rates() {
 // that one since it changes so infrequently that we only refresh it when it changes.
 void display() {
   if (autoPilot.hasModeChanged()) {
-    // display_mode(autoPilot);
+    display_mode();
   } else if (autoPilot.hasDestinationChanged()) {
     // as this takes more than 300ms to display we can just do it when something changes.
-    // display_destination(autoPilot);
+    display_destination();
   } else if (millis() - display_refresh_timer[display_refresh_selector] > display_refresh_rate[display_refresh_selector]) {
     display_refresh_timer[display_refresh_selector] = millis();
-    // switch (display_refresh_selector) {
-    //   case 0:
-    //     display_speed(autoPilot);
-    //     break;
-    //   case 1:
-    //     display_heading_long_average(autoPilot);
-    //     break;
-    //   case 2:
-    //     display_heading_long_average_change(autoPilot);
-    //     break;
-    //   case 3:
-    //     display_heading_short_average(autoPilot);
-    //     break;
-    //   case 4:
-    //     display_heading_short_average_change(autoPilot);
-    //     break;
-    //   case 5:
-    //     display_heading(autoPilot);
-    //     break;
-    //   case 6:
-    //     display_bearing(autoPilot);
-    //     break;
-    //   case 7:
-    //     display_bearing_correction(autoPilot);
-    //     break;
-    //   case 8:
-    //     display_motor(autoPilot);
-    //     break;
-    //   case 9:
-    //     display_distance(autoPilot);
-    //     break;
-    //   case 10:
-    //     display_course(autoPilot);
-    //     break;
-    //   case 11:
-    //     display_location_lat(autoPilot);
-    //     break;
-    //   case 12:
-    //     display_location_lon(autoPilot);
-    //     break;
-    //   case 13:
-    //     display_datetime(autoPilot);
-    //     break;
-    //   case 14:
-    //     display_fix(autoPilot);
-    //     break;
-    // }
+    switch (display_refresh_selector) {
+      case 0:
+        display_speed();
+        break;
+      case 1:
+        display_heading_long_average();
+        break;
+      case 2:
+        display_heading_long_average_change();
+        break;
+      // case 3:
+      //   display_heading_short_average();
+      //   break;
+      // case 4:
+      //   display_heading_short_average_change();
+      //   break;
+      // case 5:
+      //   display_heading();
+      //   break;
+      // case 6:
+      //   display_bearing();
+      //   break;
+      // case 7:
+      //   display_bearing_correction();
+      //   break;
+      // case 8:
+      //   display_motor();
+      //   break;
+      // case 9:
+      //   display_distance();
+      //   break;
+      // case 10:
+      //   display_course();
+      //   break;
+      // case 11:
+      //   display_location_lat();
+      //   break;
+      // case 12:
+      //   display_location_lon();
+      //   break;
+      // case 13:
+      //   display_datetime();
+      //   break;
+      // case 14:
+      //   display_fix();
+      //   break;
+    }
   }
   display_refresh_selector = ((display_refresh_selector + 1) % DISPLAY_SEGMENTS);
 }
 
-void display_speed(AutoPilot& autoPilot) {
-  static GFXcanvas1 speed_value_canvas(90, 42);
+void display_speed() {
   speed_value_canvas.fillScreen(HX8357_BLACK);
   speed_value_canvas.setTextColor(HX8357_WHITE);
   speed_value_canvas.setFont(&FreeSansBold24pt7b);
@@ -181,8 +200,7 @@ void display_speed(AutoPilot& autoPilot) {
   tft.drawBitmap(20, 23, speed_value_canvas.getBuffer(), 90, 42, HX8357_CYAN, HX8357_BLACK);
 }
 
-void display_heading_long_average(AutoPilot& autoPilot) {
-  static GFXcanvas1 compass_la_value_canvas(107, 32);
+void display_heading_long_average() {
   compass_la_value_canvas.fillScreen(HX8357_BLACK);
   compass_la_value_canvas.setTextColor(HX8357_WHITE);
   compass_la_value_canvas.setFont(&FreeSansBold18pt7b);
@@ -191,8 +209,7 @@ void display_heading_long_average(AutoPilot& autoPilot) {
   tft.drawBitmap(20, 105, compass_la_value_canvas.getBuffer(), 107, 32, HX8357_YELLOW, HX8357_BLACK);
 }
 
-void display_heading_long_average_change(AutoPilot& autoPilot) {
-  static GFXcanvas1 compass_la_change_value_canvas(95, 32);
+void display_heading_long_average_change() {
   compass_la_change_value_canvas.fillScreen(HX8357_BLACK);
   compass_la_change_value_canvas.setTextColor(HX8357_WHITE);
   compass_la_change_value_canvas.setFont(&FreeSansBold18pt7b);
@@ -202,8 +219,7 @@ void display_heading_long_average_change(AutoPilot& autoPilot) {
   tft.drawBitmap(35, 143, compass_la_change_value_canvas.getBuffer(), 95, 32, HX8357_YELLOW, HX8357_BLACK);
 }
 
-void display_heading_short_average(AutoPilot& autoPilot) {
-  static GFXcanvas1 compass_sa_value_canvas(107, 32);
+void display_heading_short_average() {
   compass_sa_value_canvas.fillScreen(HX8357_BLACK);
   compass_sa_value_canvas.setTextColor(HX8357_WHITE);
   compass_sa_value_canvas.setFont(&FreeSansBold18pt7b);
@@ -212,8 +228,7 @@ void display_heading_short_average(AutoPilot& autoPilot) {
   tft.drawBitmap(20, 190, compass_sa_value_canvas.getBuffer(), 107, 32, HX8357_YELLOW, HX8357_BLACK);
 }
 
-void display_heading_short_average_change(AutoPilot& autoPilot) {
-  static GFXcanvas1 compass_sa_change_value_canvas(95, 32);
+void display_heading_short_average_change() {
   compass_sa_change_value_canvas.fillScreen(HX8357_BLACK);
   compass_sa_change_value_canvas.setTextColor(HX8357_WHITE);
   compass_sa_change_value_canvas.setFont(&FreeSansBold18pt7b);
@@ -223,18 +238,16 @@ void display_heading_short_average_change(AutoPilot& autoPilot) {
   tft.drawBitmap(35, 227, compass_sa_change_value_canvas.getBuffer(), 95, 32, HX8357_YELLOW, HX8357_BLACK);
 }
 
-void display_heading(AutoPilot& autoPilot) {
-  static GFXcanvas1 compass_sa_value_canvas(107, 32);
-  compass_sa_value_canvas.fillScreen(HX8357_BLACK);
-  compass_sa_value_canvas.setTextColor(HX8357_WHITE);
-  compass_sa_value_canvas.setFont(&FreeSansBold18pt7b);
-  compass_sa_value_canvas.setCursor(0, 29);
-  compass_sa_value_canvas.print(autoPilot.getHeading());
-  tft.drawBitmap(20, 276, compass_sa_value_canvas.getBuffer(), 107, 32, HX8357_YELLOW, HX8357_BLACK);
+void display_heading() {
+  compass_value_canvas.fillScreen(HX8357_BLACK);
+  compass_value_canvas.setTextColor(HX8357_WHITE);
+  compass_value_canvas.setFont(&FreeSansBold18pt7b);
+  compass_value_canvas.setCursor(0, 29);
+  compass_value_canvas.print(autoPilot.getHeading());
+  tft.drawBitmap(20, 276, compass_value_canvas.getBuffer(), 107, 32, HX8357_YELLOW, HX8357_BLACK);
 }
 
-void display_mode(AutoPilot& autoPilot) {
-  static GFXcanvas1 mode_value_canvas(115, 24);
+void display_mode() {
   mode_value_canvas.fillScreen(HX8357_BLACK);
   if (autoPilot.getMode() == 2) {
     mode_value_canvas.setTextColor(HX8357_WHITE);
@@ -250,8 +263,7 @@ void display_mode(AutoPilot& autoPilot) {
   tft.drawBitmap(185, 20, mode_value_canvas.getBuffer(), 115, 24, 0xF57F, HX8357_BLACK);
 }
 
-void display_destination(AutoPilot& autoPilot) {
-  static GFXcanvas1 destination_value_canvas(139, 50);
+void display_destination() {
   destination_value_canvas.fillScreen(HX8357_BLACK);
   if (autoPilot.getMode() == 2) {
     destination_value_canvas.setTextColor(HX8357_WHITE);
@@ -274,9 +286,8 @@ void display_destination(AutoPilot& autoPilot) {
   tft.drawBitmap(171, 52, destination_value_canvas.getBuffer(), 139, 50, 0xF57F, HX8357_BLACK);
 }
 
-void display_bearing(AutoPilot& autoPilot) {
+void display_bearing() {
   if (autoPilot.getMode() > 0) {
-    static GFXcanvas1 bearing_value_canvas(115, 42);
     bearing_value_canvas.fillScreen(HX8357_BLACK);
     bearing_value_canvas.setFont(&FreeSansBold24pt7b);
     bearing_value_canvas.setTextColor(HX8357_WHITE);
@@ -286,9 +297,8 @@ void display_bearing(AutoPilot& autoPilot) {
   }
 }
 
-void display_bearing_correction(AutoPilot& autoPilot) {
+void display_bearing_correction() {
   if (autoPilot.getMode() > 0) {
-    static GFXcanvas1 bearing_correction_value_canvas(107, 32);
     bearing_correction_value_canvas.fillScreen(HX8357_BLACK);
     bearing_correction_value_canvas.setTextColor(HX8357_WHITE);
     bearing_correction_value_canvas.setFont(&FreeSansBold18pt7b);
@@ -299,58 +309,56 @@ void display_bearing_correction(AutoPilot& autoPilot) {
   }
 }
 
-void display_motor(AutoPilot& autoPilot) {
+void display_motor() {
   if (autoPilot.getMode() > 0) {
-    static GFXcanvas1 bearing_correction_value_canvas(105, 18);
-    bearing_correction_value_canvas.fillScreen(HX8357_BLACK);
-    bearing_correction_value_canvas.setTextColor(HX8357_WHITE);
-    bearing_correction_value_canvas.setFont(&FreeSansBold12pt7b);
+    motor_value_canvas.fillScreen(HX8357_BLACK);
+    motor_value_canvas.setTextColor(HX8357_WHITE);
+    motor_value_canvas.setFont(&FreeSansBold12pt7b);
     int motor_time_left = autoPilot.getMotorStopTime() - millis();
     if (autoPilot.getMotorDirection() < 0) {
       if (motor_time_left > 1000) {
-        bearing_correction_value_canvas.setCursor(0, 14);
-        bearing_correction_value_canvas.print("<-----");
+        motor_value_canvas.setCursor(0, 14);
+        motor_value_canvas.print("<-----");
       } else if (motor_time_left > 750) {
-        bearing_correction_value_canvas.setCursor(10, 14);
-        bearing_correction_value_canvas.print("<----");
+        motor_value_canvas.setCursor(10, 14);
+        motor_value_canvas.print("<----");
       } else if (motor_time_left > 500) {
-        bearing_correction_value_canvas.setCursor(20, 14);
-        bearing_correction_value_canvas.print("<---");
+        motor_value_canvas.setCursor(20, 14);
+        motor_value_canvas.print("<---");
       } else if (motor_time_left > 250) {
-        bearing_correction_value_canvas.setCursor(30, 14);
-        bearing_correction_value_canvas.print("<--");
+        motor_value_canvas.setCursor(30, 14);
+        motor_value_canvas.print("<--");
       } else if (motor_time_left > 0) {
-        bearing_correction_value_canvas.setCursor(40, 14);
-        bearing_correction_value_canvas.print("<-");
+        motor_value_canvas.setCursor(40, 14);
+        motor_value_canvas.print("<-");
       }
     } else if (autoPilot.getMotorDirection() > 0) {
       if (motor_time_left > 1000) {
-        bearing_correction_value_canvas.setCursor(50, 14);
-        bearing_correction_value_canvas.print("----->");
+        motor_value_canvas.setCursor(50, 14);
+        motor_value_canvas.print("----->");
       } else if (motor_time_left > 750) {
-        bearing_correction_value_canvas.setCursor(50, 14);
-        bearing_correction_value_canvas.print("---->");
+        motor_value_canvas.setCursor(50, 14);
+        motor_value_canvas.print("---->");
       } else if (motor_time_left > 500) {
-        bearing_correction_value_canvas.setCursor(50, 14);
-        bearing_correction_value_canvas.print("--->");
+        motor_value_canvas.setCursor(50, 14);
+        motor_value_canvas.print("--->");
       } else if (motor_time_left > 250) {
-        bearing_correction_value_canvas.setCursor(50, 14);
-        bearing_correction_value_canvas.print("-->");
+        motor_value_canvas.setCursor(50, 14);
+        motor_value_canvas.print("-->");
       } else if (motor_time_left > 0) {
-        bearing_correction_value_canvas.setCursor(50, 14);
-        bearing_correction_value_canvas.print("->");
+        motor_value_canvas.setCursor(50, 14);
+        motor_value_canvas.print("->");
       }
     } else {
-      bearing_correction_value_canvas.setCursor(50, 14);
-      bearing_correction_value_canvas.print("-");
+      motor_value_canvas.setCursor(50, 14);
+      motor_value_canvas.print("-");
     }
-    tft.drawBitmap(188, 230, bearing_correction_value_canvas.getBuffer(), 105, 18, 0xFC09, HX8357_BLACK);
+    tft.drawBitmap(188, 230, motor_value_canvas.getBuffer(), 105, 18, 0xFC09, HX8357_BLACK);
   }
 }
 
-void display_distance(AutoPilot& autoPilot) {
+void display_distance() {
   if (autoPilot.isWaypointSet()) {
-    static GFXcanvas1 distance_value_canvas(90, 42);
     distance_value_canvas.fillScreen(HX8357_BLACK);
     distance_value_canvas.setTextColor(HX8357_WHITE);
     distance_value_canvas.setFont(&FreeSansBold24pt7b);
@@ -360,9 +368,8 @@ void display_distance(AutoPilot& autoPilot) {
   }
 }
 
-void display_course(AutoPilot& autoPilot) {
+void display_course() {
   if (autoPilot.hasFix()) {
-    static GFXcanvas1 course_value_canvas(115, 42);
     course_value_canvas.fillScreen(HX8357_BLACK);
     course_value_canvas.setTextColor(HX8357_WHITE);
     course_value_canvas.setFont(&FreeSansBold24pt7b);
@@ -372,9 +379,8 @@ void display_course(AutoPilot& autoPilot) {
   }
 }
 
-void display_location_lat(AutoPilot& autoPilot) {
+void display_location_lat() {
   if (autoPilot.hasFix()) {
-    static GFXcanvas1 location_lat_value_canvas(115, 22);
     location_lat_value_canvas.fillScreen(HX8357_BLACK);
     location_lat_value_canvas.setTextColor(HX8357_WHITE);
     location_lat_value_canvas.setFont(&FreeSansBold12pt7b);
@@ -384,9 +390,8 @@ void display_location_lat(AutoPilot& autoPilot) {
   }
 }
 
-void display_location_lon(AutoPilot& autoPilot) {
+void display_location_lon() {
   if (autoPilot.hasFix()) {
-    static GFXcanvas1 location_lon_value_canvas(139, 22);
     location_lon_value_canvas.fillScreen(HX8357_BLACK);
     location_lon_value_canvas.setTextColor(HX8357_WHITE);
     location_lon_value_canvas.setFont(&FreeSansBold12pt7b);
@@ -396,8 +401,7 @@ void display_location_lon(AutoPilot& autoPilot) {
   }
 }
 
-void display_datetime(AutoPilot& autoPilot) {
-  static GFXcanvas1 date_time_value_canvas(165, 22);
+void display_datetime() {
   date_time_value_canvas.fillScreen(HX8357_BLACK);
   date_time_value_canvas.setTextColor(HX8357_WHITE);
   date_time_value_canvas.setFont(&FreeSansBold12pt7b);
@@ -411,8 +415,7 @@ void display_datetime(AutoPilot& autoPilot) {
   tft.drawBitmap(181, 293, date_time_value_canvas.getBuffer(), 165, 22, HX8357_WHITE, HX8357_BLACK);
 }
 
-void display_fix(AutoPilot& autoPilot) {
-  static GFXcanvas1 gps_fix_value_canvas(110, 22);
+void display_fix() {
   gps_fix_value_canvas.fillScreen(HX8357_BLACK);
   gps_fix_value_canvas.setTextColor(HX8357_WHITE);
   gps_fix_value_canvas.setFont(&FreeSansBold12pt7b);

@@ -25,11 +25,11 @@ void setup() {
 
 void loop() {
   uint32_t start_time = millis();
-  check_button(autoPilot);
-  check_command(autoPilot);
-  check_compass(autoPilot);
-  check_gps(autoPilot);
-  check_motor(autoPilot);
+  check_button();
+  check_command();
+  check_compass();
+  check_gps();
+  check_motor();
   display();
   // calculage_average_loop_time(millis() - start_time);
   // if (millis() - last_display_loop_average > DISAPLY_AVERAGE_RATE) {

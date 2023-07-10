@@ -31,7 +31,7 @@ void setup_compass() {
 
   accel.setRange(LSM303_RANGE_4G);
   accel.setMode(LSM303_MODE_NORMAL);
-
+  delay(1000);
   Serial.println("Compass all setup");
 }
 
@@ -84,7 +84,7 @@ void filter(float (&data)[3], float* previous_data) {
 }
 
 // See if it is time to read the compass
-void check_compass(AutoPilot& autoPilot) {
+void check_compass() {
   if (millis() - last_compass_read_time_mills > COMPASS_READ_INTERVAL) {
     last_compass_read_time_mills = millis();
 
