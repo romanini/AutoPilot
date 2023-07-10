@@ -16,8 +16,8 @@
 
 Adafruit_PCF8575 pcf = Adafruit_PCF8575();
 
-bool button_down[4];
-bool buttons_setup = false;
+static bool button_down[4];
+static bool buttons_setup = false;
 
 void setup_button() {
   Wire.begin();
@@ -30,9 +30,10 @@ void setup_button() {
     button_down[p] = false;
   }
   buttons_setup = true;
+  delay(1000);
 }
 
-void check_button(AutoPilot& autoPilot) {
+void check_button() {
   if (buttons_setup) {
     for (uint8_t p = 0; p < NUMBER_OF_BUTTONS; p++) {
       bool pinValue = pcf.digitalRead(p);

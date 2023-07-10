@@ -32,10 +32,11 @@ void setup_gps() {
   // Ask for firmware version
   Serial.println("GPS Firmware");
   gps.println(PMTK_Q_RELEASE);
+  delay(1000);
   Serial.println("GPS all setup");
 }
 
-void check_gps(AutoPilot& autoPilot) {
+void check_gps() {
   // read data from the GPS in the 'main loop'
   char c = gps.read();
 
