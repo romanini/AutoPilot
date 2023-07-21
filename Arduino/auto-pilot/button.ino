@@ -20,7 +20,6 @@ bool button_down[4];
 bool buttons_setup = false;
 
 void setup_button() {
-  Wire.begin();
   if (!pcf.begin(PCF8575_ADDRESS, &Wire)) {
     Serial.println("Couldn't find PCF8575");
     return;
@@ -32,7 +31,7 @@ void setup_button() {
   buttons_setup = true;
 }
 
-void check_button(AutoPilot& autoPilot) {
+void check_button() {
   if (buttons_setup) {
     for (uint8_t p = 0; p < NUMBER_OF_BUTTONS; p++) {
       bool pinValue = pcf.digitalRead(p);

@@ -4,7 +4,7 @@
 
 // what's the name of the hardware serial port?
 #define GPSSerial Serial1
-#define GPS_UPDATE_RATE 500
+#define GPS_UPDATE_RATE 100
 
 // Connect to the GPS on the hardware port
 Adafruit_GPS gps = Adafruit_GPS(&GPSSerial);
@@ -12,7 +12,10 @@ Adafruit_GPS gps = Adafruit_GPS(&GPSSerial);
 TimeChangeRule usPDT = {"PDT", Second, Sun, Mar, 2, -420};  //UTC - 7 hours
 TimeChangeRule usPST = {"PST", First, Sun, Nov, 2, -480};   //UTC - 8 hours
 Timezone pacificTz(usPDT, usPST);
-
+bool date_obtained = false;
+bool date_lost = false;
+uint32_t date_obtained_time = 0;
+uint32_t date_lost_time = 0;
 uint32_t gps_timer = millis();
 
 void setup_gps() {
@@ -25,7 +28,9 @@ void setup_gps() {
   // For parsing data, we don't suggest using anything but either RMC only or RMC+GGA since
   // the parser doesn't care about other sentences at this time
   // Set the update rate
-  gps.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ);  // 1 Hz update rate
+  gps.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ);  // 5 Hz update rate
+  gps.sendCommand(PMTK_API_SET_FIX_CTL_1HZ);  // 5 Hz fix position update rate
+  gps.sendCommand(PMTK_ENABLE_WAAS);
 
   delay(1000);
 
@@ -35,7 +40,7 @@ void setup_gps() {
   Serial.println("GPS all setup");
 }
 
-void check_gps(AutoPilot& autoPilot) {
+void check_gps() {
   // read data from the GPS in the 'main loop'
   char c = gps.read();
 
@@ -71,7 +76,19 @@ void check_gps(AutoPilot& autoPilot) {
 }
 
 void print_gps() {
+  if (gps.year > 0 && !date_obtained) {
+    date_obtained = true;
+    date_obtained_time = millis();
+  } else if (!date_lost && gps.year == 0 && date_obtained) {
+    date_lost_time = millis();
+    date_lost = true;
+  }
   Serial.println("RAW GPS::");
+  if (date_lost) {
+    Serial.print(" lost: [");
+    Serial.print(date_lost_time - date_obtained_time);
+    Serial.print("] ");
+  }
   Serial.print(gps.year);
   Serial.print("/");
   Serial.print(gps.month);
