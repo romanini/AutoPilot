@@ -45,7 +45,7 @@ void setup_display() {
 
   tft.setRotation(1);
   tft.fillScreen(HX8357_BLACK);
-  //initialize_display();
+  initialize_display();
   initialize_refresh_rates();
 
   for (int i = 0; i < DISPLAY_SEGMENTS; i++) {
