@@ -1,3 +1,5 @@
+#include <cmath>
+#include <sys/_intsup.h>
 #include "AutoPilot.h"
 #include <math.h>
 
@@ -91,6 +93,9 @@ bool AutoPilot::hasFix() {
 
 void AutoPilot::setFix(bool fix) {
   this->fix = fix;
+  if (!fix && mode == 2) {
+    mode = 0;
+  }
 }
 
 int AutoPilot::getFixquality() {
@@ -398,8 +403,8 @@ float AutoPilot::getBearing(float lat1, float lon1, float lat2, float lon2) {
     bearing += 360.0;
   }
 
-  // if ((roundf(bearing * 100) / 100) == 360.00) {
-  //   bearing = 0.00;
-  // }
+  if (roundf(bearing * 100) >= 36000) {
+    bearing = 0.00;
+  }
   return bearing;
 }
