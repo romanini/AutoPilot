@@ -277,33 +277,33 @@ void display_destination() {
 }
 
 void display_bearing() {
+  GFXcanvas16 bearing_value_canvas(115, 42);
   if (autoPilot.getMode() > 0) {
-    GFXcanvas16 bearing_value_canvas(115, 42);
     bearing_value_canvas.fillScreen(HX8357_BLACK);
     bearing_value_canvas.setFont(&FreeSansBold24pt7b);
     bearing_value_canvas.setTextColor(0xFC09);
     bearing_value_canvas.setCursor(0, 37);
     bearing_value_canvas.print(autoPilot.getBearing(), 1);
-    tft.drawRGBBitmap(182, 138, bearing_value_canvas.getBuffer(), 115, 42);
   }
+  tft.drawRGBBitmap(182, 138, bearing_value_canvas.getBuffer(), 115, 42);
 }
 
 void display_bearing_correction() {
+  GFXcanvas16 bearing_correction_value_canvas(107, 32);
   if (autoPilot.getMode() > 0) {
-    GFXcanvas16 bearing_correction_value_canvas(107, 32);
     bearing_correction_value_canvas.fillScreen(HX8357_BLACK);
     bearing_correction_value_canvas.setTextColor(0xFC09);
     bearing_correction_value_canvas.setFont(&FreeSansBold18pt7b);
     bearing_correction_value_canvas.setCursor(0, 29);
     bearing_correction_value_canvas.print((autoPilot.getBearingCorrection() > 0) ? autoPilot.getBearingCorrection() : autoPilot.getBearingCorrection() * -1.0, 1);
     bearing_correction_value_canvas.println((autoPilot.getBearingCorrection() > 0) ? " R" : " L");
-    tft.drawRGBBitmap(187, 193, bearing_correction_value_canvas.getBuffer(), 107, 32);
   }
+  tft.drawRGBBitmap(187, 193, bearing_correction_value_canvas.getBuffer(), 107, 32);
 }
 
 void display_motor() {
+  GFXcanvas16 motor_value_canvas(105, 18);
   if (autoPilot.getMode() > 0) {
-    GFXcanvas16 motor_value_canvas(105, 18);
     motor_value_canvas.fillScreen(HX8357_BLACK);
     motor_value_canvas.setTextColor(0xFC09);
     motor_value_canvas.setFont(&FreeSansBold12pt7b);
@@ -346,8 +346,8 @@ void display_motor() {
       motor_value_canvas.setCursor(50, 14);
       motor_value_canvas.print("-");
     }
-    tft.drawRGBBitmap(188, 230, motor_value_canvas.getBuffer(), 105, 18);
   }
+  tft.drawRGBBitmap(188, 230, motor_value_canvas.getBuffer(), 105, 18);
 }
 
 void display_distance() {
@@ -407,8 +407,6 @@ void display_datetime() {
   char dateTimeString[13];
   time_t currentTime = autoPilot.getDateTime();
   sprintf(dateTimeString, "%d/%d/%02d %d:%02d", month(currentTime), day(currentTime), year(currentTime) % 100, hour(currentTime), minute(currentTime));
-  Serial.print("Display Time: ");
-  Serial.println(dateTimeString);
   date_time_value_canvas.print(dateTimeString);
   tft.drawRGBBitmap(181, 293, date_time_value_canvas.getBuffer(), 165, 22);
 }

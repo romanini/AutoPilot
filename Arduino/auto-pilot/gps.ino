@@ -4,8 +4,8 @@
 
 // what's the name of the hardware serial port?
 #define GPSSerial Serial1
-#define GPS_UPDATE_RATE 100
-
+#define GPS_UPDATE_RATE 50
+#define MAX_CHARS_TO_READ 83
 // Connect to the GPS on the hardware port
 Adafruit_GPS gps = Adafruit_GPS(&GPSSerial);
 
@@ -42,7 +42,12 @@ void setup_gps() {
 
 void check_gps() {
   // read data from the GPS in the 'main loop'
-  char c = gps.read();
+  int chars_read = 0;
+  char c = 0;
+  while (c == 0 && chars_read < MAX_CHARS_TO_READ) {
+    c = gps.read();
+    chars_read++;
+  }
 
   // if a sentence is received, we can check the checksum, parse it...
   if (gps.newNMEAreceived()) {
@@ -70,8 +75,8 @@ void check_gps() {
       autoPilot.setSpeed(gps.speed);
       autoPilot.setLoation(gps.latitudeDegrees, gps.longitudeDegrees, gps.angle);
     }
-    print_gps();
-    autoPilot.printAutoPilot();
+    // print_gps();
+    // autoPilot.printAutoPilot();
   }
 }
 

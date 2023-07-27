@@ -94,7 +94,7 @@ bool AutoPilot::hasFix() {
 void AutoPilot::setFix(bool fix) {
   this->fix = fix;
   if (!fix && mode == 2) {
-    mode = 0;
+    setMode(0);
   }
 }
 
@@ -344,12 +344,12 @@ void AutoPilot::printAutoPilot() {
   serial->print("Bearing: ");
   if (this->mode > 0) {
     serial->print(this->bearing, 1);
+    serial->print(" ");
+    serial->print((this->bearing_correction > 0) ? this->bearing_correction : this->bearing_correction * -1.0, 1);
+    serial->print((this->bearing_correction > 0) ? " R" : " L");
   } else {
     serial->print("N/A");
   }
-  serial->print(" ");
-  serial->print((this->bearing_correction > 0) ? this->bearing_correction : this->bearing_correction * -1.0, 1);
-  serial->print((this->bearing_correction > 0) ? " R" : " L");
   serial->println("");
 
   serial->print("Speed: ");
