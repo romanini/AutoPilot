@@ -2,10 +2,18 @@
 
 #define MAX_MOTOR_PLUS 255
 #define MAX_MOTOR_NEG 255
-#define MOTOR_NEG_PIN 2
-#define MOTOR_PLUS_PIN 3
+#define MOTOR_NEG_PIN 3
+#define MOTOR_PLUS_PIN 6
 #define DIRECTION_POSITIVE "starbord"
 #define DIRECTION_NEGATIVE "port"
+#define MIN_DEGREE_ADJUST 0.5
+#define SMALL_ADJUST 3.0
+#define SLOW_CHANGE 3.0
+#define INV_RATE_CHANGE (1.0/10.0)
+#define SMALL_ADJUST_RUN (SLOW_CHANGE * INV_RATE_CHANGE)
+#define MILLIS_PER_DEGREE_RATE_CHANGE 1000
+#define MIN_MOTOR_OFF_TIME 500
+#define MILLIS_PER_DEGREE_CORRECTION 500
 
 int motor_stop_time_mills = 0;
 int wheel = 0;
@@ -56,9 +64,32 @@ void check_motor() {
     // we don't have a stop time so as long as we have not run the motor
     // within MIN_MOTOR_OFF_TIME
   } else if ((cur_millis - autoPilot.getMotorLastRunTime()) > MIN_MOTOR_OFF_TIME) {
-    if (autoPilot.getBearingCorrection() != 0) {
-      int run_millis = floor(autoPilot.getBearingCorrection() * MILLIS_PER_DEGREE_CORRECTION);
-      start_motor(run_millis);
-    }
+    float correct = autoPilot.getBearingCorrection();
+    int run_millis = 0;
+    if (correct > MIN_DEGREE_ADJUST) {
+	float rate_change = autoPilot.getHeadingShortAverageChange();
+  Serial.print("rate change ");
+  Serial.print(rate_change);
+  Serial.print(":   correction ");
+  Serial.println(correct);
+	if(correct > SMALL_ADJUST && rate_change < SLOW_CHANGE)
+	{
+		run_millis = floor(SMALL_ADJUST_RUN*correct);
+	}
+	else
+	{
+		float desired_rate_change = correct * INV_RATE_CHANGE;
+		float diff_rate_change = desired_rate_change - rate_change;
+		run_millis = floor(diff_rate_change * MILLIS_PER_DEGREE_RATE_CHANGE);
+	}
+
+	if(run_millis)
+  {
+          
+      		start_motor(run_millis);
   }
+    }
+    
+  }
+  //autoPilot.printAutoPilot();
 }

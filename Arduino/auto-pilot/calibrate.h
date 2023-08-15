@@ -1,8 +1,6 @@
 #ifndef CALIBRATE_H
 #define CALIBRATE_H
 
-#define MIN_MOTOR_OFF_TIME 100
-#define MILLIS_PER_DEGREE_CORRECTION 100
 
 #define COMPASS_READ_INTERVAL 20          // read at 50Hz for high accuracy
 #define LOW_PASS_FILTER_COEFFICIENT 0.25  // low pass smoothing factor
