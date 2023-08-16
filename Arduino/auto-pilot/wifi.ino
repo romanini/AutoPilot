@@ -1,4 +1,5 @@
 #include <WiFiNINA.h>
+#include <TimeLib.h>
 #include "arduino_secrets.h"
 
 #define BUF_SIZE 100
@@ -77,6 +78,76 @@ void process_mode(WiFiClient client, char buffer[]) {
   }
 }
 
+void process_print(WiFiClient client) {
+  client.print("Date&Time: ");
+  char dateTimeString[13];
+  time_t currentTime = autoPilot.getDateTime();
+  sprintf(dateTimeString, "%d/%d/%02d %d:%02d", month(currentTime), day(currentTime), year(currentTime) % 100, hour(currentTime), minute(currentTime));
+  client.print(dateTimeString);
+  if (autoPilot.hasFix()) {
+    if (autoPilot.getFixquality() == 0) {
+      client.print(" n/a");
+    } else if (autoPilot.getFixquality() == 1) {
+      client.print(" GPS");
+    } else if (autoPilot.getFixquality() == 2) {
+      client.print(" DGPS");
+    }
+    client.print(" (");
+    client.print(autoPilot.getSatellites());
+    client.print(")");
+  }
+  client.println("");
+
+  client.print("Destination: ");
+  if (autoPilot.getMode() == 2) {
+    client.print("navigate ");
+    client.print(autoPilot.getWaypointLat(), 6);
+    client.print(",");
+    client.print(autoPilot.getWaypointLon(), 6);
+  } else if (autoPilot.getMode() == 1) {
+    client.print("compass ");
+    client.print(autoPilot.getHeadingDesired(), 1);
+  } else {
+    client.print("N/A");
+  }
+  client.println("");
+
+  client.print("Heading: ");
+  client.print(autoPilot.getHeadingLongAverage());
+  client.print(" ~");
+  client.print(autoPilot.getHeadingLongAverageChange());
+  client.print(" / ");
+  client.print(autoPilot.getHeadingShortAverage());
+  client.print(" ~");
+  client.print(autoPilot.getHeadingLongAverageChange());
+  client.print(" / ");
+  client.print(autoPilot.getHeading());
+  client.print(" ");
+  client.print("Bearing: ");
+  if (autoPilot.getMode() > 0) {
+    client.print(autoPilot.getBearing(), 1);
+    client.print(" ");
+    client.print((autoPilot.getBearingCorrection() > 0) ? autoPilot.getBearingCorrection() : autoPilot.getBearingCorrection() * -1.0, 1);
+    client.print((autoPilot.getBearingCorrection() > 0) ? " R" : " L");
+  } else {
+    client.print("N/A");
+  }
+  client.println("");
+
+  client.print("Speed: ");
+  client.print(autoPilot.getSpeed(), 2);
+  client.print(" Distance: ");
+  client.print(autoPilot.getDistance(), 2);
+  client.print(" Course: ");
+  client.print(autoPilot.getCourse(), 2);
+  client.print(" Location: ");
+  client.print(autoPilot.getLocationLat(), 6);
+  client.print(",");
+  client.print(autoPilot.getLocationLon(), 6);
+  client.println("");
+  client.println("");
+}
+
 void process_waypoint(WiFiClient client, char buffer[]) {
   char* coordinates = strtok(buffer, ",");
   Serial.print("Settnig waypoint ");
@@ -118,10 +189,13 @@ void process_command(WiFiClient client, char buffer[]) {
   switch (command) {
     case 'a':
       process_adjust_bearing(client, buffer);
-      break;
+      break;    
     case 'm':
       process_mode(client, buffer);
       break;
+    case 'p':
+      process_print(client);
+      break;        
     case 'w':
       process_waypoint(client, buffer);
       break;

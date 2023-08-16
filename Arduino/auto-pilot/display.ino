@@ -15,7 +15,7 @@
 #define DISPLAY_UPDATE_RATE 400
 #define DISPLAY_SEGMENTS 15
 
-int display_refresh_rate[DISPLAY_SEGMENTS]; 
+int display_refresh_rate[DISPLAY_SEGMENTS];
 
 uint32_t display_refresh_timer[DISPLAY_SEGMENTS];
 int display_refresh_selector = 0;
@@ -58,49 +58,49 @@ void setup_display() {
 void initialize_refresh_rates() {
   for (int i = 0; i < DISPLAY_SEGMENTS; i++) {
     switch (i) {
-      case 0: // speed
+      case 0:  // speed
         display_refresh_rate[i] = 750;
         break;
-      case 1: // heading long average
+      case 1:  // heading long average
         display_refresh_rate[i] = 700;
         break;
-      case 2: // heading long average change
+      case 2:  // heading long average change
         display_refresh_rate[i] = 700;
         break;
-      case 3: // heading short average
+      case 3:  // heading short average
         display_refresh_rate[i] = 600;
         break;
-      case 4: // heading short average change
+      case 4:  // heading short average change
         display_refresh_rate[i] = 600;
         break;
       case 5:  // heading
         display_refresh_rate[i] = 400;
         break;
-      case 6: // bearing
+      case 6:  // bearing
         display_refresh_rate[i] = 900;
         break;
-      case 7: // bearing correction
+      case 7:  // bearing correction
         display_refresh_rate[i] = 900;
         break;
-      case 8: // motor
+      case 8:  // motor
         display_refresh_rate[i] = 250;
         break;
-      case 9: // distance
+      case 9:  // distance
         display_refresh_rate[i] = 1250;
         break;
-      case 10: //course
+      case 10:  //course
         display_refresh_rate[i] = 800;
         break;
-      case 11: // location lat
+      case 11:  // location lat
         display_refresh_rate[i] = 850;
         break;
-      case 12: // location lon
+      case 12:  // location lon
         display_refresh_rate[i] = 850;
         break;
-      case 13: // date & time
+      case 13:  // date & time
         display_refresh_rate[i] = 10000;
         break;
-      case 14: // fix
+      case 14:  // fix
         display_refresh_rate[i] = 15000;
         break;
     }
@@ -173,11 +173,13 @@ void display() {
 
 void display_speed() {
   GFXcanvas16 speed_value_canvas(90, 42);
-  speed_value_canvas.fillScreen(HX8357_BLACK);
-  speed_value_canvas.setTextColor(HX8357_CYAN);
-  speed_value_canvas.setFont(&FreeSansBold24pt7b);
-  speed_value_canvas.setCursor(0, 37);
-  speed_value_canvas.print(autoPilot.getSpeed(), 2);
+  if (autoPilot.hasFix()) {
+    speed_value_canvas.fillScreen(HX8357_BLACK);
+    speed_value_canvas.setTextColor(HX8357_CYAN);
+    speed_value_canvas.setFont(&FreeSansBold24pt7b);
+    speed_value_canvas.setCursor(0, 37);
+    speed_value_canvas.print(autoPilot.getSpeed(), 2);
+  }
   tft.drawRGBBitmap(20, 23, speed_value_canvas.getBuffer(), 90, 42);
 }
 
@@ -363,39 +365,42 @@ void display_distance() {
 }
 
 void display_course() {
+
+  GFXcanvas16 course_value_canvas(115, 42);
   if (autoPilot.hasFix()) {
-    GFXcanvas16 course_value_canvas(115, 42);
     course_value_canvas.fillScreen(HX8357_BLACK);
     course_value_canvas.setTextColor(0x7FE8);
     course_value_canvas.setFont(&FreeSansBold24pt7b);
     course_value_canvas.setCursor(0, 40);
     course_value_canvas.print(autoPilot.getCourse(), 1);
-    tft.drawRGBBitmap(341, 113, course_value_canvas.getBuffer(), 115, 42);
   }
+  tft.drawRGBBitmap(341, 113, course_value_canvas.getBuffer(), 115, 42);
 }
 
 void display_location_lat() {
+  GFXcanvas16 location_lat_value_canvas(115, 22);
   if (autoPilot.hasFix()) {
-    GFXcanvas16 location_lat_value_canvas(115, 22);
+
     location_lat_value_canvas.fillScreen(HX8357_BLACK);
     location_lat_value_canvas.setTextColor(0x7FE8);
     location_lat_value_canvas.setFont(&FreeSansBold12pt7b);
     location_lat_value_canvas.setCursor(0, 18);
     location_lat_value_canvas.print(autoPilot.getLocationLat(), 6);
-    tft.drawRGBBitmap(354, 200, location_lat_value_canvas.getBuffer(), 115, 22);
   }
+  tft.drawRGBBitmap(354, 200, location_lat_value_canvas.getBuffer(), 115, 22);
 }
 
 void display_location_lon() {
+  GFXcanvas16 location_lon_value_canvas(139, 22);
   if (autoPilot.hasFix()) {
-    GFXcanvas16 location_lon_value_canvas(139, 22);
+
     location_lon_value_canvas.fillScreen(HX8357_BLACK);
     location_lon_value_canvas.setTextColor(0x7FE8);
     location_lon_value_canvas.setFont(&FreeSansBold12pt7b);
     location_lon_value_canvas.setCursor(0, 18);
     location_lon_value_canvas.print(autoPilot.getLocationLon(), 6);
-    tft.drawRGBBitmap(331, 230, location_lon_value_canvas.getBuffer(), 139, 22);
   }
+  tft.drawRGBBitmap(331, 230, location_lon_value_canvas.getBuffer(), 139, 22);
 }
 
 void display_datetime() {

@@ -160,6 +160,10 @@ float AutoPilot::getHeading() {
 }
 
 void AutoPilot::setHeading(float heading) {
+  if (isnanf(heading) || isnan(heading)) {
+    serial->println("received nan Heading!");
+    return;
+  }
   this->heading = heading;
   if (this->heading_average_initialized) {
     this->heading_long_average = this->heading_long_average + ((this->heading - this->heading_long_average) / this->heading_long_average_size);
