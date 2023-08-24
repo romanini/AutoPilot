@@ -5,12 +5,14 @@
 // what's the name of the hardware serial port?
 #define GPSSerial Serial1
 #define GPS_UPDATE_RATE 50
-#define MAX_CHARS_TO_READ 83
+#define MAX_CHARS_TO_READ 100
+#define MAX_SENTENCES_PER_CYCLE 10
+
 // Connect to the GPS on the hardware port
 Adafruit_GPS gps = Adafruit_GPS(&GPSSerial);
 
-TimeChangeRule usPDT = {"PDT", Second, Sun, Mar, 2, -420};  //UTC - 7 hours
-TimeChangeRule usPST = {"PST", First, Sun, Nov, 2, -480};   //UTC - 8 hours
+TimeChangeRule usPDT = { "PDT", Second, Sun, Mar, 2, -420 };  //UTC - 7 hours
+TimeChangeRule usPST = { "PST", First, Sun, Nov, 2, -480 };   //UTC - 8 hours
 Timezone pacificTz(usPDT, usPST);
 bool date_obtained = false;
 bool date_lost = false;
@@ -44,40 +46,46 @@ void check_gps() {
   // read data from the GPS in the 'main loop'
   int chars_read = 0;
   char c = 0;
-  while (c == 0 && chars_read < MAX_CHARS_TO_READ) {
-    c = gps.read();
-    chars_read++;
-  }
+  int sentence_left_to_read = MAX_SENTENCES_PER_CYCLE;
+  do {
+    do {
+      c = gps.read();
+      chars_read++;
+    } while ((c != 0) && (chars_read < MAX_CHARS_TO_READ) && !gps.newNMEAreceived());
 
-  // if a sentence is received, we can check the checksum, parse it...
-  if (gps.newNMEAreceived()) {
-    if (!gps.parse(gps.lastNMEA())) {  // this also sets the newNMEAreceived() flag to false
-      return;                          // we can fail to parse a sentence in which case we should just wait for another
+    // if a sentence is received, we can check the checksum, parse it...
+    if (gps.newNMEAreceived()) {
+      if (!gps.parse(gps.lastNMEA())) {  // this also sets the newNMEAreceived() flag to false
+        continue;                          // we can fail to parse a sentence in which case we should just wait for another
+      }
+      sentence_left_to_read--;
+    } else {
+      return;
     }
-  }
 
-  // approximately every 1 seconds or so, print out the current stats
-  if (millis() - gps_timer > GPS_UPDATE_RATE) {
-    gps_timer = millis();  // reset the timer
-    autoPilot.setFix(gps.fix);
-    if (gps.fix) {
-      tmElements_t timeComponents;
-      timeComponents.Year = 2000 + gps.year - 1970;
-      timeComponents.Month = gps.month;
-      timeComponents.Day = gps.day;
-      timeComponents.Hour = gps.hour;
-      timeComponents.Minute = gps.minute;
-      timeComponents.Second = gps.seconds;
-      time_t currentTime = makeTime(timeComponents);
-      time_t localTime = pacificTz.toLocal(currentTime); 
-      autoPilot.setDateTime(localTime);
-      autoPilot.setFixquality(gps.fixquality, gps.satellites);
-      autoPilot.setSpeed(gps.speed);
-      autoPilot.setLoation(gps.latitudeDegrees, gps.longitudeDegrees, gps.angle);
+    // approximately every 1 seconds or so, print out the current stats
+    if (millis() - gps_timer > GPS_UPDATE_RATE) {
+      gps_timer = millis();  // reset the timer
+      autoPilot.setFix(gps.fix);
+      if (gps.fix) {
+        tmElements_t timeComponents;
+        timeComponents.Year = 2000 + gps.year - 1970;
+        timeComponents.Month = gps.month;
+        timeComponents.Day = gps.day;
+        timeComponents.Hour = gps.hour;
+        timeComponents.Minute = gps.minute;
+        timeComponents.Second = gps.seconds;
+        time_t currentTime = makeTime(timeComponents);
+        time_t localTime = pacificTz.toLocal(currentTime);
+        autoPilot.setDateTime(localTime);
+        autoPilot.setFixquality(gps.fixquality, gps.satellites);
+        autoPilot.setSpeed(gps.speed);
+        autoPilot.setLoation(gps.latitudeDegrees, gps.longitudeDegrees, gps.angle);
+      }
+      // print_gps();
+      // autoPilot.printAutoPilot();
     }
-    // print_gps();
-    // autoPilot.printAutoPilot();
-  }
+  } while (sentence_left_to_read > 0);
 }
 
 void print_gps() {
@@ -114,9 +122,9 @@ void print_gps() {
   Serial.println(gps.satellites);
   Serial.print(gps.speed);
   Serial.print(" / ");
-  Serial.print(gps.latitudeDegrees,14);
+  Serial.print(gps.latitudeDegrees, 14);
   Serial.print(" / ");
-  Serial.print(gps.longitudeDegrees,14);
+  Serial.print(gps.longitudeDegrees, 14);
   Serial.print(" / ");
   Serial.println(gps.angle);
 }
