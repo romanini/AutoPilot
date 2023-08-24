@@ -36,14 +36,14 @@ int loopcount = 0;
 
 // Hard-iron calibration settings
 const float hard_iron[3] = {
-  -8.55,  21.21,  -31.25
+  0.0,  0.0,  0.0
 };
 
 // Soft-iron calibration settings
 const float soft_iron[3][3] = {
-  {  0.932,  -0.009, 0.011  },
-  {  -0.009,  1.040, -0.033  },
-  { 0.011, -0.033,  1.033  }
+  { 1.0, 0.0, 0.0  },
+  { 0.0, 1.0, 0.0  },
+  { 0.0, 0.0, 1.0  }
 };
 
 void setup(void) {
