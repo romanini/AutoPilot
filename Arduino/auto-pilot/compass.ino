@@ -124,7 +124,7 @@ void check_compass() {
     // //  Calculating tilt compensated heading
     double Xh = mag_data[0] * cos((double)pitch) + mag_data[2] * sin((double)pitch);
     double Yh = mag_data[0] * sin((double)roll) * sin((double)pitch) + mag_data[1] * cos((double)roll) - mag_data[2] * sin((double)roll) * cos((double)pitch);
-    float heading = (atan2(Yh, Xh)) * 180 / PI;
+    float heading = (atan2(Xh, Yh)) * 180 / PI;
     if (heading < 0) {
       heading += 360;
     }

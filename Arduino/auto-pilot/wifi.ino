@@ -7,9 +7,9 @@
 ///////please enter your sensitive data in the Secret tab/arduino_secrets.h
 char ssid[] = SECRET_SSID;  // your network SSID (name)
 char pass[] = SECRET_PASS;  // your network password (use for WPA, or use as key for WEP)
-//IPAddress ip(10, 10, 10, 100);
+IPAddress ip(10, 10, 10, 100);
 
-IPAddress ip(172, 16, 0, 110);
+//IPAddress ip(172, 16, 0, 110);
 static WiFiServer debug_server(23);
 static WiFiServer command_server(8023);
 // WiFiClient client;
@@ -60,6 +60,12 @@ void setup_wifi() {
 void process_adjust_bearing(WiFiClient client, char buffer[]) {
   float bearing_adjustment = atof(&buffer[1]);
   autoPilot.adjustHeadingDesired(bearing_adjustment);
+  client.println("ok");
+}
+
+void process_run(WiFiClient client, char buffer[]) {
+  float run_millis = atof(&buffer[1]);
+  autoPilot.setStartMotor(run_millis);
   client.println("ok");
 }
 
@@ -146,6 +152,11 @@ void process_print(WiFiClient client) {
   client.print(autoPilot.getLocationLon(), 6);
   client.println("");
   client.println("");
+
+  client.print("Start Motor: ");
+  client.print(autoPilot.getStartMotor());
+  client.print(" Motro Started: ");
+  client.println((autoPilot.getMotorStarted() ? " Y" : " N"));
 }
 
 void process_waypoint(WiFiClient client, char buffer[]) {
@@ -196,6 +207,9 @@ void process_command(WiFiClient client, char buffer[]) {
     case 'p':
       process_print(client);
       break;        
+    case 'r':
+      process_run(client, buffer);
+      break;
     case 'w':
       process_waypoint(client, buffer);
       break;

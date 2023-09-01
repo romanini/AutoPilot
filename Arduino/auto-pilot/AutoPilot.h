@@ -31,6 +31,8 @@ private:
   bool heading_average_initialized;
   int heading_short_average_size;
   int heading_long_average_size;
+  int start_motor;
+  bool motor_started;
 
   float filtered_magnetometer_data[3]; // // Filtered Magnetometer measurements
   float filtered_accelerometer_data[3]; // // Filtered Accelerometer measurements
@@ -55,6 +57,11 @@ private:
   float getBearing(float lat1, float lon1, float lat2, float lon2);
 public:
   AutoPilot(HardwareSerial* ser);
+  void setStartMotor(int start_motor);
+  int getStartMotor();
+  void setMotorStarted(bool motor_started);
+  bool getMotorStarted();
+  
   void setDateTime(time_t dateTime);
   time_t getDateTime();
   int getMotorStopTime();

@@ -7,14 +7,14 @@
 
 // Hard-iron magnetic calibration settings
 const float magnetic_hard_iron[3] = {
-  -8.55, 21.21, -31.25
+  -30.70, 20.52, 63.24
 };
 
 // Soft-iron magnetic calibration settings
 const float magnetic_soft_iron[3][3] = {
-  { 0.932, -0.009, 0.011 },
-  { -0.009, 1.040, -0.033 },
-  { 0.011, -0.033, 1.033 }
+  { 1.010, 0.015, 0.004 },
+  { 0.015, 0.998, -0.035 },
+  { 0.004, -0.035, 0.993 }
 };
 
 const float  acceleration_calibration[3][3] = {

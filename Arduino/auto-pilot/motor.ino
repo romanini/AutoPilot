@@ -11,9 +11,9 @@
 #define SLOW_CHANGE 3.0
 #define INV_RATE_CHANGE (1.0 / 10.0)
 #define SMALL_ADJUST_RUN (SLOW_CHANGE * INV_RATE_CHANGE)
-#define MILLIS_PER_DEGREE_RATE_CHANGE 1000
-#define MIN_MOTOR_OFF_TIME 500
-#define MILLIS_PER_DEGREE_CORRECTION 500
+#define MILLIS_PER_DEGREE_RATE_CHANGE 100
+#define MIN_MOTOR_OFF_TIME 1000
+#define MILLIS_PER_DEGREE_CORRECTION 1000
 
 int motor_stop_time_mills = 0;
 int wheel = 0;
@@ -41,6 +41,8 @@ void start_motor(int run_millis) {
   // the stop time we need have it always in the future so multiply
   // run_millis by direction to always get a positive number
   autoPilot.setMotor(millis() + (run_millis * direction), direction);
+  Serial.print("Motor Started: ");
+  Serial.println(run_millis * direction);
 }
 
 void stop_motor() {
@@ -55,10 +57,25 @@ void stop_motor() {
  */
 void check_motor() {
   unsigned int cur_millis = millis();
+
+  if (autoPilot.getMode() == 0) {
+    stop_motor();
+    return;
+  } else if (autoPilot.getMode() == 1) {
+    if (autoPilot.getStartMotor() != 0 && !autoPilot.getMotorStarted()) {
+      autoPilot.setMotorStarted(true);
+      Serial.print("Starting Motor: ");
+      Serial.println(autoPilot.getStartMotor());
+
+      start_motor(autoPilot.getStartMotor());
+    }
+  }
+
   // if we have a stop time we are/should be running the motor
   if (autoPilot.getMotorStopTime()) {
     // if the stop time is in the past, it's time to stop the motor
     if (autoPilot.getMotorStopTime() < cur_millis) {
+      Serial.println("Motor Stopping");
       stop_motor();
     }
     // we don't have a stop time so as long as we have not run the motor
@@ -66,23 +83,36 @@ void check_motor() {
   } else if ((cur_millis - autoPilot.getMotorLastRunTime()) > MIN_MOTOR_OFF_TIME) {
     float correct = autoPilot.getBearingCorrection();
     int run_millis = 0;
-    if (correct > MIN_DEGREE_ADJUST) {
-      float rate_change = autoPilot.getHeadingShortAverageChange();
-      Serial.print("rate change ");
-      Serial.print(rate_change);
-      Serial.print(":   correction ");
-      Serial.println(correct);
-      if (correct > SMALL_ADJUST && rate_change < SLOW_CHANGE) {
+    if (fabs(correct) > MIN_DEGREE_ADJUST) {
+      float rate_change = autoPilot.getHeadingShortAverageChange() * -1.0;
+      if (fabs(correct) < SMALL_ADJUST && fabs(rate_change) < SLOW_CHANGE) {
+        Serial.print("rate change ");
+        Serial.print(rate_change);
+        Serial.print(":   correction ");
+        Serial.println(correct);
         run_millis = floor(SMALL_ADJUST_RUN * correct);
+        Serial.print("run_millis : ");
+        Serial.println(run_millis);
       } else {
-        float desired_rate_change = correct * INV_RATE_CHANGE;
+        float desired_rate_change = correct * INV_RATE_CHANGE * -1.0;
         float diff_rate_change = desired_rate_change - rate_change;
+        Serial.print("rate change ");
+        Serial.print(rate_change);
+        Serial.print(":   correction ");
+        Serial.print(correct);
+        Serial.print(" desired rate: ");
+        Serial.print(desired_rate_change);
+        Serial.print(" diff rate: ");
+        Serial.println(diff_rate_change);
         run_millis = floor(diff_rate_change * MILLIS_PER_DEGREE_RATE_CHANGE);
+        run_millis *= -1;
+        Serial.print("run_millis : ");
+        Serial.println(run_millis);
       }
 
-      if (run_millis) {
-        start_motor(run_millis);
-      }
+      // if (run_millis) {
+      //   // start_motor(run_millis * -1.0);
+      // }
     }
   }
   //autoPilot.printAutoPilot();

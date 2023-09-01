@@ -41,6 +41,9 @@ AutoPilot::AutoPilot(HardwareSerial* ser) {
   heading_short_average_size = 0;
   heading_long_average_size = 0;
 
+  start_motor = 0;
+  motor_started = false;
+
   for (int i = 0; i < 3; i++) {
     filtered_magnetometer_data[i] = 0.0;
     filtered_accelerometer_data[i] = 0.0;
@@ -58,6 +61,22 @@ AutoPilot::AutoPilot(HardwareSerial* ser) {
   modeChanged = true;
 }
 
+void AutoPilot::setStartMotor(int start_motor) {
+  this->start_motor = start_motor;
+  this->motor_started = false;
+}
+
+int AutoPilot::getStartMotor() {
+  return this->start_motor;
+}
+
+void AutoPilot::setMotorStarted(bool motor_started) {
+  this->motor_started = motor_started;
+}
+
+bool AutoPilot::getMotorStarted() {
+  return this->motor_started;
+}
 void AutoPilot::setDateTime(time_t dateTime) {
   this->dateTime = dateTime;
 }
@@ -119,7 +138,7 @@ int AutoPilot::setMode(int mode) {
   if ((mode <= 1) || (mode == 2 && this->waypoint_set)) {
     this->mode = mode;
     if (this->mode == 1) {
-      this->heading_desired = this->heading_long_average;
+      this->heading_desired = this->heading_short_average;
       this->bearing = this->heading_desired;
     }
     this->modeChanged = true;
@@ -136,7 +155,7 @@ float AutoPilot::getHeadingDesired() {
 void AutoPilot::adjustHeadingDesired(float change) {
   if (this->mode > 0) {
     if (this->mode == 2) {
-      this->heading_desired = this->heading_long_average;
+      this->heading_desired = this->heading_short_average;
       this->bearing = this->heading_desired;
       this->modeChanged = true;
     }
