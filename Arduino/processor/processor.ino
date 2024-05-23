@@ -1,6 +1,19 @@
 #include <Wire.h>
 #include <WiFiNINA.h>
-#include <AutoPilot.h>
+#include "AutoPilot.h"
+
+#define DEBUG_ENABLED true
+#ifdef DEBUG_ENABLED
+#define DEBUG_PRINT(x) Serial.print(x)
+#define DEBUG_PRINT2(x,y) Serial.print(x,y)
+#define DEBUG_PRINTLN(x) Serial.println(x)
+#define DEBUG_PRINTLN2(x,y) Serial.println(x,y)
+#else
+#define DEBUG_PRINT(x)
+#define DEBUG_PRINT2(x,y)
+#define DEBUG_PRINTLN(x)
+#define DEBUG_PRINT2(x,y)
+#endif
 
 // #define DISAPLY_AVERAGE_RATE 5000
 // #define AVERAGE_MAX_SIZE 1000
@@ -15,29 +28,28 @@ void setup() {
   Serial.begin(38400);
   Wire.begin();
   setup_wifi();
-  setup_display();
+  setup_publish();
+  setup_command();
   setup_motor();
   setup_compass();
-  setup_button();
   setup_gps();
   Serial.println("Setup complete");
 }
 
 void loop() {
   uint32_t start_time = millis();
-  check_button();
   check_command();
   check_compass();
   check_gps();
   check_motor();
-  // display();
+  publish();
   // calculage_average_loop_time(millis() - start_time);
   // if (millis() - last_display_loop_average > DISAPLY_AVERAGE_RATE) {
   //   last_display_loop_average = millis();
-  //   Serial.print("Loop average runtime: ");
-  //   Serial.print(average_loop_time);
-  //   Serial.print(" / ");
-  //   Serial.println(average_size);
+  //   DEBUG_PRINT("Loop average runtime: ");
+  //   DEBUG_PRINT(average_loop_time);
+  //   DEBUG_PRINT(" / ");
+  //   DEBUG_PRINTLN(average_size);
   // }
 }
 

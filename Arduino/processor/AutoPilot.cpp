@@ -222,6 +222,14 @@ float AutoPilot::getHeadingShortAverageChange() {
   return this->heading_short_average_change;
 }
 
+float AutoPilot::getHeadingLongAverageSize() {
+  return this->heading_long_average_size;
+}
+
+float AutoPilot::getHeadingShortAverageSize() {
+  return this->heading_short_average_size;
+}
+
 float* AutoPilot::getFilteredAccelerometerData() {
   return this->filtered_accelerometer_data;
 }

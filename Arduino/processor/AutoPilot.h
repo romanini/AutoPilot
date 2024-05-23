@@ -86,6 +86,8 @@ public:
   float getHeadingShortAverage();
   float getHeadingLongAverageChange();
   float getHeadingShortAverageChange();
+  float getHeadingLongAverageSize();
+  float getHeadingShortAverageSize();
   float* getFilteredAccelerometerData();
   void setFilteredAccelerometerData(float data[3]);
   float* getFilteredMagentometerData();
@@ -104,6 +106,7 @@ public:
   bool hasDestinationChanged();
   bool hasModeChanged();
   void printAutoPilot();
+
 };
 
 #endif

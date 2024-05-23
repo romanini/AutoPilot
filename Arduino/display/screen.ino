@@ -23,7 +23,7 @@ int display_refresh_selector = 0;
 // Use hardware SPI (on Uno, #13, #12, #11) and the above for CS/DC
 Adafruit_HX8357 tft = Adafruit_HX8357(TFT_CS, TFT_DC, TFT_RST);
 
-void setup_display() {
+void setup_screen() {
   tft.begin();
 
   // read diagnostics (optional but can help debug problems)
@@ -82,27 +82,26 @@ void initialize_refresh_rates() {
       case 7:  // bearing correction
         display_refresh_rate[i] = 900;
         break;
-      case 8:  // motor
-        display_refresh_rate[i] = 250;
-        break;
-      case 9:  // distance
+      case 8:  // distance
         display_refresh_rate[i] = 1250;
         break;
-      case 10:  //course
+      case 9:  //course
         display_refresh_rate[i] = 800;
         break;
-      case 11:  // location lat
+      case 10:  // location lat
         display_refresh_rate[i] = 850;
         break;
-      case 12:  // location lon
+      case 11:  // location lon
         display_refresh_rate[i] = 850;
         break;
-      case 13:  // date & time
+      case 12:  // date & time
         display_refresh_rate[i] = 10000;
         break;
-      case 14:  // fix
+      case 13:  // fix
         display_refresh_rate[i] = 15000;
         break;
+      case 14:  // volts
+        display_refresh_rate[i] = 10000;
     }
   }
 }
@@ -146,25 +145,25 @@ void display() {
         display_bearing_correction();
         break;
       case 8:
-        display_motor();
-        break;
-      case 9:
         display_distance();
         break;
-      case 10:
+      case 9:
         display_course();
         break;
-      case 11:
+      case 10:
         display_location_lat();
         break;
-      case 12:
+      case 11:
         display_location_lon();
         break;
-      case 13:
+      case 12:
         display_datetime();
         break;
-      case 14:
+      case 13:
         display_fix();
+        break;
+      case 14:
+        display_volts();
         break;
     }
   }
@@ -250,6 +249,11 @@ void display_mode() {
     mode_value_canvas.setFont(&FreeSansBold12pt7b);
     mode_value_canvas.setCursor(0, 18);
     mode_value_canvas.print("compass");
+  } else {
+    mode_value_canvas.setTextColor(0xF57F);
+    mode_value_canvas.setFont(&FreeSansBold12pt7b);
+    mode_value_canvas.setCursor(0, 18);
+    mode_value_canvas.print("disabled"); 
   }
   tft.drawRGBBitmap(185, 20, mode_value_canvas.getBuffer(), 115, 24);
 }
@@ -273,7 +277,7 @@ void display_destination() {
     destination_value_canvas.setTextColor(0xF57F);
     destination_value_canvas.setFont(&FreeSansBold24pt7b);
     destination_value_canvas.setCursor(30, 35);
-    destination_value_canvas.print("N/A");
+    destination_value_canvas.print("");
   }
   tft.drawRGBBitmap(171, 52, destination_value_canvas.getBuffer(), 139, 50);
 }
@@ -282,16 +286,16 @@ void display_bearing() {
   GFXcanvas16 bearing_value_canvas(115, 42);
   if (autoPilot.getMode() > 0) {
     bearing_value_canvas.fillScreen(HX8357_BLACK);
-    bearing_value_canvas.setFont(&FreeSansBold24pt7b);
+    bearing_value_canvas.setFont(&FreeSansBold18pt7b);
     bearing_value_canvas.setTextColor(0xFC09);
-    bearing_value_canvas.setCursor(0, 37);
+    bearing_value_canvas.setCursor(0, 29);
     bearing_value_canvas.print(autoPilot.getBearing(), 1);
   }
-  tft.drawRGBBitmap(182, 138, bearing_value_canvas.getBuffer(), 115, 42);
+  tft.drawRGBBitmap(182, 130, bearing_value_canvas.getBuffer(), 115, 42);
 }
 
 void display_bearing_correction() {
-  GFXcanvas16 bearing_correction_value_canvas(107, 32);
+  GFXcanvas16 bearing_correction_value_canvas(115, 32);
   if (autoPilot.getMode() > 0) {
     bearing_correction_value_canvas.fillScreen(HX8357_BLACK);
     bearing_correction_value_canvas.setTextColor(0xFC09);
@@ -300,68 +304,33 @@ void display_bearing_correction() {
     bearing_correction_value_canvas.print((autoPilot.getBearingCorrection() > 0) ? autoPilot.getBearingCorrection() : autoPilot.getBearingCorrection() * -1.0, 1);
     bearing_correction_value_canvas.println((autoPilot.getBearingCorrection() > 0) ? " R" : " L");
   }
-  tft.drawRGBBitmap(187, 193, bearing_correction_value_canvas.getBuffer(), 107, 32);
+  tft.drawRGBBitmap(187, 169, bearing_correction_value_canvas.getBuffer(), 115, 32);
 }
 
-void display_motor() {
-  GFXcanvas16 motor_value_canvas(105, 18);
-  if (autoPilot.getMode() > 0) {
-    motor_value_canvas.fillScreen(HX8357_BLACK);
-    motor_value_canvas.setTextColor(0xFC09);
-    motor_value_canvas.setFont(&FreeSansBold12pt7b);
-    int motor_time_left = autoPilot.getMotorStopTime() - millis();
-    if (autoPilot.getMotorDirection() < 0) {
-      if (motor_time_left > 1000) {
-        motor_value_canvas.setCursor(0, 14);
-        motor_value_canvas.print("<-----");
-      } else if (motor_time_left > 750) {
-        motor_value_canvas.setCursor(10, 14);
-        motor_value_canvas.print("<----");
-      } else if (motor_time_left > 500) {
-        motor_value_canvas.setCursor(20, 14);
-        motor_value_canvas.print("<---");
-      } else if (motor_time_left > 250) {
-        motor_value_canvas.setCursor(30, 14);
-        motor_value_canvas.print("<--");
-      } else if (motor_time_left > 0) {
-        motor_value_canvas.setCursor(40, 14);
-        motor_value_canvas.print("<-");
-      }
-    } else if (autoPilot.getMotorDirection() > 0) {
-      if (motor_time_left > 1000) {
-        motor_value_canvas.setCursor(50, 14);
-        motor_value_canvas.print("----->");
-      } else if (motor_time_left > 750) {
-        motor_value_canvas.setCursor(50, 14);
-        motor_value_canvas.print("---->");
-      } else if (motor_time_left > 500) {
-        motor_value_canvas.setCursor(50, 14);
-        motor_value_canvas.print("--->");
-      } else if (motor_time_left > 250) {
-        motor_value_canvas.setCursor(50, 14);
-        motor_value_canvas.print("-->");
-      } else if (motor_time_left > 0) {
-        motor_value_canvas.setCursor(50, 14);
-        motor_value_canvas.print("->");
-      }
-    } else {
-      motor_value_canvas.setCursor(50, 14);
-      motor_value_canvas.print("-");
-    }
-  }
-  tft.drawRGBBitmap(188, 230, motor_value_canvas.getBuffer(), 105, 18);
+void display_volts() {
+  GFXcanvas16 volts_value_canvas(120, 22);
+  volts_value_canvas.fillScreen(HX8357_BLACK);
+  volts_value_canvas.setTextColor(HX8357_WHITE);
+  volts_value_canvas.setFont(&FreeSansBold12pt7b);
+  volts_value_canvas.setCursor(0, 18);
+  volts_value_canvas.print(autoPilot.getBatteryVoltage(), 2);
+  volts_value_canvas.print(" / ");
+  volts_value_canvas.println(autoPilot.getInputVoltage(), 1);
+  tft.drawRGBBitmap(181, 239, volts_value_canvas.getBuffer(), 120, 22);
 }
 
 void display_distance() {
+  GFXcanvas16 distance_value_canvas(90, 42);
+  distance_value_canvas.fillScreen(HX8357_BLACK);
+  distance_value_canvas.setTextColor(HX8357_CYAN);
+  distance_value_canvas.setFont(&FreeSansBold24pt7b);
+  distance_value_canvas.setCursor(0, 37);
   if (autoPilot.isWaypointSet()) {
-    GFXcanvas16 distance_value_canvas(90, 42);
-    distance_value_canvas.fillScreen(HX8357_BLACK);
-    distance_value_canvas.setTextColor(HX8357_CYAN);
-    distance_value_canvas.setFont(&FreeSansBold24pt7b);
-    distance_value_canvas.setCursor(0, 37);
     distance_value_canvas.print(autoPilot.getDistance(), 2);
-    tft.drawRGBBitmap(341, 23, distance_value_canvas.getBuffer(), 90, 42);
+  } else {
+    distance_value_canvas.print("");
   }
+  tft.drawRGBBitmap(341, 23, distance_value_canvas.getBuffer(), 90, 42);
 }
 
 void display_course() {
@@ -410,8 +379,7 @@ void display_datetime() {
   date_time_value_canvas.setFont(&FreeSansBold12pt7b);
   date_time_value_canvas.setCursor(0, 18);
   char dateTimeString[13];
-  time_t currentTime = autoPilot.getDateTime();
-  sprintf(dateTimeString, "%d/%d/%02d %d:%02d", month(currentTime), day(currentTime), year(currentTime) % 100, hour(currentTime), minute(currentTime));
+  sprintf(dateTimeString, "%d/%d/%02d %d:%02d", autoPilot.getMonth(), autoPilot.getDay(), autoPilot.getYear() % 100, autoPilot.getHour(), autoPilot.getMinute());
   date_time_value_canvas.print(dateTimeString);
   tft.drawRGBBitmap(181, 293, date_time_value_canvas.getBuffer(), 165, 22);
 }
@@ -442,10 +410,12 @@ void display_fix() {
 }
 
 void initialize_display() {
+  Serial.println("Initializing display");
   initialize_speed();
   initialize_compass();
   initialize_destination();
   initialize_bearing();
+  initialize_volts();
   initialize_distance();
   initialize_gps();
   initialize_date_time();
@@ -465,6 +435,7 @@ void initialize_speed() {
   speed_canvas.setTextColor(HX8357_BLACK);
   speed_canvas.print("Speed");
   tft.drawBitmap(0, 0, speed_canvas.getBuffer(), 160, 80, HX8357_CYAN, HX8357_BLACK);
+  Serial.println("Speed Initialized");
 }
 
 void initialize_compass() {
@@ -506,16 +477,32 @@ void initialize_bearing() {
   int16_t x1, y1;
   uint16_t w, h;
   // // Canvas for Course Correction
-  GFXcanvas1 bearing_canvas(159, 163);
+  GFXcanvas1 bearing_canvas(159, 110);
   bearing_canvas.fillScreen(HX8357_BLACK);
-  bearing_canvas.drawRect(0, 0, 159, 163, HX8357_WHITE);
+  bearing_canvas.drawRect(0, 0, 159, 110, HX8357_WHITE);
   bearing_canvas.setFont(&FreeSans9pt7b);
   bearing_canvas.getTextBounds("Bearing", 0, 12, &x1, &y1, &w, &h);
   bearing_canvas.fillRect(x1, y1, w + 8, h + 3, HX8357_WHITE);
   bearing_canvas.setCursor(0, 14);
   bearing_canvas.setTextColor(HX8357_BLACK);
   bearing_canvas.print("Bearing");
-  tft.drawBitmap(161, 106, bearing_canvas.getBuffer(), 159, 163, 0xFC09, HX8357_BLACK);
+  tft.drawBitmap(161, 106, bearing_canvas.getBuffer(), 159, 110, 0xFC09, HX8357_BLACK);
+}
+
+void initialize_volts() {
+  int16_t x1, y1;
+  uint16_t w, h;
+  // // Canvas for Course Correction
+  GFXcanvas1 volts_canvas(159, 53);
+  volts_canvas.fillScreen(HX8357_BLACK);
+  volts_canvas.drawRect(0, 0, 159, 53, HX8357_WHITE);
+  volts_canvas.setFont(&FreeSans9pt7b);
+  volts_canvas.getTextBounds("Volts", 0, 12, &x1, &y1, &w, &h);
+  volts_canvas.fillRect(x1, y1, w + 8, h + 3, HX8357_WHITE);
+  volts_canvas.setCursor(0, 14);
+  volts_canvas.setTextColor(HX8357_BLACK);
+  volts_canvas.print("Volts");
+  tft.drawBitmap(161, 216, volts_canvas.getBuffer(), 159, 53, HX8357_WHITE, HX8357_BLACK);
 }
 
 void initialize_distance() {
