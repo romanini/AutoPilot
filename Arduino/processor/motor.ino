@@ -41,8 +41,8 @@ void start_motor(int run_millis) {
   // the stop time we need have it always in the future so multiply
   // run_millis by direction to always get a positive number
   autoPilot.setMotor(millis() + (run_millis * direction), direction);
-  DEBUG_PRINT("Motor Started: ");
-  DEBUG_PRINTLN(run_millis * direction);
+  //DEBUG_PRINT("Motor Started: ");
+  //DEBUG_PRINTLN(run_millis * direction);
 }
 
 void stop_motor() {
@@ -64,8 +64,8 @@ void check_motor() {
   } else if (autoPilot.getMode() == 1) {
     if (autoPilot.getStartMotor() != 0 && !autoPilot.getMotorStarted()) {
       autoPilot.setMotorStarted(true);
-      DEBUG_PRINT("Starting Motor: ");
-      DEBUG_PRINTLN(autoPilot.getStartMotor());
+      //DEBUG_PRINT("Starting Motor: ");
+      //DEBUG_PRINTLN(autoPilot.getStartMotor());
 
       start_motor(autoPilot.getStartMotor());
     }
@@ -75,7 +75,7 @@ void check_motor() {
   if (autoPilot.getMotorStopTime()) {
     // if the stop time is in the past, it's time to stop the motor
     if (autoPilot.getMotorStopTime() < cur_millis) {
-      DEBUG_PRINTLN("Motor Stopping");
+      //DEBUG_PRINTLN("Motor Stopping");
       stop_motor();
     }
     // we don't have a stop time so as long as we have not run the motor
@@ -86,28 +86,28 @@ void check_motor() {
     if (fabs(correct) > MIN_DEGREE_ADJUST) {
       float rate_change = autoPilot.getHeadingShortAverageChange() * -1.0;
       if (fabs(correct) < SMALL_ADJUST && fabs(rate_change) < SLOW_CHANGE) {
-        DEBUG_PRINT("rate change ");
-        DEBUG_PRINT(rate_change);
-        DEBUG_PRINT(":   correction ");
-        DEBUG_PRINTLN(correct);
+        // DEBUG_PRINT("rate change ");
+        // DEBUG_PRINT(rate_change);
+        // DEBUG_PRINT(":   correction ");
+        // DEBUG_PRINTLN(correct);
         run_millis = floor(SMALL_ADJUST_RUN * correct);
-        DEBUG_PRINT("run_millis : ");
-        DEBUG_PRINTLN(run_millis);
+        // DEBUG_PRINT("run_millis : ");
+        // DEBUG_PRINTLN(run_millis);
       } else {
         float desired_rate_change = correct * INV_RATE_CHANGE * -1.0;
         float diff_rate_change = desired_rate_change - rate_change;
-        DEBUG_PRINT("rate change ");
-        DEBUG_PRINT(rate_change);
-        DEBUG_PRINT(":   correction ");
-        DEBUG_PRINT(correct);
-        DEBUG_PRINT(" desired rate: ");
-        DEBUG_PRINT(desired_rate_change);
-        DEBUG_PRINT(" diff rate: ");
-        DEBUG_PRINTLN(diff_rate_change);
+        // DEBUG_PRINT("rate change ");
+        // DEBUG_PRINT(rate_change);
+        // DEBUG_PRINT(":   correction ");
+        // DEBUG_PRINT(correct);
+        // DEBUG_PRINT(" desired rate: ");
+        // DEBUG_PRINT(desired_rate_change);
+        // DEBUG_PRINT(" diff rate: ");
+        // DEBUG_PRINTLN(diff_rate_change);
         run_millis = floor(diff_rate_change * MILLIS_PER_DEGREE_RATE_CHANGE);
         run_millis *= -1;
-        DEBUG_PRINT("run_millis : ");
-        DEBUG_PRINTLN(run_millis);
+        // DEBUG_PRINT("run_millis : ");
+        // DEBUG_PRINTLN(run_millis);
       }
 
       // if (run_millis) {

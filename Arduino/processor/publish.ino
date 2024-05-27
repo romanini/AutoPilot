@@ -1,6 +1,6 @@
 #include <WiFiNINA.h>
 
-#define PUBLISH_INTERVAL 5000
+#define PUBLISH_INTERVAL 1000
 #define DATA_SIZE 300
 #define BROADCAST_PORT 8888
 

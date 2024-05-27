@@ -24,6 +24,8 @@ void process_adjust_bearing(WiFiClient client, char buffer[]) {
   float bearing_adjustment = atof(&buffer[1]);
   autoPilot.adjustHeadingDesired(bearing_adjustment);
   client.println("ok");
+  DEBUG_PRINT("adjust bearing ");
+  DEBUG_PRINTLN(bearing_adjustment);
 }
 
 void process_run(WiFiClient client, char buffer[]) {
@@ -32,11 +34,14 @@ void process_run(WiFiClient client, char buffer[]) {
   client.println("ok");
 }
 
-// TODO check MODE is valid
 void process_mode(WiFiClient client, char buffer[]) {
   int new_mode = atoi(&buffer[1]);
   if (new_mode >= 0 && new_mode <= 2) {
     int ret = autoPilot.setMode(new_mode);
+    DEBUG_PRINT("set mode ");
+    DEBUG_PRINT(new_mode);
+    DEBUG_PRINT(" returned ");
+    DEBUG_PRINTLN(ret);
     if (ret == 0) {
       client.println("ok");
     } else {
