@@ -38,7 +38,6 @@ AutoPilot::AutoPilot(HardwareSerial* ser) {
   location_lat = 0.0;
   location_lon = 0.0;
   destinationChanged = true;
-  modeChanged = true;
   battery_voltage = 0.0;
   battery_voltage_average_size = 0;
   input_voltage = 0.0;
@@ -156,12 +155,6 @@ float AutoPilot::getLocationLon() {
 bool AutoPilot::hasDestinationChanged() {
   bool retval = this->destinationChanged;
   this->destinationChanged = false;
-  return retval;
-}
-
-bool AutoPilot::hasModeChanged() {
-  bool retval = this->modeChanged;
-  this->modeChanged = false;
   return retval;
 }
 
@@ -340,7 +333,6 @@ void AutoPilot::parse(char *sentence) {
     this->mode = 0;    
   }
   if (currentMode != this->mode) {
-    this->modeChanged = true;
     this->destinationChanged = true;
   }
 

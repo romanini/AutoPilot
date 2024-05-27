@@ -1,6 +1,6 @@
 #include <WiFiNINA.h>
 
-#define REAL_SEND false
+//#define MOCK_SEND false
 #define TIMEOUT_MS 1000 // Set your desired timeout value in milliseconds
 #define COMMAND_PORT 8023
 

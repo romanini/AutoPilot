@@ -17,6 +17,7 @@
 
 int display_refresh_rate[DISPLAY_SEGMENTS];
 
+int autoPilotMode = 0;
 uint32_t display_refresh_timer[DISPLAY_SEGMENTS];
 int display_refresh_selector = 0;
 
@@ -112,13 +113,20 @@ void initialize_refresh_rates() {
 // effectively time-slice the display() function by having it refresh a small part of the display each time.  For the distination we special case
 // that one since it changes so infrequently that we only refresh it when it changes.
 void display() {
-  if (autoPilot.hasModeChanged()) {
+  if (autoPilot.getMode() != autoPilotMode) {
+    autoPilotMode = autoPilot.getMode();
+    DEBUG_PRINTLN("display Mode ");
     display_mode();
+    DEBUG_PRINTLN("done display Mode");
   } else if (autoPilot.hasDestinationChanged()) {
     // as this takes more than 300ms to display we can just do it when something changes.
+    DEBUG_PRINTLN("display destination");
     display_destination();
+    DEBUG_PRINTLN("done display destination");
   } else if (millis() - display_refresh_timer[display_refresh_selector] > display_refresh_rate[display_refresh_selector]) {
     display_refresh_timer[display_refresh_selector] = millis();
+    // DEBUG_PRINT("Displaying selector: ");
+    // DEBUG_PRINTLN(display_refresh_selector);
     switch (display_refresh_selector) {
       case 0:
         display_speed();
@@ -166,6 +174,7 @@ void display() {
         display_volts();
         break;
     }
+    // DEBUG_PRINTLN("Done display selector");
   }
   display_refresh_selector = ((display_refresh_selector + 1) % DISPLAY_SEGMENTS);
 }
@@ -334,7 +343,6 @@ void display_distance() {
 }
 
 void display_course() {
-
   GFXcanvas16 course_value_canvas(115, 42);
   if (autoPilot.hasFix()) {
     course_value_canvas.fillScreen(HX8357_BLACK);
@@ -435,7 +443,6 @@ void initialize_speed() {
   speed_canvas.setTextColor(HX8357_BLACK);
   speed_canvas.print("Speed");
   tft.drawBitmap(0, 0, speed_canvas.getBuffer(), 160, 80, HX8357_CYAN, HX8357_BLACK);
-  Serial.println("Speed Initialized");
 }
 
 void initialize_compass() {
