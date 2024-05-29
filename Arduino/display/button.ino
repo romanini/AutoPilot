@@ -22,7 +22,14 @@
 
 #define PCF8575_ADDRESS 0x20
 
+#define FLASH_INTERVAL 25
+#define FLASH_COUNT 5
+
 Adafruit_PCF8575 pcf = Adafruit_PCF8575();
+
+uint32_t enable_flash_mills = millis();
+bool enable_let_on = false;
+int enable_flash_count = 0;
 
 bool button_down[NUMBER_OF_BUTTONS];
 bool setup_complete = false;
@@ -56,8 +63,22 @@ void setup_button() {
   Serial.println("Button and LED setup!");
 }
 
+void flash_enable_led() {
+  enable_flash_count += 1;
+  if (enable_flash_count == FLASH_COUNT) {
+    enable_flash_count = 0;
+    enable_flash_mills = millis();
+    enable_let_on = true;
+    pcf.digitalWrite(ENABLED_LED, LOW);
+  }
+}
+
 void check_button() {
   if (setup_complete) {
+    if (enable_let_on && (millis() - enable_flash_mills > FLASH_INTERVAL)) {
+      enable_let_on = false;
+      pcf.digitalWrite(ENABLED_LED, HIGH);
+    }
     switch (autoPilot.getMode()) {
       case 0:
         pcf.digitalWrite(NAVIGATE_MODE_LED, HIGH);
@@ -98,8 +119,7 @@ void check_button() {
           case COMPASS_MODE_BUTTON:
             if (autoPilot.getMode() != 1) {
               setMode(1);
-            }
-            else {
+            } else {
               setMode(0);
             }
             DEBUG_PRINTLN("Compass Mode");

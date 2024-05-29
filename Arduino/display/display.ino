@@ -44,6 +44,7 @@ void loop() {
   check_button();
   check_voltage();
   check_subscription();
+  check_command();
   display();
 
   static unsigned long lastPrint = 0;

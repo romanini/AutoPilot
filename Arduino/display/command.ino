@@ -15,6 +15,13 @@ void setup_command() {
 #endif  
 }
 
+void check_command() {
+  if (autoPilot.getReset()) {
+    autoPilot.setReset(false);
+    disconnect();
+  }
+}
+
 void adjustHeading(float change) {
 #ifndef MOCK_SEND 
     if (connect()) { 
@@ -51,4 +58,10 @@ boolean connect() {
     }
   }  
   return true;
+}
+
+boolean disconnect() {
+  if (client.connected()) {
+    client.stop();
+  }
 }

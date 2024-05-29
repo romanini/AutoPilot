@@ -1,3 +1,4 @@
+#include "avr/pgmspace.h"
 #include <cstdlib>
 #include <cstring>
 #include "AutoPilot.h"
@@ -42,6 +43,7 @@ AutoPilot::AutoPilot(HardwareSerial* ser) {
   battery_voltage_average_size = 0;
   input_voltage = 0.0;
   input_voltage_average_size = 0;
+  reset = false;
 }
 
 int AutoPilot::getYear() {
@@ -185,8 +187,16 @@ void AutoPilot::setInputVoltage(float voltage) {
   }
   if (this->input_voltage_average_size < INPUT_VOLTS_AVERAGE_MAX_SIZE) {
     this->input_voltage_average_size += 1;
-  }}
+  }
+}
 
+bool AutoPilot::getReset() {
+  return this->reset;
+}
+
+void AutoPilot::setReset(bool value) {
+  this->reset = value;
+}
 
 void AutoPilot::printAutoPilot() {
   serial->print("Date&Time: ");
@@ -262,6 +272,18 @@ void AutoPilot::printAutoPilot() {
 }
 
 void AutoPilot::parse(char *sentence) {
+  if (strncmp(sentence, APDAT,6) == 0) {
+    serial->print("parsing APDAT");
+    parseAPDAT(sentence);
+  } else if (strncmp(sentence, RESET, 6) == 0) {
+    serial->print("parsing RESET");
+    parseRESET(sentence);
+  } else {
+    serial->print("unknown sentence");
+  }
+}
+
+void AutoPilot::parseAPDAT(char *sentence) {
   char *p = sentence; // Pointer to move through the sentence -- good parsers are non-destructive
 
   p = strchr(p, ',') + 1; // Skip to char after the next comma, then check.
@@ -486,6 +508,13 @@ void AutoPilot::parse(char *sentence) {
   } else {
     this->location_lon = 0.0;    
   }
+}
+
+// For now the only thing to reset is the command connection
+// some day when there are other things to reset we can
+// parse this and know what we need to reset.
+void AutoPilot::parseRESET(char *sentence) {
+  this->reset = true;
 }
 
 /**************************************************************************/

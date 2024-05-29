@@ -33,6 +33,7 @@ void setup() {
   setup_motor();
   setup_compass();
   setup_gps();
+  publish_RESET();
   Serial.println("Setup complete");
 }
 
@@ -42,7 +43,7 @@ void loop() {
   check_compass();
   check_gps();
   check_motor();
-  publish();
+  publish_APDAT();
   // calculage_average_loop_time(millis() - start_time);
   // if (millis() - last_display_loop_average > DISAPLY_AVERAGE_RATE) {
   //   last_display_loop_average = millis();

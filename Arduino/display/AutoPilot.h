@@ -9,6 +9,9 @@
 #define NMEA_MAX_SENTENCE_ID 20 ///< maximum length of a sentence ID name, including terminating 0
 #define NMEA_MAX_SOURCE_ID 3 ///< maximum length of a source ID name, including terminating 0
 
+#define APDAT "APDAT,"
+#define RESET "RESET,"
+
 class AutoPilot {
 private:
   int year;
@@ -51,8 +54,12 @@ private:
   float input_voltage;
   int input_voltage_average_size;
   
+  bool reset;
+
   bool isEmpty(char *ptart);
   HardwareSerial *serial;
+  void parseAPDAT(char *buffer);
+  void parseRESET(char *buffer);
 
 public:
   AutoPilot(HardwareSerial* ser);
@@ -88,6 +95,8 @@ public:
   void setBatteryVoltage(float voltage);
   float getInputVoltage();
   void setInputVoltage(float voltage);
+  bool getReset();
+  void setReset(bool val);
   void printAutoPilot();
   void parse(char *buffer);
 };

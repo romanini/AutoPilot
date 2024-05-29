@@ -16,7 +16,7 @@ void setup_publish() {
   udpClient.begin(broadcastPort);
 }
 
-void publish() {
+void publish_APDAT() {
   if (millis() - last_publish_time_mills > PUBLISH_INTERVAL) {
     last_publish_time_mills = millis();
     time_t currentTime = autoPilot.getDateTime();
@@ -61,4 +61,12 @@ void publish() {
     udpClient.write(serialzied_data);
     udpClient.endPacket();
   }
+}
+
+void publish_RESET() {
+    sprintf(serialzied_data, "~RESET,1$");
+    DEBUG_PRINTLN(serialzied_data);
+    udpClient.beginPacket(broadcastIp, broadcastPort);
+    udpClient.write(serialzied_data);
+    udpClient.endPacket();
 }
