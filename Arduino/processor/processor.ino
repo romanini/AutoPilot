@@ -2,7 +2,7 @@
 #include <WiFiNINA.h>
 #include "AutoPilot.h"
 
-#define DEBUG_ENABLED true
+#define DEBUG_ENABLED false
 #ifdef DEBUG_ENABLED
 #define DEBUG_PRINT(x) Serial.print(x)
 #define DEBUG_PRINT2(x,y) Serial.print(x,y)
@@ -33,6 +33,7 @@ void setup() {
   setup_motor();
   setup_compass();
   setup_gps();
+  setup_led();
   publish_RESET();
   Serial.println("Setup complete");
 }
@@ -43,6 +44,7 @@ void loop() {
   check_compass();
   check_gps();
   check_motor();
+  check_led();
   publish_APDAT();
   // calculage_average_loop_time(millis() - start_time);
   // if (millis() - last_display_loop_average > DISAPLY_AVERAGE_RATE) {

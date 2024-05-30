@@ -60,6 +60,7 @@ void publish_APDAT() {
     udpClient.beginPacket(broadcastIp, broadcastPort);
     udpClient.write(serialzied_data);
     udpClient.endPacket();
+    flash_led();
   }
 }
 
