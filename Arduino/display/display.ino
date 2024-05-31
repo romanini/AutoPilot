@@ -2,17 +2,25 @@
 #include <WiFiNINA.h>
 #include <MemoryFree.h>
 
-#define DEBUG_ENABLED 1
+//#define DEBUG_ENABLED 1
 #ifdef DEBUG_ENABLED
 #define DEBUG_PRINT(x) Serial.print(x)
 #define DEBUG_PRINT2(x, y) Serial.print(x, y)
 #define DEBUG_PRINTLN(x) Serial.println(x)
 #define DEBUG_PRINTLN2(x, y) Serial.println(x, y)
+#define DEBUG_PRINT_CPP(x) serial->print(x);
+#define DEBUG_PRINT2_CPP(x, y) Serial->print(x, y)
+#define DEBUG_PRINTLN_CPP(x) Serial->println(x)
+#define DEBUG_PRINTLN2_CPP(x, y) Serial->println(x, y)
 #else
 #define DEBUG_PRINT(x)
 #define DEBUG_PRINT2(x, y)
 #define DEBUG_PRINTLN(x)
 #define DEBUG_PRINT2(x, y)
+#define DEBUG_PRINT_CPP(x)
+#define DEBUG_PRINT2_CPP(x, y)
+#define DEBUG_PRINTLN_CPP(x)
+#define DEBUG_PRINT2_CPP(x, y)
 #endif
 
 #define DISPLAY_ADDRESS 8
@@ -31,7 +39,12 @@ void setup() {
   setup_subscribe();
   setup_command();
   setup_button();
-
+  Serial.println("Setup Complete");
+#ifdef DEBUG_ENABLED
+  Serial.println("Debug Enabled");
+#else
+  Serial.println("Debug Disabled");
+#endif
   DEBUG_PRINTLN("Debug is enabled");
   DEBUG_PRINT("Program starts with ");
   DEBUG_PRINT(freeMemory());

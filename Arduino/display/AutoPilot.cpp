@@ -273,10 +273,8 @@ void AutoPilot::printAutoPilot() {
 
 void AutoPilot::parse(char *sentence) {
   if (strncmp(sentence, APDAT,6) == 0) {
-    serial->print("parsing APDAT");
     parseAPDAT(sentence);
   } else if (strncmp(sentence, RESET, 6) == 0) {
-    serial->print("parsing RESET");
     parseRESET(sentence);
   } else {
     serial->print("unknown sentence");
