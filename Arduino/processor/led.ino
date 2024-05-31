@@ -9,6 +9,7 @@ int flash_count = 0;
 
 void setup_led() {
   pinMode(FLASH_PIN, OUTPUT);
+  Serial.println("Led all setup");
 }
 
 void flash_led() {

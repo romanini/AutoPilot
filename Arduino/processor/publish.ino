@@ -14,6 +14,7 @@ char serialzied_data[DATA_SIZE];
 
 void setup_publish() {
   udpClient.begin(broadcastPort);
+  Serial.println("Publishing all setup");
 }
 
 void publish_APDAT() {

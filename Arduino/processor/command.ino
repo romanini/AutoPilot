@@ -18,6 +18,7 @@ void setup_command() {
   // start the servers:
   debug_server.begin();
   command_server.begin();
+  Serial.println("Command all setup");
 }
 
 void process_adjust_bearing(WiFiClient client, char buffer[]) {

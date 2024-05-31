@@ -2,7 +2,7 @@
 #include <WiFiNINA.h>
 #include "AutoPilot.h"
 
-#define DEBUG_ENABLED false
+// #define DEBUG_ENABLED 1
 #ifdef DEBUG_ENABLED
 #define DEBUG_PRINT(x) Serial.print(x)
 #define DEBUG_PRINT2(x,y) Serial.print(x,y)
@@ -36,6 +36,11 @@ void setup() {
   setup_led();
   publish_RESET();
   Serial.println("Setup complete");
+#ifdef DEBUG_ENABLED
+  Serial.println("debug enabled");
+#else
+  Serial.println("dibug disabled");
+#endif
 }
 
 void loop() {
@@ -46,23 +51,6 @@ void loop() {
   check_motor();
   check_led();
   publish_APDAT();
-  // calculage_average_loop_time(millis() - start_time);
-  // if (millis() - last_display_loop_average > DISAPLY_AVERAGE_RATE) {
-  //   last_display_loop_average = millis();
-  //   DEBUG_PRINT("Loop average runtime: ");
-  //   DEBUG_PRINT(average_loop_time);
-  //   DEBUG_PRINT(" / ");
-  //   DEBUG_PRINTLN(average_size);
-  // }
 }
 
-// void calculage_average_loop_time(int run_time) {
-//   if (average_size > 0) {
-//     average_loop_time = average_loop_time + ((run_time - average_loop_time) / average_size);
-//   } else {
-//     average_loop_time = run_time;
-//   }
-//   if (average_size < AVERAGE_MAX_SIZE) {
-//     average_size += 1;
-//   }
-// }
+
