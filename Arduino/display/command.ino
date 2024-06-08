@@ -22,7 +22,7 @@ void check_command() {
   }
 }
 
-void adjustHeading(float change) {
+void adjust_heading(float change) {
 #ifndef MOCK_SEND 
     if (connect()) { 
       client.print("a");
@@ -36,7 +36,7 @@ void adjustHeading(float change) {
 #endif
 }
 
-void setMode(int mode) {
+void set_mode(int mode) {
 #ifndef MOCK_SEND 
     if (connect()) { 
       client.print("m");

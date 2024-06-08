@@ -5,136 +5,194 @@
  * a built in pull-up 'resistor' on each input, but no pull-down resistor capability.
  */
 
-#define ADJUSTMENT_AMOUNT 1.0
+#define ADJUSTMENT_AMOUNT_SHORT 1.0
+#define ADJUSTMENT_AMOUNT_LONG 10.0
+#define ADJUSTMENT_AMOUNT_TACK 90.0
 
-#define PORT_ADJUST_BUTTON 0
-#define COMPASS_MODE_BUTTON 1
-#define NAVIGATE_MODE_BUTTON 2
-#define STARBORD_ADJUST_BUTTON 3
+#define PORT_ADJUST_BUTTON_PIN 0
+#define COMPASS_MODE_BUTTON_PIN 1
+#define NAVIGATE_MODE_BUTTON_PIN 2
+#define STARBORD_ADJUST_BUTTON_PIN 3
 
-#define NUMBER_OF_BUTTONS 4
+#define BEEP_PIN 4
+#define BEEP_INTERVAL 10
+#define BEEP_HOLD_INTERVAL 100
+#define BEEP_LONG_INTERVAL 1000
 
-#define PORT_ADJUST_LED 15
-#define ENABLED_LED 14
-#define COMPASS_MODE_LED 13
-#define STARBORD_ADJUST_LED 12
-#define NAVIGATE_MODE_LED 11
+#define PORT_ADJUST_LED_PIN 15
+#define RECEIVE_LED_PIN 14
+#define COMPASS_MODE_LED_PIN 13
+#define STARBORD_ADJUST_LED_PIN 12
+#define NAVIGATE_MODE_LED_PIN 11
 
 #define PCF8575_ADDRESS 0x20
 
-#define FLASH_INTERVAL 25
-#define FLASH_COUNT 5
+#define BUTTON_HOLD_TIME 1000
+#define BUTTON_LONG_HOLD_TIME 5000
+
+#define LED_CLICK_TIME 50
+#define LED_HOLD_TIME 200
+#define LED_LONG_HOLD_TIME 500
+
+#define RECEIVE_FLASH_INTERVAL 25
+#define RECEIVE_FLASH_COUNT 5
+
+const int button_pins[] = { PORT_ADJUST_BUTTON_PIN, COMPASS_MODE_BUTTON_PIN, NAVIGATE_MODE_BUTTON_PIN, STARBORD_ADJUST_BUTTON_PIN };
+const int led_pins[] = { PORT_ADJUST_LED_PIN, COMPASS_MODE_LED_PIN, NAVIGATE_MODE_LED_PIN, STARBORD_ADJUST_LED_PIN };  // these must be in the same order as the button Pins
+const int num_buttons = sizeof(button_pins) / sizeof(button_pins[0]);
 
 Adafruit_PCF8575 pcf = Adafruit_PCF8575();
 
-uint32_t enable_flash_mills = millis();
-bool enable_let_on = false;
-int enable_flash_count = 0;
+uint32_t receive_led_flash_mills = millis();
+bool receive_led_state = LOW;
+int receive_flash_count = 0;
 
-bool button_down[NUMBER_OF_BUTTONS];
-bool setup_complete = false;
+unsigned long beep_on_time = 0;
+unsigned long beep_off_time = 0;
+bool beep_state = LOW;
+
+unsigned long button_press_times[num_buttons];
+unsigned long button_release_times[num_buttons];
+bool button_pressed_states[num_buttons];
 
 void setup_button() {
   if (!pcf.begin(PCF8575_ADDRESS, &Wire)) {
     Serial.println("Couldn't find PCF8575");
     return;
   }
-  pcf.pinMode(PORT_ADJUST_BUTTON, INPUT_PULLUP);
-  button_down[PORT_ADJUST_BUTTON] = false;
-  pcf.pinMode(COMPASS_MODE_BUTTON, INPUT_PULLUP);
-  button_down[COMPASS_MODE_BUTTON] = false;
-  pcf.pinMode(NAVIGATE_MODE_BUTTON, INPUT_PULLUP);
-  button_down[NAVIGATE_MODE_BUTTON] = false;
-  pcf.pinMode(STARBORD_ADJUST_BUTTON, INPUT_PULLUP);
-  button_down[STARBORD_ADJUST_BUTTON] = false;
+  for (int pin = 0; pin < num_buttons; pin++) {
+    // setup the button
+    pcf.pinMode(button_pins[pin], INPUT_PULLUP);
+    button_pressed_states[pin] = false;
 
-  pcf.pinMode(PORT_ADJUST_LED, OUTPUT);
-  pcf.digitalWrite(PORT_ADJUST_LED, HIGH);
-  pcf.pinMode(ENABLED_LED, OUTPUT);
-  pcf.digitalWrite(ENABLED_LED, HIGH);
-  pcf.pinMode(COMPASS_MODE_LED, OUTPUT);
-  pcf.digitalWrite(COMPASS_MODE_LED, HIGH);
-  pcf.pinMode(STARBORD_ADJUST_LED, OUTPUT);
-  pcf.digitalWrite(STARBORD_ADJUST_LED, HIGH);
-  pcf.pinMode(NAVIGATE_MODE_LED, OUTPUT);
-  pcf.digitalWrite(NAVIGATE_MODE_LED, HIGH);
+    // setup the LED
+    pcf.pinMode(led_pins[pin], OUTPUT);
+    pcf.digitalWrite(led_pins[pin], HIGH);
+  }
 
-  setup_complete = true;
+  pcf.pinMode(BEEP_PIN, OUTPUT);
+  pcf.digitalWrite(BEEP_PIN, LOW);
+
+  pcf.pinMode(RECEIVE_LED_PIN, OUTPUT);
+  pcf.digitalWrite(RECEIVE_LED_PIN, HIGH);
+
   Serial.println("Button and LED setup!");
 }
 
-void flash_enable_led() {
-  enable_flash_count += 1;
-  if (enable_flash_count == FLASH_COUNT) {
-    enable_flash_count = 0;
-    enable_flash_mills = millis();
-    enable_let_on = true;
-    pcf.digitalWrite(ENABLED_LED, LOW);
+void flash_receive_led() {
+  receive_flash_count += 1;
+  if (receive_flash_count == RECEIVE_FLASH_COUNT) {
+    receive_flash_count = 0;
+    receive_led_flash_mills = millis();
+    receive_led_state = LOW;
+    pcf.digitalWrite(RECEIVE_LED_PIN, receive_led_state);
+  }
+}
+
+void set_beep(unsigned long duration) {
+  beep_on_time = millis();
+  beep_off_time = beep_on_time + duration;
+  beep_state = HIGH;
+  pcf.digitalWrite(BEEP_PIN, beep_state);
+}
+
+void update_beep() {
+  unsigned long currentTime = millis();
+  if (beep_state == HIGH && currentTime >= beep_off_time) {
+    beep_state = LOW;
+    pcf.digitalWrite(BEEP_PIN, beep_state);
+  }
+}
+void button_pressed(int pin) {
+  unsigned long currentTime = millis();
+  button_press_times[pin] = currentTime;
+  button_pressed_states[pin] = true;
+  // light the LED
+  pcf.digitalWrite(led_pins[pin], LOW);
+}
+
+void button_release(int pin) {
+  unsigned long currentTime = millis();
+  button_release_times[pin] = currentTime;
+  button_pressed_states[pin] = false;
+  // turn off LED
+  pcf.digitalWrite(led_pins[pin], HIGH);
+  DEBUG_PRINT("Button ");
+  DEBUG_PRINT(pin);
+  DEBUG_PRINT(" released");
+
+  float adjustment = 0.0;
+  unsigned long beep_interval = BEEP_INTERVAL;
+  if (pin == PORT_ADJUST_BUTTON_PIN || pin == STARBORD_ADJUST_BUTTON_PIN) {
+    // PORT and STARBORD adjust can do click, hold and long hold for different adjust values
+    unsigned long pressDuration = button_release_times[pin] - button_press_times[pin];
+    if (pressDuration < BUTTON_HOLD_TIME) {
+      adjustment = ADJUSTMENT_AMOUNT_SHORT;
+    } else if (pressDuration < BUTTON_LONG_HOLD_TIME) {
+      adjustment = ADJUSTMENT_AMOUNT_LONG;
+      beep_interval = BEEP_HOLD_INTERVAL;
+    } else {
+      adjustment = ADJUSTMENT_AMOUNT_TACK;
+      beep_interval = BEEP_LONG_INTERVAL;
+    }
+  }
+
+  set_beep(beep_interval);
+
+  switch (pin) {
+    case PORT_ADJUST_BUTTON_PIN:
+      adjustment *= -1.0;
+      adjust_heading(adjustment);
+      DEBUG_PRINT("Port Adjust ");
+      DEBUG_PRINTLN(adjustment);
+      break;
+    case STARBORD_ADJUST_BUTTON_PIN:
+      adjust_heading(adjustment);
+      DEBUG_PRINT("Port Adjust ");
+      DEBUG_PRINTLN(adjustment);
+      break;
+    case COMPASS_MODE_BUTTON_PIN:
+      if (autoPilot.getMode() != 1) {
+        set_mode(1);
+        DEBUG_PRINTLN("Compass Mode");
+      } else {
+        set_mode(0);
+        DEBUG_PRINTLN("Mode off");
+      }
+      break;
+    case NAVIGATE_MODE_BUTTON_PIN:
+      if (autoPilot.getMode() != 2) {
+        set_mode(2);
+        DEBUG_PRINTLN("Navigate Mode");
+      } else {
+        set_mode(0);
+        DEBUG_PRINTLN("Mode off");
+      }
+      break;
+  }
+  update_beep();
+}
+
+void update_receive_led() {
+  if ((receive_led_state == LOW) && (millis() - receive_led_flash_mills > RECEIVE_FLASH_INTERVAL)) {
+    receive_led_state = HIGH;
+    pcf.digitalWrite(RECEIVE_LED_PIN, receive_led_state);
   }
 }
 
 void check_button() {
-  if (setup_complete) {
-    if (enable_let_on && (millis() - enable_flash_mills > FLASH_INTERVAL)) {
-      enable_let_on = false;
-      pcf.digitalWrite(ENABLED_LED, HIGH);
-    }
-    switch (autoPilot.getMode()) {
-      case 0:
-        pcf.digitalWrite(NAVIGATE_MODE_LED, HIGH);
-        pcf.digitalWrite(COMPASS_MODE_LED, HIGH);
-        break;
-      case 1:
-        pcf.digitalWrite(NAVIGATE_MODE_LED, HIGH);
-        pcf.digitalWrite(COMPASS_MODE_LED, LOW);
-        break;
-      case 2:
-        pcf.digitalWrite(NAVIGATE_MODE_LED, LOW);
-        pcf.digitalWrite(COMPASS_MODE_LED, HIGH);
-        break;
-    }
-    for (uint8_t p = 0; p < NUMBER_OF_BUTTONS; p++) {
-      bool pinValue = pcf.digitalRead(p);
-      if (!pinValue && !button_down[p]) {
-        button_down[p] = true;
-        switch (p) {
-          case PORT_ADJUST_BUTTON:
-            pcf.digitalWrite(PORT_ADJUST_LED, LOW);
-            adjustHeading(ADJUSTMENT_AMOUNT * -1.0);
-            DEBUG_PRINTLN("Port Adjust");
-            break;
-          case STARBORD_ADJUST_BUTTON:
-            pcf.digitalWrite(STARBORD_ADJUST_LED, LOW);
-            adjustHeading(ADJUSTMENT_AMOUNT);
-            DEBUG_PRINTLN("Starbord Adjust");
-            break;
-          case NAVIGATE_MODE_BUTTON:
-            if (autoPilot.getMode() != 2) {
-              setMode(2);
-            } else {
-              setMode(0);
-            }
-            DEBUG_PRINTLN("Navigate Mode");
-            break;
-          case COMPASS_MODE_BUTTON:
-            if (autoPilot.getMode() != 1) {
-              setMode(1);
-            } else {
-              setMode(0);
-            }
-            DEBUG_PRINTLN("Compass Mode");
-            break;
-        }
-      } else if (pinValue && button_down[p]) {
-        button_down[p] = false;
-        switch (p) {
-          case PORT_ADJUST_BUTTON:
-            pcf.digitalWrite(PORT_ADJUST_LED, HIGH);
-            break;
-          case STARBORD_ADJUST_BUTTON:
-            pcf.digitalWrite(STARBORD_ADJUST_LED, HIGH);
-            break;
-        }
+  update_receive_led();
+  update_beep();
+  for (uint8_t pin = 0; pin < num_buttons; pin++) {
+    int buttonState = pcf.digitalRead(button_pins[pin]);
+
+    if (buttonState == LOW) {
+      if (!button_pressed_states[pin]) {
+        button_pressed(pin);
+      }
+    } else {
+      if (button_pressed_states[pin]) {
+        button_release(pin);
       }
     }
   }

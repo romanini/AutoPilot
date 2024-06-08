@@ -37,7 +37,7 @@ void check_subscription() {
     end[0] = '\0';
     // parse the sentence
     autoPilot.parse(start);
-    flash_enable_led();
+    flash_receive_led();
     // copy the left over to the buffer for next time
     strcpy(buffer, leftover);
     DEBUG_PRINTLN(" parsed.");
