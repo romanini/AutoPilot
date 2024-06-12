@@ -17,13 +17,13 @@ void check_subscription() {
   char leftover[699];
 
   if (packetSize) {
-    DEBUG_PRINT("Received packet: ");
-    DEBUG_PRINT(packetSize);
+    //DEBUG_PRINT("Received packet: ");
+    //DEBUG_PRINT(packetSize);
     int len = udp.read(packetBuffer, DATA_SIZE); // Read the packet into the buffer
     if (len > 0) {
       packetBuffer[len] = '\0'; // Null-terminate the received data
-      DEBUG_PRINT(" packet Buffer: ");
-      DEBUG_PRINT(packetBuffer); // Print received data
+      //DEBUG_PRINT(" packet Buffer: ");
+      //DEBUG_PRINT(packetBuffer); // Print received data
     }
     // add what we received to what was left over before
     strcat(buffer, packetBuffer);
@@ -31,16 +31,16 @@ void check_subscription() {
     char *end = strchr(start, '$'); // find the end of the sentence
     // copy off the leftover 
     strcpy(leftover, end + 1);
-    DEBUG_PRINT(" leftover ");
-    DEBUG_PRINT(leftover);
+    //DEBUG_PRINT(" leftover ");
+    //DEBUG_PRINT(leftover);
     // put a null at the end of the sentence
     end[0] = '\0';
     // parse the sentence
     autoPilot.parse(start);
-    flash_enable_led();
+    flash_receive_led();
     // copy the left over to the buffer for next time
     strcpy(buffer, leftover);
-    DEBUG_PRINTLN(" parsed.");
+    //DEBUG_PRINTLN(" parsed.");
   }
 }
 
