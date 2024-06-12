@@ -14,8 +14,8 @@
 #define NAVIGATE_MODE_BUTTON_PIN 2
 #define STARBORD_ADJUST_BUTTON_PIN 3
 
-#define BEEP_PIN 4
-#define BEEP_INTERVAL 10
+#define BEEP_PIN 10
+#define BEEP_INTERVAL 25
 #define BEEP_HOLD_INTERVAL 100
 #define BEEP_LONG_INTERVAL 1000
 
@@ -55,6 +55,10 @@ unsigned long button_press_times[num_buttons];
 unsigned long button_release_times[num_buttons];
 bool button_pressed_states[num_buttons];
 
+bool beep_short_triggered[num_buttons];
+bool beep_long_triggered[num_buttons];
+bool beep_very_long_triggered[num_buttons];
+
 void setup_button() {
   if (!pcf.begin(PCF8575_ADDRESS, &Wire)) {
     Serial.println("Couldn't find PCF8575");
@@ -64,6 +68,9 @@ void setup_button() {
     // setup the button
     pcf.pinMode(button_pins[pin], INPUT_PULLUP);
     button_pressed_states[pin] = false;
+    beep_short_triggered[pin] = false;
+    beep_long_triggered[pin] = false;
+    beep_very_long_triggered[pin] = false;
 
     // setup the LED
     pcf.pinMode(led_pins[pin], OUTPUT);
@@ -71,7 +78,7 @@ void setup_button() {
   }
 
   pcf.pinMode(BEEP_PIN, OUTPUT);
-  pcf.digitalWrite(BEEP_PIN, LOW);
+  pcf.digitalWrite(BEEP_PIN, HIGH);
 
   pcf.pinMode(RECEIVE_LED_PIN, OUTPUT);
   pcf.digitalWrite(RECEIVE_LED_PIN, HIGH);
@@ -92,37 +99,54 @@ void flash_receive_led() {
 void set_beep(unsigned long duration) {
   beep_on_time = millis();
   beep_off_time = beep_on_time + duration;
-  beep_state = HIGH;
+  beep_state = LOW;
   pcf.digitalWrite(BEEP_PIN, beep_state);
+  DEBUG_PRINT("Set Beep on for ");
+  DEBUG_PRINTLN(duration);
 }
 
 void update_beep() {
   unsigned long currentTime = millis();
-  if (beep_state == HIGH && currentTime >= beep_off_time) {
-    beep_state = LOW;
+  if (beep_state == LOW && currentTime >= beep_off_time) {
+    beep_state = HIGH;
     pcf.digitalWrite(BEEP_PIN, beep_state);
+    DEBUG_PRINTLN("Beep Off");
   }
 }
 void button_pressed(int pin) {
-  unsigned long currentTime = millis();
-  button_press_times[pin] = currentTime;
+  button_press_times[pin] = millis();
   button_pressed_states[pin] = true;
   // light the LED
   pcf.digitalWrite(led_pins[pin], LOW);
 }
 
 void button_release(int pin) {
-  unsigned long currentTime = millis();
-  button_release_times[pin] = currentTime;
+  unsigned long current_time = millis();
+  button_release_times[pin] = current_time;
   button_pressed_states[pin] = false;
-  // turn off LED
+  beep_short_triggered[pin] = false;
+  beep_long_triggered[pin] = false;
+  beep_very_long_triggered[pin] = false;
+
+  // turn off LED, yes HIGH is off because it is switched on negative.
   pcf.digitalWrite(led_pins[pin], HIGH);
+
+  unsigned long press_duration = current_time - button_press_times[pin];
+
   DEBUG_PRINT("Button ");
   DEBUG_PRINT(pin);
-  DEBUG_PRINT(" released");
+  DEBUG_PRINT(" released after ");
+  DEBUG_PRINT(press_duration);
+  DEBUG_PRINTLN(" ms");
+
+  if (press_duration < 25) {
+    DEBUG_PRINT("Button ");
+    DEBUG_PRINT(pin);
+    DEBUG_PRINTLN(" Clicked");
+    set_beep(BEEP_INTERVAL);
+  }
 
   float adjustment = 0.0;
-  unsigned long beep_interval = BEEP_INTERVAL;
   if (pin == PORT_ADJUST_BUTTON_PIN || pin == STARBORD_ADJUST_BUTTON_PIN) {
     // PORT and STARBORD adjust can do click, hold and long hold for different adjust values
     unsigned long pressDuration = button_release_times[pin] - button_press_times[pin];
@@ -130,14 +154,10 @@ void button_release(int pin) {
       adjustment = ADJUSTMENT_AMOUNT_SHORT;
     } else if (pressDuration < BUTTON_LONG_HOLD_TIME) {
       adjustment = ADJUSTMENT_AMOUNT_LONG;
-      beep_interval = BEEP_HOLD_INTERVAL;
     } else {
       adjustment = ADJUSTMENT_AMOUNT_TACK;
-      beep_interval = BEEP_LONG_INTERVAL;
     }
   }
-
-  set_beep(beep_interval);
 
   switch (pin) {
     case PORT_ADJUST_BUTTON_PIN:
@@ -170,13 +190,49 @@ void button_release(int pin) {
       }
       break;
   }
-  update_beep();
 }
 
 void update_receive_led() {
   if ((receive_led_state == LOW) && (millis() - receive_led_flash_mills > RECEIVE_FLASH_INTERVAL)) {
     receive_led_state = HIGH;
     pcf.digitalWrite(RECEIVE_LED_PIN, receive_led_state);
+  }
+}
+
+void check_button_press_diuration(int pin) {
+  unsigned long press_duration = millis() - button_press_times[pin];
+
+  if (pin == PORT_ADJUST_BUTTON_PIN || pin == STARBORD_ADJUST_BUTTON_PIN) {
+    // Note this looks a bit strange but beep_state == HIGH means it is NOT beeping becasue it is switched on negative pole.
+    if (press_duration >= 5000 && press_duration < 6000 && !beep_very_long_triggered[pin]) {
+      DEBUG_PRINT("Button ");
+      DEBUG_PRINT(pin);
+      DEBUG_PRINTLN(" Very Long Pressing");
+      set_beep(BEEP_LONG_INTERVAL);
+      beep_very_long_triggered[pin] = true;
+    } else if (press_duration >= 1000 && press_duration < 2000 && !beep_long_triggered[pin]) {
+      DEBUG_PRINT("Button ");
+      DEBUG_PRINT(pin);
+      DEBUG_PRINTLN(" Long Pressing");
+      set_beep(BEEP_HOLD_INTERVAL);
+      beep_long_triggered[pin] = true;
+    } else if (press_duration >= 25 && press_duration < 100 && !beep_short_triggered[pin]) {
+      DEBUG_PRINT("Button ");
+      DEBUG_PRINT(pin);
+      DEBUG_PRINTLN(" Pressed");
+      set_beep(BEEP_INTERVAL);
+      beep_short_triggered[pin] = true;
+    }
+  } else {
+    if (press_duration >= 25 && !beep_short_triggered[pin]) {
+      DEBUG_PRINT("Button ");
+      DEBUG_PRINT(pin);
+      DEBUG_PRINTLN(" Pressed");
+      set_beep(BEEP_INTERVAL);
+      beep_short_triggered[pin] = true;
+      beep_long_triggered[pin] = true;
+      beep_very_long_triggered[pin] = true;            
+    }
   }
 }
 
@@ -189,6 +245,8 @@ void check_button() {
     if (buttonState == LOW) {
       if (!button_pressed_states[pin]) {
         button_pressed(pin);
+      } else {
+        check_button_press_diuration(pin);
       }
     } else {
       if (button_pressed_states[pin]) {

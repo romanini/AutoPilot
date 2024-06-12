@@ -15,6 +15,7 @@
 #define DEBUG_PRINT2(x, y)
 #endif
 
+#define SETUP_COMPLETE_BEEP_INTERVAL 25
 #define DISPLAY_ADDRESS 8
 #define DATA_SIZE 300
 
@@ -32,6 +33,7 @@ void setup() {
   setup_command();
   setup_button();
   Serial.println("Setup Complete");
+  set_beep(SETUP_COMPLETE_BEEP_INTERVAL);
 #ifdef DEBUG_ENABLED
   Serial.println("Debug Enabled");
 #else
@@ -54,7 +56,7 @@ void loop() {
   static unsigned long lastPrint = 0;
   if (millis() - lastPrint > 5000) {  // every 5 seconds
     lastPrint = millis();
-    DEBUG_PRINT("Free memory: ");
-    DEBUG_PRINTLN(freeMemory());
+    //DEBUG_PRINT("Free memory: ");
+    //DEBUG_PRINTLN(freeMemory());
   }
 }
