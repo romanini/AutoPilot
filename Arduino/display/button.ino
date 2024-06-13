@@ -140,10 +140,12 @@ void button_release(int pin) {
   DEBUG_PRINTLN(" ms");
 
   if (press_duration < 25) {
-    DEBUG_PRINT("Button ");
-    DEBUG_PRINT(pin);
-    DEBUG_PRINTLN(" Clicked");
-    set_beep(BEEP_INTERVAL);
+    if (autoPilot.getMode() != 0 || (pin != PORT_ADJUST_BUTTON_PIN && pin != STARBORD_ADJUST_BUTTON_PIN)) {
+      DEBUG_PRINT("Button ");
+      DEBUG_PRINT(pin);
+      DEBUG_PRINTLN(" Clicked");
+      set_beep(BEEP_INTERVAL);
+    }
   }
 
   float adjustment = 0.0;
@@ -202,7 +204,7 @@ void update_receive_led() {
 void check_button_press_diuration(int pin) {
   unsigned long press_duration = millis() - button_press_times[pin];
 
-  if (pin == PORT_ADJUST_BUTTON_PIN || pin == STARBORD_ADJUST_BUTTON_PIN) {
+  if ((pin == PORT_ADJUST_BUTTON_PIN || pin == STARBORD_ADJUST_BUTTON_PIN) && autoPilot.getMode() > 0) {
     // Note this looks a bit strange but beep_state == HIGH means it is NOT beeping becasue it is switched on negative pole.
     if (press_duration >= 5000 && press_duration < 6000 && !beep_very_long_triggered[pin]) {
       DEBUG_PRINT("Button ");
@@ -219,11 +221,11 @@ void check_button_press_diuration(int pin) {
     } else if (press_duration >= 25 && press_duration < 100 && !beep_short_triggered[pin]) {
       DEBUG_PRINT("Button ");
       DEBUG_PRINT(pin);
-      DEBUG_PRINTLN(" Pressed");
+      DEBUG_PRINTLN(" Pressed <>");
       set_beep(BEEP_INTERVAL);
       beep_short_triggered[pin] = true;
     }
-  } else {
+  } else if (pin == NAVIGATE_MODE_BUTTON_PIN || pin == COMPASS_MODE_BUTTON_PIN) {
     if (press_duration >= 25 && !beep_short_triggered[pin]) {
       DEBUG_PRINT("Button ");
       DEBUG_PRINT(pin);
@@ -231,7 +233,7 @@ void check_button_press_diuration(int pin) {
       set_beep(BEEP_INTERVAL);
       beep_short_triggered[pin] = true;
       beep_long_triggered[pin] = true;
-      beep_very_long_triggered[pin] = true;            
+      beep_very_long_triggered[pin] = true;
     }
   }
 }

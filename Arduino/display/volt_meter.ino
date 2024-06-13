@@ -3,12 +3,12 @@
 // Battery 4.2 max R1 = 10k, R2 = 22k ratio = 0.6875
 const int batteryVoltagePin = A1;
 const float batteryVoltageDividerRatio = .6875;  // Voltage divider ratio (R2/(R1+R2))
-const float batteryCorrectionFactor = 0.97675531;
+const float batteryCorrectionFactor = 0.9880095;
 
 // v-in (12v) R1 = 10k, R2 = 2.2k ratio = 0.1803
 const int inputVoltagePin = A0;
 const float inputVoltageDividerRatio = .1803;    // Voltage divider ratio (R2/(R1+R2))
-const float inputCorrectionFactor = 0.95946999;
+const float inputCorrectionFactor = 0.9816733;
 
 uint32_t last_check_time_mills = millis();
 
