@@ -7,7 +7,7 @@ This project has three main parts:
 ## Navigation Computer 
 An OrangePi Zero 2W running Ubuntu 22.04 and OpenCPN
 
-## Processor
+## Controller
 An Arduino Nano 33 IoT connected to an ultimate GPS , an Accelerometer and a motor controller.
 
 ## Display
