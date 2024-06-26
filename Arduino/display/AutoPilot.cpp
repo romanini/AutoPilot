@@ -1,4 +1,10 @@
-#include "avr/pgmspace.h"
+#if defined(ARDUINO_ARCH_SAMD)
+  #include <avr/pgmspace.h>
+#elif defined(ARDUINO_ARCH_ESP32)
+  #include <pgmspace.h>
+#else
+  #error "Unsupported board type. Please use an AVR, SAMD, or ESP32 based board."
+#endif
 #include <cstdlib>
 #include <cstring>
 #include "AutoPilot.h"
@@ -6,7 +12,7 @@
 #define BATTERY_VOLTS_AVERAGE_MAX_SIZE 12
 #define INPUT_VOLTS_AVERAGE_MAX_SIZE 12
 
-AutoPilot::AutoPilot(HardwareSerial* ser) {
+AutoPilot::AutoPilot(SerialType* ser) {
    serial = ser;
 
   year = 0;

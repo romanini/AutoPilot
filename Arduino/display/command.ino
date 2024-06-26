@@ -1,4 +1,11 @@
-#include <WiFiNINA.h>
+#if defined(ARDUINO_ARCH_SAMD)  // Check if the board is based on the SAMD architecture (like Arduino Nano 33 IoT)
+  #include <WiFiNINA.h>
+#elif defined(ARDUINO_ARCH_ESP32)  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
+  #include <WiFi.h>
+  #include <WiFiUdp.h>
+#else
+  #error "Unsupported board type. Please use Arduino Nano 33 IoT or Arduino Nano ESP32."
+#endif
 
 //#define MOCK_SEND false
 #define TIMEOUT_MS 1000 // Set your desired timeout value in milliseconds

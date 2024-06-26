@@ -42,6 +42,8 @@ const int led_pins[] = { PORT_ADJUST_LED_PIN, COMPASS_MODE_LED_PIN, NAVIGATE_MOD
 const int num_buttons = sizeof(button_pins) / sizeof(button_pins[0]);
 
 Adafruit_PCF8575 pcf = Adafruit_PCF8575();
+int attempts = 0;
+bool initialized = false;
 
 uint32_t receive_led_flash_mills = millis();
 bool receive_led_state = LOW;
@@ -60,9 +62,12 @@ bool beep_long_triggered[num_buttons];
 bool beep_very_long_triggered[num_buttons];
 
 void setup_button() {
-  if (!pcf.begin(PCF8575_ADDRESS, &Wire)) {
-    Serial.println("Couldn't find PCF8575");
-    return;
+  while (!initialized && attempts < 5) {
+    initialized = pcf.begin(0x20, &Wire);
+    if (!initialized) {
+      Serial.println("Couldn't find PCF8575");
+      delay(100);
+    }
   }
   for (int pin = 0; pin < num_buttons; pin++) {
     // setup the button

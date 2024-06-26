@@ -17,15 +17,33 @@
 
 int display_refresh_rate[DISPLAY_SEGMENTS];
 
+#if defined(ARDUINO_ARCH_ESP32)  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
+SPIClass* vspi = NULL;
+#define VSPI_MISO MISO
+#define VSPI_MOSI MOSI
+#define VSPI_SCLK SCK
+#define VSPI_SS SS
+#endif
+
 int autoPilotMode = 0;
 uint32_t display_refresh_timer[DISPLAY_SEGMENTS];
 int display_refresh_selector = 0;
 
-// Use hardware SPI (on Uno, #13, #12, #11) and the above for CS/DC
 Adafruit_HX8357 tft = Adafruit_HX8357(TFT_CS, TFT_DC, TFT_RST);
 
 void setup_screen() {
+  Serial.println("Starting Setup Display");
+
+// Use hardware SPI (on Uno, #13, #12, #11) and the above for CS/DC
+#if defined(ARDUINO_ARCH_ESP32)  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
+  vspi = new SPIClass(FSPI);
+  vspi->begin(VSPI_SCLK, VSPI_MISO, VSPI_MOSI, VSPI_SS);  //SCLK, MISO, MOSI, SS
+  Adafruit_HX8357 tft = Adafruit_HX8357(vspi, TFT_CS, TFT_DC, TFT_RST);
+#endif
+
+  Serial.println("Setting up Display");
   tft.begin();
+  Serial.println("started");
 
   // read diagnostics (optional but can help debug problems)
   uint8_t x = tft.readcommand8(HX8357_RDPOWMODE);
@@ -262,7 +280,7 @@ void display_mode() {
     mode_value_canvas.setTextColor(0xF57F);
     mode_value_canvas.setFont(&FreeSansBold12pt7b);
     mode_value_canvas.setCursor(0, 18);
-    mode_value_canvas.print("disabled"); 
+    mode_value_canvas.print("disabled");
   }
   tft.drawRGBBitmap(185, 20, mode_value_canvas.getBuffer(), 115, 24);
 }
@@ -386,9 +404,13 @@ void display_datetime() {
   date_time_value_canvas.setTextColor(HX8357_WHITE);
   date_time_value_canvas.setFont(&FreeSansBold12pt7b);
   date_time_value_canvas.setCursor(0, 18);
-  char dateTimeString[13];
-  sprintf(dateTimeString, "%d/%d/%02d %d:%02d", autoPilot.getMonth(), autoPilot.getDay(), autoPilot.getYear() % 100, autoPilot.getHour(), autoPilot.getMinute());
-  date_time_value_canvas.print(dateTimeString);
+  if (autoPilot.hasFix()) {
+    char dateTimeString[13];
+    sprintf(dateTimeString, "%d/%d/%02d %d:%02d", autoPilot.getMonth(), autoPilot.getDay(), autoPilot.getYear() % 100, autoPilot.getHour(), autoPilot.getMinute());
+    date_time_value_canvas.print(dateTimeString);
+  } else {
+    date_time_value_canvas.print("");
+  }
   tft.drawRGBBitmap(181, 293, date_time_value_canvas.getBuffer(), 165, 22);
 }
 

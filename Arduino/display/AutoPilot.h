@@ -1,8 +1,17 @@
-#include "api/HardwareSerial.h"
+//#include "api/HardwareSerial.h"
 #ifndef AUTOPILOT_H
 #define AUTOPILOT_H
 
-#include "Arduino.h"
+#if defined(ARDUINO_ARCH_SAMD)  // For Arduino Nano 33 IoT
+  #include <Arduino.h>
+  typedef HardwareSerial SerialType;  // Define SerialType for SAMD
+#elif defined(ARDUINO_ARCH_ESP32)  // For Arduino Nano ESP32
+  #include <USB.h>
+  typedef USBCDC SerialType;  // Define SerialType for ESP32
+#else
+  #error "Unsupported board type. Please use Arduino Nano 33 IoT or Arduino Nano ESP32."
+#endif
+
 #include <TimeLib.h> // Include the Time library if needed
 
 #define MAXLINELENGTH 300 ///< how long are max NMEA lines to parse?
@@ -57,12 +66,12 @@ private:
   bool reset;
 
   bool isEmpty(char *ptart);
-  HardwareSerial *serial;
+  SerialType *serial;
   void parseAPDAT(char *buffer);
   void parseRESET(char *buffer);
 
 public:
-  AutoPilot(HardwareSerial* ser);
+  AutoPilot(SerialType* ser);
   int getYear();
   int getMonth();
   int getDay();

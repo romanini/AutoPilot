@@ -1,6 +1,13 @@
 #include "AutoPilot.h"
-#include <WiFiNINA.h>
-#include <MemoryFree.h>
+#if defined(ARDUINO_ARCH_SAMD)  // Check if the board is based on the SAMD architecture (like Arduino Nano 33 IoT)
+  #include <WiFiNINA.h>
+#elif defined(ARDUINO_ARCH_ESP32)  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
+  #include <WiFi.h>
+  #include <WiFiUdp.h>
+#else
+  #error "Unsupported board type. Please use Arduino Nano 33 IoT or Arduino Nano ESP32."
+#endif
+//#include <MemoryFree.h>
 
 #define DEBUG_ENABLED 1
 #ifdef DEBUG_ENABLED
@@ -25,8 +32,9 @@ char serialzied_data[DATA_SIZE];
 int receive_count = 0;
 
 void setup() {
+  while (!Serial) { delay(10); }
   Serial.begin(38400);
-
+  Serial.println("Start");
   setup_screen();
   setup_wifi();
   setup_subscribe();
@@ -39,9 +47,9 @@ void setup() {
 #else
   Serial.println("Debug Disabled");
 #endif
-  DEBUG_PRINT("Program starts with ");
-  DEBUG_PRINT(freeMemory());
-  DEBUG_PRINTLN(" bytes of free memory.");
+  // DEBUG_PRINT("Program starts with ");
+  // DEBUG_PRINT(freeMemory());
+  // DEBUG_PRINTLN(" bytes of free memory.");
 }
 
 
@@ -53,10 +61,10 @@ void loop() {
   check_command();
   display();
 
-  static unsigned long lastPrint = 0;
-  if (millis() - lastPrint > 5000) {  // every 5 seconds
-    lastPrint = millis();
-    //DEBUG_PRINT("Free memory: ");
-    //DEBUG_PRINTLN(freeMemory());
-  }
+  // static unsigned long lastPrint = 0;
+  // if (millis() - lastPrint > 5000) {  // every 5 seconds
+  //   lastPrint = millis();
+  //   //DEBUG_PRINT("Free memory: ");
+  //   //DEBUG_PRINTLN(freeMemory());
+  // }
 }
