@@ -66,7 +66,11 @@ void publish_APDAT() {
 
     DEBUG_PRINTLN(serialzied_data);
     udpClient.beginPacket(broadcastIp, broadcastPort);
+#if defined(ARDUINO_ARCH_SAMD)  // Check if the board is based on the SAMD architecture (like Arduino Nano 33 IoT)
     udpClient.write(serialzied_data);
+#elif defined(ARDUINO_ARCH_ESP32)  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
+    udpClient.print(serialzied_data);
+#endif
     udpClient.endPacket();
     flash_led();
   }
@@ -76,6 +80,10 @@ void publish_RESET() {
     sprintf(serialzied_data, "~RESET,1$");
     DEBUG_PRINTLN(serialzied_data);
     udpClient.beginPacket(broadcastIp, broadcastPort);
+#if defined(ARDUINO_ARCH_SAMD)  // Check if the board is based on the SAMD architecture (like Arduino Nano 33 IoT)
     udpClient.write(serialzied_data);
+#elif defined(ARDUINO_ARCH_ESP32)  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
+    udpClient.print(serialzied_data);
+#endif
     udpClient.endPacket();
 }

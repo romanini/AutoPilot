@@ -9,7 +9,7 @@
 #define METERS_TO_NAUTICAL_MILES 0.000539957  // Conversion factor: 1 meter = 0.000539957 nautical miles
 #define PI std::acos(-1.0)
 
-AutoPilot::AutoPilot(HardwareSerial* ser) {
+AutoPilot::AutoPilot(SerialType* ser) {
   tmElements_t timeComponents;
   timeComponents.Year = 0;
   timeComponents.Month = 0;

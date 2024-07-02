@@ -1,9 +1,16 @@
 #include <sys/_timeval.h>
-#include "api/HardwareSerial.h"
+
 #ifndef AUTOPILOT_H
 #define AUTOPILOT_H
-
-#include "Arduino.h"
+#if defined(ARDUINO_ARCH_SAMD)  // For Arduino Nano 33 IoT
+  #include <Arduino.h>
+  typedef HardwareSerial SerialType;  // Define SerialType for SAMD
+#elif defined(ARDUINO_ARCH_ESP32)  // For Arduino Nano ESP32
+  #include <USB.h>
+  typedef USBCDC SerialType;  // Define SerialType for ESP32
+#else
+  #error "Unsupported board type. Please use Arduino Nano 33 IoT or Arduino Nano ESP32."
+#endif
 #include <TimeLib.h> // Include the Time library if needed
 
 class AutoPilot {
@@ -48,7 +55,7 @@ private:
   
   bool destinationChanged; // flag indicating if the destination (waypoint/heading desired) has changed
   bool modeChanged; // flag indicating that the mode has changed
-  HardwareSerial *serial;
+  SerialType *serial;
 
   float toRadians(float degrees);
   float toDegrees(float radians);
@@ -56,7 +63,7 @@ private:
   float getDistance(float lat1, float lon1, float lat2, float lon2);
   float getBearing(float lat1, float lon1, float lat2, float lon2);
 public:
-  AutoPilot(HardwareSerial* ser);
+  AutoPilot(SerialType* ser);
   void setStartMotor(int start_motor);
   int getStartMotor();
   void setMotorStarted(bool motor_started);

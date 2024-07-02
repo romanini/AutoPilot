@@ -9,7 +9,7 @@
 #endif
 #include "AutoPilot.h"
 
-// #define DEBUG_ENABLED 1
+#define DEBUG_ENABLED 1
 #ifdef DEBUG_ENABLED
 #define DEBUG_PRINT(x) Serial.print(x)
 #define DEBUG_PRINT2(x,y) Serial.print(x,y)
@@ -32,6 +32,7 @@ AutoPilot autoPilot = AutoPilot(&Serial);
 
 void setup() {
   //Initialize serial 
+  while (!Serial) { delay(10); }
   Serial.begin(38400);
   Wire.begin();
   setup_wifi();

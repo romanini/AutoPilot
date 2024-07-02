@@ -23,6 +23,10 @@ int wifi_status = WL_IDLE_STATUS;
 
 void setup_wifi() {
   // check for the WiFi module:
+  Serial.print("Using ");
+  Serial.println(WIFI_LIB_NAME);
+
+#if defined(ARDUINO_ARCH_SAMD)
   if (WiFi.status() == WL_NO_MODULE) {
     Serial.println("Communication with WiFi module failed!");
     // don't continue
@@ -34,27 +38,29 @@ void setup_wifi() {
   if (fv < WIFI_FIRMWARE_LATEST_VERSION) {
     Serial.println("Please upgrade the firmware");
   }
-
+#endif
   WiFi.config(ip, dns, gateway, subnet); 
 
-  // attempt to connect to WiFi network:
-  while (wifi_status != WL_CONNECTED) {
-    Serial.print("Attempting to connect to SSID: ");
-    Serial.println(ssid);
-    // Connect to WPA/WPA2 network. Change this line if using open or WEP network:
-    wifi_status = WiFi.begin(ssid, pass);
+  Serial.print("Attempting to connect to SSID: ");
+  Serial.println(ssid);
+  // Connect to WPA/WPA2 network. Change this line if using open or WEP network:
+  wifi_status = WiFi.begin(ssid, pass);
 
-    // wait 10 seconds for connection:
-    delay(5000);
+  // attempt to connect to WiFi network:
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
   }
+
 
   print_wifi_status();
 }
 
 void print_wifi_status() {
+#if defined(ARDUINO_ARCH_SAMD)
   Serial.print("WiFi firmware version: ");
   Serial.println(WiFi.firmwareVersion());
-
+#endif
   // print the SSID of the network you're attached to:
   Serial.print("SSID: ");
   Serial.println(WiFi.SSID());
