@@ -9,8 +9,8 @@
 #endif
 //#include <MemoryFree.h>
 
-#define DEBUG_ENABLED 1
-#ifdef DEBUG_ENABLED
+#define DEBUG_ENABLED 0
+#if DEBUG_ENABLED
 #define DEBUG_PRINT(x) Serial.print(x)
 #define DEBUG_PRINT2(x, y) Serial.print(x, y)
 #define DEBUG_PRINTLN(x) Serial.println(x)
@@ -32,7 +32,9 @@ char serialzied_data[DATA_SIZE];
 int receive_count = 0;
 
 void setup() {
+#if defined(ARDUINO_ARCH_ESP32)  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
   while (!Serial) { delay(10); }
+#endif
   Serial.begin(38400);
   Serial.println("Start");
   setup_screen();

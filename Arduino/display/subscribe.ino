@@ -8,10 +8,13 @@
 #endif
 
 #define DATA_SIZE 300
+#define LAST_RECEIVE_MAX_TIME 10000
 
 char buffer[1000];
 WiFiUDP udp; // Create a UDP object
 unsigned int localPort = 8888;  // local port to listen on
+unsigned long lastReceiveTime = 0;
+bool receiveTimeout = true;
 
 void setup_subscribe() {
   udp.begin(localPort); // Start the UDP server on port 8888 for incoming messages
@@ -22,7 +25,11 @@ void check_subscription() {
   char packetBuffer[DATA_SIZE]; // Buffer to hold incoming packets
   int packetSize = udp.parsePacket();
   char leftover[699];
-
+  
+  if (!receiveTimeout && (lastReceiveTime < millis() - LAST_RECEIVE_MAX_TIME)) {
+    receiveTimeout = true;
+    autoPilot.init();
+  }
   if (packetSize) {
     //DEBUG_PRINT("Received packet: ");
     //DEBUG_PRINT(packetSize);
@@ -44,6 +51,8 @@ void check_subscription() {
     end[0] = '\0';
     // parse the sentence
     autoPilot.parse(start);
+    lastReceiveTime = millis();
+    receiveTimeout = false;
     flash_receive_led();
     // copy the left over to the buffer for next time
     strcpy(buffer, leftover);

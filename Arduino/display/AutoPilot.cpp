@@ -1,9 +1,9 @@
 #if defined(ARDUINO_ARCH_SAMD)
-  #include <avr/pgmspace.h>
+#include <avr/pgmspace.h>
 #elif defined(ARDUINO_ARCH_ESP32)
-  #include <pgmspace.h>
+#include <pgmspace.h>
 #else
-  #error "Unsupported board type. Please use an AVR, SAMD, or ESP32 based board."
+#error "Unsupported board type. Please use an AVR, SAMD, or ESP32 based board."
 #endif
 #include <cstdlib>
 #include <cstring>
@@ -12,9 +12,16 @@
 #define BATTERY_VOLTS_AVERAGE_MAX_SIZE 12
 #define INPUT_VOLTS_AVERAGE_MAX_SIZE 12
 
-AutoPilot::AutoPilot(SerialType* ser) {
-   serial = ser;
+AutoPilot::AutoPilot(SerialType *ser) {
+  serial = ser;
+  battery_voltage = 0.0;
+  battery_voltage_average_size = 0;
+  input_voltage = 0.0;
+  input_voltage_average_size = 0;
+  this->init();
+}
 
+void AutoPilot::init() {
   year = 0;
   month = 0;
   day = 0;
@@ -26,7 +33,7 @@ AutoPilot::AutoPilot(SerialType* ser) {
   mode = 0;
   waypoint_set = false;
   waypoint_lat = 0.0;
-  waypoint_lon = 0.0;  
+  waypoint_lon = 0.0;
   heading_desired = 0.0;
   heading_short_average = 0.0;
   heading_long_average = 0.0;
@@ -45,11 +52,8 @@ AutoPilot::AutoPilot(SerialType* ser) {
   location_lat = 0.0;
   location_lon = 0.0;
   destinationChanged = true;
-  battery_voltage = 0.0;
-  battery_voltage_average_size = 0;
-  input_voltage = 0.0;
-  input_voltage_average_size = 0;
   reset = false;
+  connected = false;
 }
 
 int AutoPilot::getYear() {
@@ -68,7 +72,7 @@ int AutoPilot::getHour() {
   return this->hour;
 }
 
-int AutoPilot:: getMinute() {
+int AutoPilot::getMinute() {
   return this->minute;
 }
 
@@ -204,6 +208,14 @@ void AutoPilot::setReset(bool value) {
   this->reset = value;
 }
 
+bool AutoPilot::isConnected() {
+  return this->connected;
+}
+
+void AutoPilot::setConnected(bool connected) {
+  this->connected = connected;
+}
+
 void AutoPilot::printAutoPilot() {
   serial->print("Date&Time: ");
   char dateTimeString[13];
@@ -278,54 +290,56 @@ void AutoPilot::printAutoPilot() {
 }
 
 void AutoPilot::parse(char *sentence) {
-  if (strncmp(sentence, APDAT,6) == 0) {
+  if (strncmp(sentence, APDAT, 6) == 0) {
     parseAPDAT(sentence);
+    setConnected(true);
   } else if (strncmp(sentence, RESET, 6) == 0) {
     parseRESET(sentence);
+    setConnected(true);
   } else {
     serial->print("unknown sentence");
   }
 }
 
 void AutoPilot::parseAPDAT(char *sentence) {
-  char *p = sentence; // Pointer to move through the sentence -- good parsers are non-destructive
+  char *p = sentence;  // Pointer to move through the sentence -- good parsers are non-destructive
 
-  p = strchr(p, ',') + 1; // Skip to char after the next comma, then check.
+  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
   if (!isEmpty(p)) {
     this->year = atoi(p);
   } else {
     this->year = 0;
   }
 
-  p = strchr(p, ',') + 1; // Skip to char after the next comma, then check.
+  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
   if (!isEmpty(p)) {
     this->month = atoi(p);
   } else {
-    this->month = 0;    
+    this->month = 0;
   }
 
-  p = strchr(p, ',') + 1; // Skip to char after the next comma, then check.
+  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
   if (!isEmpty(p)) {
     this->day = atoi(p);
   } else {
-    this->day = 0;    
+    this->day = 0;
   }
 
-  p = strchr(p, ',') + 1; // Skip to char after the next comma, then check.
+  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
   if (!isEmpty(p)) {
     this->hour = atoi(p);
   } else {
-    this->hour = 0;    
+    this->hour = 0;
   }
 
-  p = strchr(p, ',') + 1; // Skip to char after the next comma, then check.
+  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
   if (!isEmpty(p)) {
     this->minute = atoi(p);
   } else {
-    this->minute = 0;    
+    this->minute = 0;
   }
 
-  p = strchr(p, ',') + 1; // Skip to char after the next comma, then check.
+  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
   if (!isEmpty(p)) {
     int fix = atoi(p);
     if (fix > 0) {
@@ -334,35 +348,35 @@ void AutoPilot::parseAPDAT(char *sentence) {
       this->fix = false;
     }
   } else {
-    this->fix = false;    
+    this->fix = false;
   }
 
-  p = strchr(p, ',') + 1; // Skip to char after the next comma, then check.
+  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
   if (!isEmpty(p)) {
     this->fixquality = atoi(p);
   } else {
-    this->fixquality = 0;    
+    this->fixquality = 0;
   }
 
-  p = strchr(p, ',') + 1; // Skip to char after the next comma, then check.
+  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
   if (!isEmpty(p)) {
     this->satellites = atoi(p);
   } else {
-    this->satellites = 0;    
+    this->satellites = 0;
   }
 
-  p = strchr(p, ',') + 1; // Skip to char after the next comma, then check.
+  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
   int currentMode = this->mode;
   if (!isEmpty(p)) {
     this->mode = atoi(p);
   } else {
-    this->mode = 0;    
+    this->mode = 0;
   }
   if (currentMode != this->mode) {
     this->destinationChanged = true;
   }
 
-  p = strchr(p, ',') + 1; // Skip to char after the next comma, then check.
+  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
   int currentWaypointSet = this->waypoint_set;
   if (!isEmpty(p)) {
     int waypoint_set = atoi(p);
@@ -372,145 +386,141 @@ void AutoPilot::parseAPDAT(char *sentence) {
       this->waypoint_set = false;
     }
   } else {
-    this->waypoint_set = false;    
+    this->waypoint_set = false;
   }
-  if ((currentWaypointSet != this->waypoint_set) &&
-      (this->mode == 2)) {
-        this->destinationChanged = true;
+  if ((currentWaypointSet != this->waypoint_set) && (this->mode == 2)) {
+    this->destinationChanged = true;
   }
 
-  p = strchr(p, ',') + 1; // Skip to char after the next comma, then check.
+  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
   float currentWaypointLat = this->waypoint_lat;
   if (!isEmpty(p)) {
     this->waypoint_lat = atof(p);
   } else {
-    this->waypoint_lat = 0.0;    
+    this->waypoint_lat = 0.0;
   }
-  if ((currentWaypointLat != this->waypoint_lat) &&
-      (this->mode == 2)) {
-        this->destinationChanged = true;
+  if ((currentWaypointLat != this->waypoint_lat) && (this->mode == 2)) {
+    this->destinationChanged = true;
   }
 
-  p = strchr(p, ',') + 1; // Skip to char after the next comma, then check.
+  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
   float currentWaypointLon = this->waypoint_lon;
   if (!isEmpty(p)) {
     this->waypoint_lon = atof(p);
   } else {
-    this->waypoint_lon = 0.0;    
+    this->waypoint_lon = 0.0;
   }
-  if ((currentWaypointLon != this->waypoint_lon) &&
-      (this->mode == 2)) {
-        this->destinationChanged = true;
+  if ((currentWaypointLon != this->waypoint_lon) && (this->mode == 2)) {
+    this->destinationChanged = true;
   }
 
-  p = strchr(p, ',') + 1; // Skip to char after the next comma, then check.
+  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
   float currentHeadingDesired = this->heading_desired;
   if (!isEmpty(p)) {
     this->heading_desired = atof(p);
   } else {
-    this->heading_desired = 0.0;    
+    this->heading_desired = 0.0;
   }
-  if ((currentHeadingDesired != this->heading_desired) &&
-      (this->mode == 1)) {
-        this->destinationChanged = true;
-  }  
+  if ((currentHeadingDesired != this->heading_desired) && (this->mode == 1)) {
+    this->destinationChanged = true;
+  }
 
-  p = strchr(p, ',') + 1; // Skip to char after the next comma, then check.
+  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
   if (!isEmpty(p)) {
     this->heading_long_average = atof(p);
   } else {
-    this->heading_long_average = 0.0;    
+    this->heading_long_average = 0.0;
   }
 
-  p = strchr(p, ',') + 1; // Skip to char after the next comma, then check.
+  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
   if (!isEmpty(p)) {
     this->heading_long_average_change = atof(p);
   } else {
-    this->heading_long_average_change = 0.0;    
+    this->heading_long_average_change = 0.0;
   }
 
-  p = strchr(p, ',') + 1; // Skip to char after the next comma, then check.
+  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
   if (!isEmpty(p)) {
     this->heading_long_average_size = atoi(p);
   } else {
-    this->heading_long_average_size = 0;    
-  }  
+    this->heading_long_average_size = 0;
+  }
 
-  p = strchr(p, ',') + 1; // Skip to char after the next comma, then check.
+  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
   if (!isEmpty(p)) {
     this->heading_short_average = atof(p);
   } else {
-    this->heading_short_average = 0.0;    
+    this->heading_short_average = 0.0;
   }
 
-  p = strchr(p, ',') + 1; // Skip to char after the next comma, then check.
+  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
   if (!isEmpty(p)) {
     this->heading_short_average_change = atof(p);
   } else {
-    this->heading_short_average_change = 0.0;    
+    this->heading_short_average_change = 0.0;
   }
 
-  p = strchr(p, ',') + 1; // Skip to char after the next comma, then check.
+  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
   if (!isEmpty(p)) {
     this->heading_short_average_size = atoi(p);
   } else {
-    this->heading_short_average_size = 0;    
-  }  
+    this->heading_short_average_size = 0;
+  }
 
-  p = strchr(p, ',') + 1; // Skip to char after the next comma, then check.
+  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
   if (!isEmpty(p)) {
     this->heading = atof(p);
   } else {
-    this->heading = 0.0;    
+    this->heading = 0.0;
   }
 
-  p = strchr(p, ',') + 1; // Skip to char after the next comma, then check.
+  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
   if (!isEmpty(p)) {
     this->bearing = atof(p);
   } else {
-    this->bearing = 0.0;    
+    this->bearing = 0.0;
   }
 
-  p = strchr(p, ',') + 1; // Skip to char after the next comma, then check.
+  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
   if (!isEmpty(p)) {
     this->bearing_correction = atof(p);
   } else {
-    this->bearing_correction = 0.0;    
-  }  
+    this->bearing_correction = 0.0;
+  }
 
-  p = strchr(p, ',') + 1; // Skip to char after the next comma, then check.
+  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
   if (!isEmpty(p)) {
     this->speed = atof(p);
   } else {
-    this->speed = 0.0;    
+    this->speed = 0.0;
   }
 
-  p = strchr(p, ',') + 1; // Skip to char after the next comma, then check.
+  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
   if (!isEmpty(p)) {
     this->distance = atof(p);
   } else {
-    this->distance = 0.0;    
+    this->distance = 0.0;
   }
 
-  p = strchr(p, ',') + 1; // Skip to char after the next comma, then check.
+  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
   if (!isEmpty(p)) {
     this->course = atof(p);
   } else {
-    this->course = 0.0;    
+    this->course = 0.0;
   }
 
-  p = strchr(p, ',') + 1; // Skip to char after the next comma, then check.
+  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
   if (!isEmpty(p)) {
     this->location_lat = atof(p);
   } else {
-    this->location_lat = 0.0;    
+    this->location_lat = 0.0;
   }
 
-  p = strchr(p, ',') + 1; // Skip to char after the next comma, then check.
+  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
   if (!isEmpty(p)) {
     this->location_lon = atof(p);
   } else {
-    this->location_lon = 0.0;    
+    this->location_lon = 0.0;
   }
 }
 

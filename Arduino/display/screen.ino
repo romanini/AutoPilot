@@ -215,7 +215,11 @@ void display_heading_long_average() {
   compass_la_value_canvas.setTextColor(HX8357_YELLOW);
   compass_la_value_canvas.setFont(&FreeSansBold18pt7b);
   compass_la_value_canvas.setCursor(0, 29);
-  compass_la_value_canvas.print(autoPilot.getHeadingLongAverage());
+  if (autoPilot.isConnected()) {
+    compass_la_value_canvas.print(autoPilot.getHeadingLongAverage());
+  } else {
+    compass_la_value_canvas.print("");
+  }
   tft.drawRGBBitmap(20, 105, compass_la_value_canvas.getBuffer(), 107, 32);
 
   //tft.drawBitmap(20, 105, compass_la_value_canvas.getBuffer(), 107, 32, HX8357_YELLOW, HX8357_BLACK);
@@ -227,8 +231,12 @@ void display_heading_long_average_change() {
   compass_la_change_value_canvas.setTextColor(HX8357_YELLOW);
   compass_la_change_value_canvas.setFont(&FreeSansBold18pt7b);
   compass_la_change_value_canvas.setCursor(0, 29);
-  compass_la_change_value_canvas.print("~");
-  compass_la_change_value_canvas.print(autoPilot.getHeadingLongAverageChange());
+  if (autoPilot.isConnected()) {
+    compass_la_change_value_canvas.print("~");
+    compass_la_change_value_canvas.print(autoPilot.getHeadingLongAverageChange());
+  } else {
+    compass_la_change_value_canvas.print("");
+  }
   tft.drawRGBBitmap(35, 143, compass_la_change_value_canvas.getBuffer(), 95, 32);
 }
 
@@ -238,7 +246,11 @@ void display_heading_short_average() {
   compass_sa_value_canvas.setTextColor(HX8357_YELLOW);
   compass_sa_value_canvas.setFont(&FreeSansBold18pt7b);
   compass_sa_value_canvas.setCursor(0, 29);
-  compass_sa_value_canvas.print(autoPilot.getHeadingShortAverage());
+  if (autoPilot.isConnected()) {
+    compass_sa_value_canvas.print(autoPilot.getHeadingShortAverage());
+  } else {
+    compass_sa_value_canvas.print("");
+  }
   tft.drawRGBBitmap(20, 190, compass_sa_value_canvas.getBuffer(), 107, 32);
 }
 
@@ -248,8 +260,12 @@ void display_heading_short_average_change() {
   compass_sa_change_value_canvas.setTextColor(HX8357_YELLOW);
   compass_sa_change_value_canvas.setFont(&FreeSansBold18pt7b);
   compass_sa_change_value_canvas.setCursor(0, 29);
-  compass_sa_change_value_canvas.print("~");
-  compass_sa_change_value_canvas.print(autoPilot.getHeadingShortAverageChange());
+  if (autoPilot.isConnected()) {
+    compass_sa_change_value_canvas.print("~");
+    compass_sa_change_value_canvas.print(autoPilot.getHeadingShortAverageChange());
+  } else {
+    compass_sa_change_value_canvas.print("");
+  }
   tft.drawRGBBitmap(35, 227, compass_sa_change_value_canvas.getBuffer(), 95, 32);
 }
 
@@ -259,7 +275,11 @@ void display_heading() {
   compass_value_canvas.setTextColor(HX8357_YELLOW);
   compass_value_canvas.setFont(&FreeSansBold18pt7b);
   compass_value_canvas.setCursor(0, 29);
-  compass_value_canvas.print(autoPilot.getHeading());
+  if (autoPilot.isConnected()) {
+    compass_value_canvas.print(autoPilot.getHeading());
+  } else {
+    compass_value_canvas.print("");
+  }
   tft.drawRGBBitmap(20, 276, compass_value_canvas.getBuffer(), 107, 32);
 }
 

@@ -64,6 +64,7 @@ private:
   int input_voltage_average_size;
   
   bool reset;
+  bool connected;
 
   bool isEmpty(char *ptart);
   SerialType *serial;
@@ -72,6 +73,7 @@ private:
 
 public:
   AutoPilot(SerialType* ser);
+  void init();
   int getYear();
   int getMonth();
   int getDay();
@@ -106,6 +108,8 @@ public:
   void setInputVoltage(float voltage);
   bool getReset();
   void setReset(bool val);
+  bool isConnected();
+  void setConnected(bool connected);
   void printAutoPilot();
   void parse(char *buffer);
 };
