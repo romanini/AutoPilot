@@ -92,6 +92,10 @@ int AutoPilot::getMode() {
   return this->mode;
 }
 
+void AutoPilot::setMode(int mode) {
+  this->mode = mode;
+}
+
 bool AutoPilot::isWaypointSet() {
   return this->waypoint_set;
 }
@@ -175,13 +179,14 @@ float AutoPilot::getBatteryVoltage() {
 }
 
 void AutoPilot::setBatteryVoltage(float voltage) {
-  if (this->battery_voltage_average_size > 0) {
+  if (voltage > 0.2) {
+    if (this->battery_voltage_average_size < BATTERY_VOLTS_AVERAGE_MAX_SIZE) {
+      this->battery_voltage_average_size += 1;
+    }
     this->battery_voltage = this->battery_voltage + ((voltage - this->battery_voltage) / this->battery_voltage_average_size);
   } else {
-    this->battery_voltage = voltage;
-  }
-  if (this->battery_voltage_average_size < BATTERY_VOLTS_AVERAGE_MAX_SIZE) {
-    this->battery_voltage_average_size += 1;
+    this->battery_voltage = 0.0;
+    this->battery_voltage_average_size = 0;
   }
 }
 
@@ -190,13 +195,14 @@ float AutoPilot::getInputVoltage() {
 }
 
 void AutoPilot::setInputVoltage(float voltage) {
-  if (this->input_voltage_average_size > 0) {
+  if (voltage > 0.2) {
+    if (this->input_voltage_average_size < INPUT_VOLTS_AVERAGE_MAX_SIZE) {
+      this->input_voltage_average_size += 1;
+    }
     this->input_voltage = this->input_voltage + ((voltage - this->input_voltage) / this->input_voltage_average_size);
   } else {
-    this->input_voltage = voltage;
-  }
-  if (this->input_voltage_average_size < INPUT_VOLTS_AVERAGE_MAX_SIZE) {
-    this->input_voltage_average_size += 1;
+    this->input_voltage = 0.0;
+    this->input_voltage_average_size = 0;
   }
 }
 

@@ -91,7 +91,7 @@ class AutoPilot:
         print(f"Date&Time: {self.month}/{self.day}/{self.year:02d} {self.hour}:{self.minute:02d}")
         fixquality_desc = "n/a" if self.fixquality == 0 else "GPS" if self.fixquality == 1 else "DGPS"
         print(f"Fix: {fixquality_desc} ({self.satellites})" if self.fix else "No Fix")
-        mode_desc = "navigate" if self.mode == 2 else "compass" if self.mode == 1 else "N/A"
+        mode_desc = "navigate" if self.mode == 2 else "compass" if self.mode == 1 else "disabled" if self.mode == 0 else "N/A"
         destination = f"{self.waypoint_lat}, {self.waypoint_lon}" if self.mode == 2 else f"{self.heading_desired}" if self.mode == 1 else "N/A"
         print(f"Destination: {mode_desc} {destination}")
         print(f"Heading: {self.heading_long_average} ~ {self.heading_long_average_change} ({self.heading_long_average_size}) / "

@@ -1,14 +1,13 @@
+#include <Wire.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_LIS2MDL.h>
 #include <Adafruit_LSM303_Accel.h>
 #include "calibrate.h"
 #include "math.h"
 
-#define MAG_ADDRESS 0x1E
-#define ACCEL_ADDRESS (0x32 >> 1)
 uint32_t last_compass_read_time_mills = millis();
 
-Adafruit_LIS2MDL mag = Adafruit_LIS2MDL();
+Adafruit_LIS2MDL mag = Adafruit_LIS2MDL(12345);
 Adafruit_LSM303_Accel_Unified accel = Adafruit_LSM303_Accel_Unified(54321);
 
 float mag_data[3];
@@ -16,7 +15,7 @@ float accel_data[3];
 
 void setup_compass() {
   /* Initialise the sensor */
-  if (!mag.begin(MAG_ADDRESS, &Wire)) {
+  if (!mag.begin()) {
     /* There was a problem detecting the LIS2MDL ... check your connections */
     Serial.println("Ooops, no LIS3MDL detected ... Check your wiring!");
     while (1)
@@ -24,7 +23,7 @@ void setup_compass() {
   }
 
   /* Initialise the sensor */
-  if (!accel.begin(ACCEL_ADDRESS, &Wire)) {
+  if (!accel.begin()) {
     /* There was a problem detecting the ADXL345 ... check your connections */
     Serial.println("Ooops, no LSM303 detected ... Check your wiring!");
     while (1)
@@ -37,7 +36,7 @@ void setup_compass() {
   Serial.println("Compass all setup");
 }
 
-float* read_magnetometer() {
+void read_magnetometer() {
 
   // Get new sensor event with readings in uTesla
   sensors_event_t event;
@@ -64,7 +63,7 @@ float* read_magnetometer() {
 }
 
 
-float* read_accelletometer() {
+void read_accelletometer() {
   // Get new sensor event with readings
   sensors_event_t accel_event;
   accel.getEvent(&accel_event);

@@ -296,11 +296,16 @@ void display_mode() {
     mode_value_canvas.setFont(&FreeSansBold12pt7b);
     mode_value_canvas.setCursor(0, 18);
     mode_value_canvas.print("compass");
+  } else if (autoPilot.getMode() == 0) {
+    mode_value_canvas.setTextColor(0xF57F);
+    mode_value_canvas.setFont(&FreeSansBold12pt7b);
+    mode_value_canvas.setCursor(0, 18);
+    mode_value_canvas.print("disabled");    
   } else {
     mode_value_canvas.setTextColor(0xF57F);
     mode_value_canvas.setFont(&FreeSansBold12pt7b);
     mode_value_canvas.setCursor(0, 18);
-    mode_value_canvas.print("disabled");
+    mode_value_canvas.print("no link");
   }
   tft.drawRGBBitmap(185, 20, mode_value_canvas.getBuffer(), 115, 24);
 }

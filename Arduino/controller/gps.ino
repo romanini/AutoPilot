@@ -2,8 +2,14 @@
 #include <TimeLib.h>
 #include <Timezone.h>
 
+#if defined(ARDUINO_ARCH_SAMD)  // Check if the board is based on the SAMD architecture (like Arduino Nano 33 IoT)
 // what's the name of the hardware serial port?
 #define GPSSerial Serial1
+#elif defined(ARDUINO_ARCH_ESP32)  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
+// what's the name of the hardware serial port?
+#define GPSSerial Serial0 
+#endif
+
 #define GPS_UPDATE_RATE 50
 #define MAX_CHARS_TO_READ 100
 #define MAX_SENTENCES_PER_CYCLE 10

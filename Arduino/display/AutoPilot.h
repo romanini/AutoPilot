@@ -83,6 +83,7 @@ public:
   int getFixquality();
   int getSatellites();
   int getMode();
+  void setMode(int mode);
   bool isWaypointSet();
   float getWaypointLat();
   float getWaypointLon();

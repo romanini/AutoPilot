@@ -17,15 +17,11 @@ WiFiClient client;
 void setup_command() { 
   // Set the timeout for WiFiClient
   client.setTimeout(TIMEOUT_MS);
-#ifndef MOCK_SEND 
-  connect();
-#endif  
 }
 
 void check_command() {
   if (autoPilot.getReset()) {
     autoPilot.setReset(false);
-    disconnect();
   }
 }
 
@@ -37,6 +33,7 @@ void adjust_heading(float change) {
       client.flush();
       DEBUG_PRINT("adjusting heading ");
       DEBUG_PRINTLN(change);
+      disconnect();
     } else {
       DEBUG_PRINTLN("Could not adjust heading.");
     }
@@ -51,6 +48,7 @@ void set_mode(int mode) {
       client.flush();
       DEBUG_PRINT("set mode ");
       DEBUG_PRINTLN(mode);
+      disconnect();
     } else {
       DEBUG_PRINTLN("Could not set mode.");      
     }
@@ -69,6 +67,7 @@ boolean connect() {
 
 boolean disconnect() {
   if (client.connected()) {
+    client.println("q");
     client.stop();
   }
 }

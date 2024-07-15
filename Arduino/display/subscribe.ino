@@ -29,6 +29,7 @@ void check_subscription() {
   if (!receiveTimeout && (lastReceiveTime < millis() - LAST_RECEIVE_MAX_TIME)) {
     receiveTimeout = true;
     autoPilot.init();
+    autoPilot.setMode(-1);
   }
   if (packetSize) {
     //DEBUG_PRINT("Received packet: ");

@@ -34,7 +34,17 @@ void setup_wifi() {
   if (fv < WIFI_FIRMWARE_LATEST_VERSION) {
     Serial.println("Please upgrade the firmware");
   }
-#endif
+
+  // attempt to connect to WiFi network:
+  while (wifi_status != WL_CONNECTED) {
+    Serial.print("Attempting to connect to SSID: ");
+    Serial.println(ssid);
+    // Connect to WPA/WPA2 network. Change this line if using open or WEP network:
+    wifi_status = WiFi.begin(ssid, pass);
+    // wait 10 seconds for connection:
+    delay(5000);
+  }
+#elif defined(ARDUINO_ARCH_ESP32)  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
   Serial.print("Attempting to connect to SSID: ");
   Serial.println(ssid);
   // Connect to WPA/WPA2 network. Change this line if using open or WEP network:
@@ -43,9 +53,9 @@ void setup_wifi() {
   // attempt to connect to WiFi network:
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
-    Serial.print(".");
-  }
 
+  }
+#endif
   // you're connected now, so print out the status:
   print_wifi_status();
 }
