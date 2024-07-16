@@ -377,7 +377,7 @@ void display_distance() {
   distance_value_canvas.setTextColor(HX8357_CYAN);
   distance_value_canvas.setFont(&FreeSansBold24pt7b);
   distance_value_canvas.setCursor(0, 37);
-  if (autoPilot.isWaypointSet()) {
+  if (autoPilot.isWaypointSet() && autoPilot.hasFix()) {
     distance_value_canvas.print(autoPilot.getDistance(), 2);
   } else {
     distance_value_canvas.print("");

@@ -119,10 +119,14 @@ void update_beep() {
   }
 }
 void button_pressed(int pin) {
-  button_press_times[pin] = millis();
-  button_pressed_states[pin] = true;
-  // light the LED
-  pcf.digitalWrite(led_pins[pin], LOW);
+  if ((autoPilot.getMode() == 0 && (pin == COMPASS_MODE_BUTTON_PIN || (pin == NAVIGATE_MODE_BUTTON_PIN && autoPilot.isWaypointSet() && autoPilot.hasFix()))) || 
+     ((autoPilot.getMode() != 0 && (pin == PORT_ADJUST_BUTTON_PIN || pin == STARBORD_ADJUST_BUTTON_PIN || 
+                                    pin == COMPASS_MODE_BUTTON_PIN || (pin == NAVIGATE_MODE_BUTTON_PIN && autoPilot.isWaypointSet() && autoPilot.hasFix()))))) {
+    button_press_times[pin] = millis();
+    button_pressed_states[pin] = true;
+    // light the LED
+    pcf.digitalWrite(led_pins[pin], LOW);
+  }
 }
 
 void button_release(int pin) {
@@ -145,7 +149,10 @@ void button_release(int pin) {
   DEBUG_PRINTLN(" ms");
 
   if (press_duration < 25) {
-    if (autoPilot.getMode() != 0 || (pin != PORT_ADJUST_BUTTON_PIN && pin != STARBORD_ADJUST_BUTTON_PIN)) {
+    //    if (autoPilot.getMode() != 0 || (pin != PORT_ADJUST_BUTTON_PIN && pin != STARBORD_ADJUST_BUTTON_PIN)) {
+    if ((autoPilot.getMode() == 0 && (pin == COMPASS_MODE_BUTTON_PIN || (pin == NAVIGATE_MODE_BUTTON_PIN && autoPilot.isWaypointSet() && autoPilot.hasFix()))) || 
+       ((autoPilot.getMode() > 0 && (pin == PORT_ADJUST_BUTTON_PIN || pin == STARBORD_ADJUST_BUTTON_PIN || 
+                                      pin == COMPASS_MODE_BUTTON_PIN || (pin == NAVIGATE_MODE_BUTTON_PIN && autoPilot.isWaypointSet() && autoPilot.hasFix()))))) {
       DEBUG_PRINT("Button ");
       DEBUG_PRINT(pin);
       DEBUG_PRINTLN(" Clicked");
@@ -168,15 +175,27 @@ void button_release(int pin) {
 
   switch (pin) {
     case PORT_ADJUST_BUTTON_PIN:
-      adjustment *= -1.0;
-      adjust_heading(adjustment);
-      DEBUG_PRINT("Port Adjust ");
-      DEBUG_PRINTLN(adjustment);
+      if (autoPilot.getMode() > 0) {
+        if (autoPilot.getMode() == 2) {
+          set_mode(1);
+          delay(1000);
+        }
+        adjustment *= -1.0;
+        adjust_heading(adjustment);
+        DEBUG_PRINT("Port Adjust ");
+        DEBUG_PRINTLN(adjustment);
+      }
       break;
     case STARBORD_ADJUST_BUTTON_PIN:
-      adjust_heading(adjustment);
-      DEBUG_PRINT("Port Adjust ");
-      DEBUG_PRINTLN(adjustment);
+      if (autoPilot.getMode() > 0) {
+        if (autoPilot.getMode() == 2) {
+          set_mode(1);
+          delay(1000);
+        }        
+        adjust_heading(adjustment);
+        DEBUG_PRINT("Port Adjust ");
+        DEBUG_PRINTLN(adjustment);
+      }
       break;
     case COMPASS_MODE_BUTTON_PIN:
       if (autoPilot.getMode() != 1) {
