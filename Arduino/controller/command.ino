@@ -46,7 +46,6 @@ void setup_command() {
   telnet_server.onConnectionAttempt(onTelnetConnectionAttempt);
   telnet_server.onReconnect(onTelnetReconnect);
   telnet_server.onDisconnect(onTelnetDisconnect);
-
   command_server.onConnect(onCommandConnect);
   command_server.onConnectionAttempt(onCommandConnectionAttempt);
   command_server.onReconnect(onCommandReconnect);
@@ -304,16 +303,15 @@ void onTelnetInput(String str) {
 }
 
 void onCommandInput(String str) {
-  if (str == "q") {
-    Serial.println("Closing command connection");
-    command_server.println("> disconnecting you");
-    command_server.disconnectClient();
-  } else {
-    int len = str.length() + 1;
-    str.toCharArray(command_buffer, len);
-    command_count = BUF_SIZE - len;
-    process_command(command_server, command_buffer);
-  }
+  Serial.print("Got command input: '");
+  Serial.print(str);
+  Serial.println("'");
+
+  int len = str.length() + 1;
+  str.toCharArray(command_buffer, len);
+  command_count = BUF_SIZE - len;
+  process_command(command_server, command_buffer);
+  command_server.disconnectClient();
 }
 #endif
 

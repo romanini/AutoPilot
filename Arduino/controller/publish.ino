@@ -70,7 +70,7 @@ void publish_APDAT() {
       autoPilot.getLocationLon() //%.2f
     );
 
-    DEBUG_PRINTLN(serialzied_data);
+    //DEBUG_PRINTLN(serialzied_data);
 #if defined(ARDUINO_ARCH_SAMD)  // Check if the board is based on the SAMD architecture (like Arduino Nano 33 IoT)
     udpClient.beginPacket(broadcastIp, BROADCAST_PORT);
     udpClient.write(serialzied_data);
