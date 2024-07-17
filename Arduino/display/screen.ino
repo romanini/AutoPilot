@@ -290,7 +290,7 @@ void display_mode() {
     mode_value_canvas.setTextColor(0xF57F);
     mode_value_canvas.setFont(&FreeSansBold12pt7b);
     mode_value_canvas.setCursor(5, 18);
-    mode_value_canvas.print("navigate");
+    mode_value_canvas.print("waypoint");
   } else if (autoPilot.getMode() == 1) {
     mode_value_canvas.setTextColor(0xF57F);
     mode_value_canvas.setFont(&FreeSansBold12pt7b);
