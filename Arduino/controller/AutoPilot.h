@@ -7,6 +7,7 @@
   typedef HardwareSerial SerialType;  // Define SerialType for SAMD
 #elif defined(ARDUINO_ARCH_ESP32)  // For Arduino Nano ESP32
   #include <USB.h>
+  #include <FreeRTOS.h>
   typedef USBCDC SerialType;  // Define SerialType for ESP32
 #else
   #error "Unsupported board type. Please use Arduino Nano 33 IoT or Arduino Nano ESP32."
@@ -15,6 +16,9 @@
 
 class AutoPilot {
 private:
+#if defined(ARDUINO_ARCH_ESP32)  // For Arduino Nano ESP32
+  SemaphoreHandle_t mutex;
+#endif
   time_t dateTime; // current time and date in local TZ
 
   int motor_stop_time;  // time at which to stop the motor in milliseconds
@@ -41,8 +45,8 @@ private:
   int start_motor;
   bool motor_started;
 
-  float filtered_magnetometer_data[3]; // // Filtered Magnetometer measurements
-  float filtered_accelerometer_data[3]; // // Filtered Accelerometer measurements
+  // float filtered_magnetometer_data[3]; // // Filtered Magnetometer measurements
+  // float filtered_accelerometer_data[3]; // // Filtered Accelerometer measurements
 
   bool waypoint_set;    // flag indicating if the waypoint has been set
   float waypoint_lat;   // desired waypoint latitide
@@ -62,8 +66,11 @@ private:
   float getCourseCorrection(float bearing, float course);
   float getDistance(float lat1, float lon1, float lat2, float lon2);
   float getBearing(float lat1, float lon1, float lat2, float lon2);
+  void lock();
+  void unlock();
 public:
   AutoPilot(SerialType* ser);
+  ~AutoPilot();
   void setStartMotor(int start_motor);
   int getStartMotor();
   void setMotorStarted(bool motor_started);
@@ -95,10 +102,10 @@ public:
   float getHeadingShortAverageChange();
   float getHeadingLongAverageSize();
   float getHeadingShortAverageSize();
-  float* getFilteredAccelerometerData();
-  void setFilteredAccelerometerData(float data[3]);
-  float* getFilteredMagentometerData();
-  void setFilteredMagnetometerData(float data[3]);
+  // float* getFilteredAccelerometerData();
+  // void setFilteredAccelerometerData(float data[3]);
+  // float* getFilteredMagentometerData();
+  // void setFilteredMagnetometerData(float data[3]);
   bool isWaypointSet();
   float getWaypointLat();
   float getWaypointLon();
@@ -110,8 +117,6 @@ public:
   float getSpeed();
   void setSpeed(float speed);
   float getDistance();
-  bool hasDestinationChanged();
-  bool hasModeChanged();
   void printAutoPilot();
 
 };

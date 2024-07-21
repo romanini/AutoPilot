@@ -1,3 +1,7 @@
+#include <cstdarg>
+#include "FreeRTOS.h"
+#include "freertos/portmacro.h"
+#include <cstddef>
 #include <cmath>
 #include <sys/_intsup.h>
 #include "AutoPilot.h"
@@ -9,7 +13,17 @@
 #define METERS_TO_NAUTICAL_MILES 0.000539957  // Conversion factor: 1 meter = 0.000539957 nautical miles
 #define PI std::acos(-1.0)
 
-AutoPilot::AutoPilot(SerialType* ser) {
+AutoPilot::AutoPilot(SerialType* ser) {  
+  serial = ser;
+
+#if defined(ARDUINO_ARCH_ESP32)  // For Arduino Nano ESP32
+  mutex = xSemaphoreCreateRecursiveMutex();
+  if (mutex == NULL) {
+    serial->println("mutex creation failed");
+    while(1);
+  }
+#endif
+
   tmElements_t timeComponents;
   timeComponents.Year = 0;
   timeComponents.Month = 0;
@@ -19,7 +33,6 @@ AutoPilot::AutoPilot(SerialType* ser) {
   timeComponents.Second = 0;
   dateTime = makeTime(timeComponents);
 
-  serial = ser;
 
   motor_stop_time = 0;
   motor_direction = 0;
@@ -44,10 +57,10 @@ AutoPilot::AutoPilot(SerialType* ser) {
   start_motor = 0;
   motor_started = false;
 
-  for (int i = 0; i < 3; i++) {
-    filtered_magnetometer_data[i] = 0.0;
-    filtered_accelerometer_data[i] = 0.0;
-  }
+  // for (int i = 0; i < 3; i++) {
+  //   filtered_magnetometer_data[i] = 0.0;
+  //   filtered_accelerometer_data[i] = 0.0;
+  // }
   waypoint_set = false;
   waypoint_lat = 0.0;
   waypoint_lon = 0.0;
@@ -61,80 +74,135 @@ AutoPilot::AutoPilot(SerialType* ser) {
   modeChanged = true;
 }
 
+AutoPilot::~AutoPilot() {
+#if defined(ARDUINO_ARCH_ESP32)  // For Arduino Nano ESP32
+  if (mutex != NULL) {
+    vSemaphoreDelete(mutex);
+  }
+#endif  
+}
+
 void AutoPilot::setStartMotor(int start_motor) {
+  this->lock();
   this->start_motor = start_motor;
   this->motor_started = false;
+  this->unlock();
 }
 
 int AutoPilot::getStartMotor() {
-  return this->start_motor;
+  this->lock();
+  int value = this->start_motor;
+  this->unlock();
+  return value;
 }
 
 void AutoPilot::setMotorStarted(bool motor_started) {
+  this->lock();
   this->motor_started = motor_started;
+  this->unlock();
 }
 
 bool AutoPilot::getMotorStarted() {
-  return this->motor_started;
+  this->lock();
+  bool value = this->motor_started;
+  this->unlock();
+  return value;
 }
 void AutoPilot::setDateTime(time_t dateTime) {
+  this->lock();
   this->dateTime = dateTime;
+  this->unlock();
 }
 
 time_t AutoPilot::getDateTime() {
-  return this->dateTime;
+  this->lock();
+  time_t value = this->dateTime;
+  this->unlock();
+  return value;
+
 }
 
 int AutoPilot::getMotorStopTime() {
-  return this->motor_stop_time;
+  this->lock();
+  int value = this->motor_stop_time;
+  this->unlock();
+  return value;
 }
 
 int AutoPilot::getMotorDirection() {
-  return this->motor_direction;
+  this->lock();
+  int value = this->motor_direction;
+  this->unlock();
+  return value;
 }
 
 void AutoPilot::setMotor(int motor_stop_time, int motor_direction) {
+  this->lock();
   this->motor_stop_time = motor_stop_time;
   this->motor_direction = motor_direction;
+  this->unlock();
 }
 
 int AutoPilot::getMotorLastRunTime() {
-  return this->motor_last_run_time;
+  this->lock();
+  int value = this->motor_last_run_time;
+  this->unlock();
+  return value;
 }
 
 void AutoPilot::setMotorLastRunTime(int motor_last_run_time) {
+  this->lock();
   this->motor_last_run_time = motor_last_run_time;
+  this->unlock();
 }
 
 bool AutoPilot::hasFix() {
-  return this->fix;
+  this->lock();
+  bool value = this->fix;
+  this->unlock();
+  return value;
 }
 
 void AutoPilot::setFix(bool fix) {
+  this->lock();
   this->fix = fix;
   if (!fix && mode == 2) {
     setMode(0);
   }
+  this->unlock();
 }
 
 int AutoPilot::getFixquality() {
-  return this->fixquality;
+  this->lock();
+  int value = this->fixquality;
+  this->unlock();
+  return value;
 }
 
 void AutoPilot::setFixquality(int fixquality, int satellites) {
+  this->lock();
   this->fixquality = fixquality;
   this->satellites = satellites;
+  this->unlock();
 }
 
 int AutoPilot::getSatellites() {
-  return this->satellites;
+  this->lock();
+  int value = this->satellites;
+  this->unlock();
+  return value;
 }
 
 int AutoPilot::getMode() {
-  return this->mode;
+  this->lock();
+  int value = this->mode;
+  this->unlock();
+  return value;
 }
 
 int AutoPilot::setMode(int mode) {
+  this->lock();
+  int retval = -1;
   if ((mode <= 1) || (mode == 2 && this->waypoint_set)) {
     this->mode = mode;
     if (this->mode == 1) {
@@ -143,16 +211,21 @@ int AutoPilot::setMode(int mode) {
     }
     this->modeChanged = true;
     this->destinationChanged = true;
-    return 0;
+    retval = 0;
   }
-  return -1;
+  this->unlock();
+  return retval;
 }
 
 float AutoPilot::getHeadingDesired() {
-  return this->heading_desired;
+  this->lock();
+  float value = this->heading_desired;
+  this->unlock();
+  return value;
 }
 
 void AutoPilot::adjustHeadingDesired(float change) {
+  this->lock();
   if (this->mode > 0) {
     if (this->mode == 2) {
       this->heading_desired = this->heading_short_average;
@@ -164,21 +237,32 @@ void AutoPilot::adjustHeadingDesired(float change) {
     this->bearing = this->heading_desired;
     this->destinationChanged = true;
   }
+  this->unlock();
 }
 
 float AutoPilot::getBearing() {
-  return this->bearing;
+  this->lock();
+  float value = this->bearing;
+  this->unlock();
+  return value;
 }
 
 float AutoPilot::getBearingCorrection() {
-  return this->bearing_correction;
+  this->lock();
+  float value = this->bearing_correction;
+  this->unlock();
+  return value;
 }
 
 float AutoPilot::getHeading() {
-  return this->heading;
+  this->lock();
+  float value = this->heading;
+  this->unlock();
+  return value;
 }
 
 void AutoPilot::setHeading(float heading) {
+  this->lock();
   if (isnanf(heading) || isnan(heading)) {
     serial->println("received nan Heading!");
     return;
@@ -204,65 +288,105 @@ void AutoPilot::setHeading(float heading) {
     // TODO do we use shot average or long average?
     this->bearing_correction = this->getCourseCorrection(this->bearing, this->heading_short_average);
   }
+  this->unlock();
 }
 
 float AutoPilot::getHeadingLongAverage() {
-  return this->heading_long_average;
+  this->lock();
+  float value = this->heading_long_average;
+  this->unlock();
+  return value;
 }
 
 float AutoPilot::getHeadingShortAverage() {
-  return this->heading_short_average;
+  this->lock();
+  float value = this->heading_short_average;
+  this->unlock();
+  return value;
 }
 
 float AutoPilot::getHeadingLongAverageChange() {
-  return this->heading_long_average_change;
+  this->lock();
+  float value = this->heading_long_average_change;
+  this->unlock();
+  return value;
 }
 
 float AutoPilot::getHeadingShortAverageChange() {
-  return this->heading_short_average_change;
+  this->lock();
+  float value = this->heading_short_average_change;
+  this->unlock();
+  return value;
 }
 
 float AutoPilot::getHeadingLongAverageSize() {
-  return this->heading_long_average_size;
+  this->lock();
+  float value =this->heading_long_average_size;
+  this->unlock();
+  return value;
 }
 
 float AutoPilot::getHeadingShortAverageSize() {
-  return this->heading_short_average_size;
+  this->lock();
+  float value = this->heading_short_average_size;
+  this->unlock();
+  return value;
 }
 
-float* AutoPilot::getFilteredAccelerometerData() {
-  return this->filtered_accelerometer_data;
-}
+// float* AutoPilot::getFilteredAccelerometerData() {
+//   this->lock();
+//   float *value = this->filtered_accelerometer_data;
+//   this->unlock();
+//   return value;
 
-void AutoPilot::setFilteredAccelerometerData(float data[3]) {
-  for (int i = 0; i < 3; i++) {
-    this->filtered_accelerometer_data[i] = data[i];
-  }
-}
+// }
 
-float* AutoPilot::getFilteredMagentometerData() {
-  return this->filtered_magnetometer_data;
-}
+// void AutoPilot::setFilteredAccelerometerData(float data[3]) {
+//   this->lock();
+//   for (int i = 0; i < 3; i++) {
+//     this->filtered_accelerometer_data[i] = data[i];
+//   }
+//   this->unlock();
+// }
 
-void AutoPilot::setFilteredMagnetometerData(float data[3]) {
-  for (int i = 0; i < 3; i++) {
-    this->filtered_magnetometer_data[i] = data[i];
-  }
-}
+// float* AutoPilot::getFilteredMagentometerData() {
+//   this->lock();
+//   float *value = this->filtered_magnetometer_data;
+//   this->unlock();
+//   return value;
+// }
+
+// void AutoPilot::setFilteredMagnetometerData(float data[3]) {
+//   this->lock();
+//   for (int i = 0; i < 3; i++) {
+//     this->filtered_magnetometer_data[i] = data[i];
+//   }
+//   this->unlock();
+// }
 
 bool AutoPilot::isWaypointSet() {
-  return this->waypoint_set;
+  this->lock();
+  bool value = this->waypoint_set;
+  this->unlock();
+  return value;
 }
 
 float AutoPilot::getWaypointLat() {
-  return this->waypoint_lat;
+  this->lock();
+  float value = this->waypoint_lat;
+  this->unlock();
+  return value;
 }
 
 float AutoPilot::getWaypointLon() {
-  return this->waypoint_lon;
+  this->lock();
+  float value = this->waypoint_lon;
+  this->unlock();
+  return value;
 }
 
 void AutoPilot::setWaypoint(float lat, float lon) {
+  this->lock();
   this->waypoint_lat = lat;
   this->waypoint_lon = lon;
   this->waypoint_set = true;
@@ -272,17 +396,25 @@ void AutoPilot::setWaypoint(float lat, float lon) {
   if (this->mode == 2) {
     this->destinationChanged = true;
   }
+  this->unlock();
 }
 
 float AutoPilot::getLocationLat() {
-  return this->location_lat;
+  this->lock();
+  float value = this->location_lat;
+  this->unlock();
+  return value;
 }
 
 float AutoPilot::getLocationLon() {
-  return this->location_lon;
+  this->lock();
+  float value = this->location_lon;
+  this->unlock();
+  return value;
 }
 
 void AutoPilot::setLoation(float lat, float lon, float course) {
+  this->lock();
   this->location_lat = lat;
   this->location_lon = lon;
   this->course = course;
@@ -293,37 +425,38 @@ void AutoPilot::setLoation(float lat, float lon, float course) {
       this->bearing_correction = this->getCourseCorrection(this->bearing, this->course);
     }
   }
+  this->unlock();
 }
 
 float AutoPilot::getCourse() {
-  return this->course;
+  this->lock();
+  float value = this->course;
+  this->unlock();
+  return value;
 }
 
 float AutoPilot::getSpeed() {
-  return this->speed;
+  this->lock();
+  float value = this->speed;
+  this->unlock();
+  return value;
 }
 
 void AutoPilot::setSpeed(float speed) {
+  this->lock();
   this->speed = speed;
-}
-
-bool AutoPilot::hasDestinationChanged() {
-  bool retval = this->destinationChanged;
-  this->destinationChanged = false;
-  return retval;
-}
-
-bool AutoPilot::hasModeChanged() {
-  bool retval = this->modeChanged;
-  this->modeChanged = false;
-  return retval;
+  this->unlock();
 }
 
 float AutoPilot::getDistance() {
-  return this->distance;
+  this->lock();
+  float value = this->distance;
+  this->unlock();
+  return value;
 }
 
 void AutoPilot::printAutoPilot() {
+  this->lock();
   serial->print("Date&Time: ");
   char dateTimeString[13];
   time_t currentTime = this->dateTime;
@@ -395,6 +528,7 @@ void AutoPilot::printAutoPilot() {
   serial->print(this->location_lon, 6);
   serial->println("");
   serial->println("");
+  this->unlock();
 }
 
 float AutoPilot::toRadians(float degrees) {
@@ -438,4 +572,16 @@ float AutoPilot::getBearing(float lat1, float lon1, float lat2, float lon2) {
     bearing = 0.00;
   }
   return bearing;
+}
+
+void AutoPilot::lock() {
+#if defined(ARDUINO_ARCH_ESP32)  // For Arduino Nano ESP32
+  xSemaphoreTakeRecursive(mutex, portMAX_DELAY);
+#endif
+}
+
+void AutoPilot::unlock() {
+#if defined(ARDUINO_ARCH_ESP32)  // For Arduino Nano ESP32
+  xSemaphoreGiveRecursive(mutex);
+#endif
 }

@@ -17,7 +17,7 @@
   Written by PJRC, adapted by Limor Fried for Adafruit Industries.
   Modified by Shawn Hymel (January 30, 2022).
  ***************************************************************************/
-
+#include <Wire.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_LIS2MDL.h>
 #include <Adafruit_LSM303_Accel.h>
@@ -49,6 +49,8 @@ const float soft_iron[3][3] = {
 void setup(void) {
   Serial.begin(115200);
   while (!Serial) delay(10);     // will pause Zero, Leonardo, etc until serial console opens
+  
+  Wire.begin();
   
   Serial.println(F("Sensor Calibration!"));
 

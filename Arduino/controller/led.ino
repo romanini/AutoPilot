@@ -1,5 +1,5 @@
 
-#define FLASH_INTERVAL 25
+#define FLASH_INTERVAL 500
 #define FLASH_COUNT 5
 #define FLASH_PIN 2
 
@@ -14,7 +14,7 @@ void setup_led() {
 
 void flash_led() {
   flash_count += 1;
-  if (flash_count == FLASH_COUNT) {
+  if (flash_count >= FLASH_COUNT) {
     flash_count = 0;
     flash_millis = millis();
     led_on = true;

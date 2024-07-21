@@ -13,7 +13,14 @@ Adafruit_LSM303_Accel_Unified accel = Adafruit_LSM303_Accel_Unified(54321);
 float mag_data[3];
 float accel_data[3];
 
+float filtered_magnetometer_data[3]; // // Filtered Magnetometer measurements
+float filtered_accelerometer_data[3]; // // Filtered Accelerometer measurements
+
 void setup_compass() {
+  for (int i = 0; i < 3; i++) {
+    filtered_magnetometer_data[i] = 0.0;
+    filtered_accelerometer_data[i] = 0.0;
+  }
   /* Initialise the sensor */
   if (!mag.begin()) {
     /* There was a problem detecting the LIS2MDL ... check your connections */
@@ -97,19 +104,24 @@ void check_compass() {
 
     read_magnetometer();
 
-    float* previous_mag_data = autoPilot.getFilteredMagentometerData();
+    //float* previous_mag_data = autoPilot.getFilteredMagentometerData();
     for (int i = 0; i < 3; i++) {
-      mag_data[i] = (mag_data[i] * LOW_PASS_FILTER_COEFFICIENT) + (previous_mag_data[i] * (1.0 - LOW_PASS_FILTER_COEFFICIENT));
+      //mag_data[i] = (mag_data[i] * LOW_PASS_FILTER_COEFFICIENT) + (previous_mag_data[i] * (1.0 - LOW_PASS_FILTER_COEFFICIENT));
+      mag_data[i] = (mag_data[i] * LOW_PASS_FILTER_COEFFICIENT) + (filtered_magnetometer_data[i] * (1.0 - LOW_PASS_FILTER_COEFFICIENT));
+      filtered_magnetometer_data[i] = mag_data[i];
     }
-    autoPilot.setFilteredMagnetometerData(mag_data);
+    //autoPilot.setFilteredMagnetometerData(mag_data);
 
     read_accelletometer();
 
-    float* previous_accel_data = autoPilot.getFilteredAccelerometerData();
+    //float* previous_accel_data = autoPilot.getFilteredAccelerometerData();
     for (int i = 0; i < 3; i++) {
-      accel_data[i] = (accel_data[i] * LOW_PASS_FILTER_COEFFICIENT) + (previous_accel_data[i] * (1.0 - LOW_PASS_FILTER_COEFFICIENT));
+      //accel_data[i] = (accel_data[i] * LOW_PASS_FILTER_COEFFICIENT) + (previous_accel_data[i] * (1.0 - LOW_PASS_FILTER_COEFFICIENT));
+      accel_data[i] = (accel_data[i] * LOW_PASS_FILTER_COEFFICIENT) + (filtered_accelerometer_data[i] * (1.0 - LOW_PASS_FILTER_COEFFICIENT));
+      filtered_accelerometer_data[i] = accel_data[i];
+
     }
-    autoPilot.setFilteredAccelerometerData(accel_data);
+    //autoPilot.setFilteredAccelerometerData(accel_data);
 
     double roll = atan2(accel_data[1], accel_data[2]);
     double pitch = atan2((accel_data[0] * -1.0), sqrt(accel_data[1] * accel_data[1] + accel_data[2] * accel_data[2]));
