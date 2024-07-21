@@ -1,5 +1,5 @@
 
-#define FLASH_INTERVAL 500
+#define FLASH_INTERVAL 25
 #define FLASH_COUNT 5
 #define FLASH_PIN 2
 
