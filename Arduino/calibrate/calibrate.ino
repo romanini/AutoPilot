@@ -51,7 +51,7 @@ void setup(void) {
   while (!Serial) delay(10);     // will pause Zero, Leonardo, etc until serial console opens
   
   Wire.begin();
-  
+
   Serial.println(F("Sensor Calibration!"));
 
     /* Initialise the sensor */

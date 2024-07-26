@@ -27,12 +27,12 @@ char telnet_buffer[BUF_SIZE];
 int telnet_count = BUF_SIZE;
 
 void process_adjust_bearing(CustomClientType& client, char buffer[]);
-void process_run(CustomClientType& client, char buffer[]);
 void process_mode(CustomClientType& client, char buffer[]);
 void process_print(CustomClientType& client);
 void process_quit(CustomClientType& client);
 void process_waypoint(CustomClientType& client, char buffer[]);
 void process_help(CustomClientType& client);
+void process_telnet(CustomClientType& client, char buffer[]);
 void process_command(CustomClientType& client, char buffer[]);
 
 void setup_command() {
@@ -41,16 +41,14 @@ void setup_command() {
   telnet_server.begin();
   command_server.begin();
 #elif defined(ARDUINO_ARCH_ESP32)  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
-#if DEBUG_ENABLED
   telnet_server.onConnect(onTelnetConnect);
   telnet_server.onConnectionAttempt(onTelnetConnectionAttempt);
   telnet_server.onReconnect(onTelnetReconnect);
-  telnet_server.onDisconnect(onTelnetDisconnect);
+  telnet_server.onDisconnect(onTelnetDisconnect);  
   command_server.onConnect(onCommandConnect);
   command_server.onConnectionAttempt(onCommandConnectionAttempt);
   command_server.onReconnect(onCommandReconnect);
   command_server.onDisconnect(onCommandDisconnect);
-#endif
   telnet_server.onInputReceived(onTelnetInput);
   telnet_server.begin(TELNET_PORT);
   command_server.onInputReceived(onCommandInput);
@@ -67,11 +65,6 @@ void process_adjust_bearing(CustomClientType& client, char buffer[]) {
   DEBUG_PRINTLN(bearing_adjustment);
 }
 
-void process_run(CustomClientType& client, char buffer[]) {
-  float run_millis = atof(&buffer[1]);
-  //autoPilot.setStartMotor(run_millis);
-  client.println("ok");
-}
 
 void process_mode(CustomClientType& client, char buffer[]) {
   int new_mode = atoi(&buffer[1]);
@@ -91,9 +84,19 @@ void process_mode(CustomClientType& client, char buffer[]) {
   }
 }
 
+void process_quit(CustomClientType& client) {
+#if defined(ARDUINO_ARCH_SAMD)  // Check if the board is based on the SAMD architecture (like Arduino Nano 33 IoT)
+  client.println("Use ^] + q  to disconnect.");
+#elif defined(ARDUINO_ARCH_ESP32)  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
+  Serial.println("Closing connection");
+  client.println("> disconnecting you");
+  client.disconnectClient();
+#endif
+}
+
 void process_print(CustomClientType& client) {
   client.print("Date&Time: ");
-  char dateTimeString[13];
+  char dateTimeString[16];
   time_t currentTime = autoPilot.getDateTime();
   sprintf(dateTimeString, "%d/%d/%02d %d:%02d", month(currentTime), day(currentTime), year(currentTime) % 100, hour(currentTime), minute(currentTime));
   client.print(dateTimeString);
@@ -113,7 +116,7 @@ void process_print(CustomClientType& client) {
 
   client.print("Destination: ");
   if (autoPilot.getMode() == 2) {
-    client.print("navigate ");
+    client.print("waypoint ");
     client.print(autoPilot.getWaypointLat(), 6);
     client.print(",");
     client.print(autoPilot.getWaypointLon(), 6);
@@ -159,21 +162,6 @@ void process_print(CustomClientType& client) {
   client.print(autoPilot.getLocationLon(), 6);
   client.println("");
   client.println("");
-
-  client.print("Start Motor: ");
-  client.print(autoPilot.getStartMotor());
-  client.print(" Motro Started: ");
-  client.println((autoPilot.getMotorStarted() ? " Y" : " N"));
-}
-
-void process_quit(CustomClientType& client) {
-#if defined(ARDUINO_ARCH_SAMD)  // Check if the board is based on the SAMD architecture (like Arduino Nano 33 IoT)
-  client.println("Use ^] + q  to disconnect.");
-#elif defined(ARDUINO_ARCH_ESP32)  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
-  Serial.println("Closing connection");
-  client.println("> disconnecting you");
-  client.disconnectClient();
-#endif
 }
 
 void process_waypoint(CustomClientType& client, char buffer[]) {
@@ -200,15 +188,14 @@ void process_waypoint(CustomClientType& client, char buffer[]) {
 void process_help(CustomClientType& client) {
   client.println("Possible commands:\n");
   client.println("\ta<heading offset> \t- Adjust heading to be <heading offset> from current heading.");
-  client.println("\tm<0|1|2> \t\t- Set the current mode 0 = off, 1 = compass, 2 = navigate.");
+  client.println("\tm<0|1|2> \t\t- Set the current mode 0 = off, 1 = compass, 2 = waypoint.");
   client.println("\tp \t\t\t- Print current auto pilot status.");
   client.println("\tq \t\t\t- Quit the current session.");
-  client.println("\tr<n> \t\t\t- Run motor for N millis, can use positive or negative time to indicate direction.");
   client.println("\tw<lat,long> \t\t- Set the waypoint to <lat,long>.");
   client.println("\t? \t\t\t- Print this help screen.");
 }
 
-void process_command(CustomClientType& client, char buffer[]) {
+void process_telnet(CustomClientType& client, char buffer[]) {
   char command = buffer[0];
   switch (command) {
     case 'a':
@@ -223,9 +210,6 @@ void process_command(CustomClientType& client, char buffer[]) {
     case 'q':
       process_quit(client);
       break;
-    case 'r':
-      process_run(client, buffer);
-      break;
     case 'w':
       process_waypoint(client, buffer);
       break;
@@ -238,9 +222,26 @@ void process_command(CustomClientType& client, char buffer[]) {
   }
 }
 
+void process_command(CustomClientType& client, char buffer[]) {
+  char command = buffer[0];
+  switch (command) {
+    case 'a':
+      process_adjust_bearing(client, buffer);
+      break;
+    case 'm':
+      process_mode(client, buffer);
+      break;
+    case 'q':
+      process_quit(client);
+      break;
+    default:
+      client.println("-1 Command not understood");
+      break;
+  }
+}
+
 #if defined(ARDUINO_ARCH_ESP32)  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
 
-#if DEBUG_ENABLED
 // (optional) callback functions for telnet events
 void onTelnetConnect(String ip) {
   Serial.print("- Telnet: ");
@@ -293,13 +294,11 @@ void onCommandConnectionAttempt(String ip) {
   Serial.println(" tried to connected");
 }
 
-#endif
-
 void onTelnetInput(String str) {
   int len = str.length() + 1;
   str.toCharArray(telnet_buffer, len);
   telnet_count = BUF_SIZE - len;
-  process_command(telnet_server, telnet_buffer);
+  process_telnet(telnet_server, telnet_buffer);
 }
 
 void onCommandInput(String str) {
@@ -323,7 +322,7 @@ void check_command() {
       char c = telnet_client.read();                     // read a byte, then
       if (c == '\n') {                                   // if the byte is a newline character
         telnet_buffer[BUF_SIZE - telnet_count] = 0;
-        process_command(telnet_client, telnet_buffer);
+        process_telnet(telnet_client, telnet_buffer);
         telnet_count = BUF_SIZE;
       } else {
         if (telnet_count > 0) {                        // if you got anything else but a carriage return character,
