@@ -430,7 +430,7 @@ void display_datetime() {
   date_time_value_canvas.setFont(&FreeSansBold12pt7b);
   date_time_value_canvas.setCursor(0, 18);
   if (autoPilot.hasFix()) {
-    char dateTimeString[13];
+    char dateTimeString[16];
     sprintf(dateTimeString, "%d/%d/%02d %d:%02d", autoPilot.getMonth(), autoPilot.getDay(), autoPilot.getYear() % 100, autoPilot.getHour(), autoPilot.getMinute());
     date_time_value_canvas.print(dateTimeString);
   } else {

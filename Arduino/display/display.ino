@@ -9,7 +9,7 @@
 #endif
 //#include <MemoryFree.h>
 
-#define DEBUG_ENABLED 1
+#define DEBUG_ENABLED 0
 #if DEBUG_ENABLED
 #define DEBUG_PRINT(x) Serial.print(x)
 #define DEBUG_PRINT2(x, y) Serial.print(x, y)
