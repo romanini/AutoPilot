@@ -49,6 +49,7 @@ void setup() {
   setup_compass();
   setup_gps();
   setup_led();
+  setup_pid();
   publish_RESET();
 
 #if defined(ARDUINO_ARCH_ESP32) && MULTI_CORE  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
@@ -81,7 +82,8 @@ void loop() {
 void control_task(void *pvParameters) {
   for (;;) {  // A Task shall never return or exit.
     check_compass();
-    check_motor();
+    //check_motor();
+    check_pid();
     vTaskDelay(100 / portTICK_PERIOD_MS);
   }
 }
