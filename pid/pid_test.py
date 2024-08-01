@@ -7,7 +7,7 @@ import argparse
 parser = argparse.ArgumentParser()
 
 parser.add_argument("-p","--kp",type=float,default=2.0)
-parser.add_argument("-i","--ki",type=float,default=0.0)
+parser.add_argument("-i","--ki",type=float,default=0.5)
 parser.add_argument("-d","--kd",type=float,default=0.0)
 parser.add_argument("-c","--cmd_angle",type=float,default=30.0)
 parser.add_argument("-s","--start_angle",type=float,default=0.0)
@@ -72,7 +72,7 @@ def pid_loop(Kp,Ki,Kd,cmd_angle,angle,time):
 for time in np.arange(0,loop_time,loop_speed):
     plot_data["time"].append(time)
     plot_data["angle"].append(angle)
-    #plot_data["steer_angle"].append(steer_angle)
+    plot_data["steer_angle"].append(steer_angle)
     plot_data["cmd_angle"].append(cmd_angle)
     plot_data["actual_angle"].append(actual_angle)
     #plot_data["Pi"].append(Pi)

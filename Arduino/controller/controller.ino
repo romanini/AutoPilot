@@ -49,7 +49,7 @@ void setup() {
   setup_compass();
   setup_gps();
   setup_led();
-  setup_pid();
+  setup_motor();
   publish_RESET();
 
 #if defined(ARDUINO_ARCH_ESP32) && MULTI_CORE  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
@@ -80,10 +80,33 @@ void loop() {
 
 #if defined(ARDUINO_ARCH_ESP32) && MULTI_CORE  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
 void control_task(void *pvParameters) {
+  int last_mills=millis();
+  int cur_mills;
+  float setpoint;
+  float input;
   for (;;) {  // A Task shall never return or exit.
+    cur_mills=millis();
     check_compass();
-    //check_motor();
-    check_pid();
+
+    if (autoPilot.getMode() > 0) {
+	if (autoPilot.getMode() == 1) 
+	{
+	    // TODO do we want to use short average or long average?
+	    input = autoPilot.getHeadingShortAverage();
+	 } else 
+         {
+	      input = autoPilot.getCourse();
+	 }
+	    setpoint = autoPilot.getBearing();
+	    // Compute PID output
+
+	    float diff_time=cur_mills-last_mills;
+	    diff_time *=0.001;
+	    last_mills = cur_mills;
+	    float steer_angle=pid_loop(setpoint,input,diff_time);
+	    motor_control_loop(steer_angle);
+    }
+    //check_pid();
     vTaskDelay(100 / portTICK_PERIOD_MS);
   }
 }
