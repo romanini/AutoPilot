@@ -12,9 +12,9 @@ Adafruit_LSM303_Accel_Unified accel = Adafruit_LSM303_Accel_Unified(54321);
 
 float mag_data[3];
 float accel_data[3];
-
-float filtered_magnetometer_data[3]; // // Filtered Magnetometer measurements
-float filtered_accelerometer_data[3]; // // Filtered Accelerometer measurements
+int count = 0;
+static float filtered_magnetometer_data[3]; // // Filtered Magnetometer measurements
+static float filtered_accelerometer_data[3]; // // Filtered Accelerometer measurements
 
 void setup_compass() {
   for (int i = 0; i < 3; i++) {
@@ -104,37 +104,40 @@ void check_compass() {
 
     read_magnetometer();
 
-    //float* previous_mag_data = autoPilot.getFilteredMagentometerData();
     for (int i = 0; i < 3; i++) {
-      //mag_data[i] = (mag_data[i] * LOW_PASS_FILTER_COEFFICIENT) + (previous_mag_data[i] * (1.0 - LOW_PASS_FILTER_COEFFICIENT));
       mag_data[i] = (mag_data[i] * LOW_PASS_FILTER_COEFFICIENT) + (filtered_magnetometer_data[i] * (1.0 - LOW_PASS_FILTER_COEFFICIENT));
       filtered_magnetometer_data[i] = mag_data[i];
     }
-    //autoPilot.setFilteredMagnetometerData(mag_data);
 
     read_accelletometer();
 
-    //float* previous_accel_data = autoPilot.getFilteredAccelerometerData();
     for (int i = 0; i < 3; i++) {
-      //accel_data[i] = (accel_data[i] * LOW_PASS_FILTER_COEFFICIENT) + (previous_accel_data[i] * (1.0 - LOW_PASS_FILTER_COEFFICIENT));
       accel_data[i] = (accel_data[i] * LOW_PASS_FILTER_COEFFICIENT) + (filtered_accelerometer_data[i] * (1.0 - LOW_PASS_FILTER_COEFFICIENT));
       filtered_accelerometer_data[i] = accel_data[i];
 
     }
-    //autoPilot.setFilteredAccelerometerData(accel_data);
 
-    double roll = atan2(accel_data[1], accel_data[2]);
-    double pitch = atan2((accel_data[0] * -1.0), sqrt(accel_data[1] * accel_data[1] + accel_data[2] * accel_data[2]));
+    double pitch = atan2(accel_data[1] * -1.0 , sqrt(sq(accel_data[0]) + sq(accel_data[2])));
+    double roll = atan2(accel_data[0] , accel_data[2]);
 
-    double x = accel_data[0] * -1.0;
-    //double y = std::asin(x);
-    //double z = asin(x);
-    //double pitch = asin(accel_data[0] * -1.0);
-    // double roll = (double)asin((double)accel_data[1] / cos((double)pitch));
+    // double pitch = atan2((accel_data[0] * -1.0), sqrt(accel_data[1] * accel_data[1] + accel_data[2] * accel_data[2]));
+    // double roll = atan2(accel_data[1], accel_data[2]);
 
+    // if (count >= 50) {
+    //   count = 0;
+    //   char buff[100];
+    //   sprintf(buff, "Pitch: %.6f Roll: %.6f", pitch, roll);
+    //   DEBUG_PRINTLN(buff);
+    // } else {
+    //   count++;
+    // }
     // //  Calculating tilt compensated heading
     double Xh = mag_data[0] * cos((double)pitch) + mag_data[2] * sin((double)pitch);
     double Yh = mag_data[0] * sin((double)roll) * sin((double)pitch) + mag_data[1] * cos((double)roll) - mag_data[2] * sin((double)roll) * cos((double)pitch);
+
+    // For now forget the compensation since it seems to be crazy :-(
+    Xh = mag_data[0];
+    Yh = mag_data[1];
     float heading = (atan2(Xh, Yh)) * 180 / PI;
     if (heading < 0) {
       heading += 360;

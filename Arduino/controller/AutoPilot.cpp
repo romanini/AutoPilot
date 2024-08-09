@@ -13,14 +13,15 @@
 #define METERS_TO_NAUTICAL_MILES 0.000539957  // Conversion factor: 1 meter = 0.000539957 nautical miles
 #define PI std::acos(-1.0)
 
-AutoPilot::AutoPilot(SerialType* ser) {  
+AutoPilot::AutoPilot(SerialType* ser) {
   serial = ser;
 
 #if defined(ARDUINO_ARCH_ESP32)  // For Arduino Nano ESP32
   mutex = xSemaphoreCreateRecursiveMutex();
   if (mutex == NULL) {
     serial->println("mutex creation failed");
-    while(1);
+    while (1)
+      ;
   }
 #endif
 
@@ -50,6 +51,7 @@ AutoPilot::AutoPilot(SerialType* ser) {
   heading_long_average = 0.0;
   heading_short_average_change = 0.0;
   heading_long_average_change = 0.0;
+  heading_short_average_change_max = 0.0;
   heading_average_initialized = false;
   heading_short_average_size = 0;
   heading_long_average_size = 0;
@@ -57,10 +59,11 @@ AutoPilot::AutoPilot(SerialType* ser) {
   start_motor = 0;
   motor_started = false;
 
-  // for (int i = 0; i < 3; i++) {
-  //   filtered_magnetometer_data[i] = 0.0;
-  //   filtered_accelerometer_data[i] = 0.0;
-  // }
+  for (int i = 0; i < HEADING_AVERAGE_SIZE; i++) {
+    heading_average[i] = 0.0;
+  }
+  heading_average_count = 0;
+
   waypoint_set = false;
   waypoint_lat = 0.0;
   waypoint_lon = 0.0;
@@ -68,6 +71,7 @@ AutoPilot::AutoPilot(SerialType* ser) {
   location_lon = 0.0;
   course = 0.0;
 
+  steer_angle = 0.0;
   speed = 0.0;
   distance = 0.0;
   destinationChanged = true;
@@ -79,7 +83,7 @@ AutoPilot::~AutoPilot() {
   if (mutex != NULL) {
     vSemaphoreDelete(mutex);
   }
-#endif  
+#endif
 }
 
 void AutoPilot::setStartMotor(int start_motor) {
@@ -119,7 +123,6 @@ time_t AutoPilot::getDateTime() {
   time_t value = this->dateTime;
   this->unlock();
   return value;
-
 }
 
 int AutoPilot::getMotorStopTime() {
@@ -206,7 +209,7 @@ int AutoPilot::setMode(int mode) {
   if ((mode <= 1) || (mode == 2 && this->waypoint_set)) {
     this->mode = mode;
     if (this->mode == 1) {
-      this->heading_desired = this->heading_short_average;
+      this->heading_desired = this->heading_long_average;
       this->bearing = this->heading_desired;
     }
     this->modeChanged = true;
@@ -269,26 +272,55 @@ void AutoPilot::setHeading(float heading) {
   }
   this->heading = heading;
   if (this->heading_average_initialized) {
-    this->heading_long_average = this->heading_long_average + ((this->heading - this->heading_long_average) / this->heading_long_average_size);
-    this->heading_short_average = this->heading_short_average + ((this->heading - this->heading_short_average) / this->heading_short_average_size);
-    this->heading_long_average_change = this->heading_long_average_change + (((this->heading - this->heading_long_average) - this->heading_long_average_change) / this->heading_long_average_size);
-    this->heading_short_average_change = this->heading_short_average_change + (((this->heading - this->heading_short_average) - this->heading_short_average_change) / this->heading_short_average_size);
+    int j = this->heading_average_count % HEADING_AVERAGE_SIZE;
+    this->heading_average[j] = heading;
+    if (this->heading_average_count < HEADING_AVERAGE_SIZE) {
+      this->heading_average_count++;
+    } else {
+      this->heading_average_count = 0;
+    }
+    float max_heading = 0.0;
+    float min_heading = 360.0;
+    float sum_heading = 0.0;
+    for (int k = 0; k < HEADING_AVERAGE_SIZE; k++) {
+      if (this->heading_average[k] > max_heading) {
+        max_heading = this->heading_average[k];
+      }
+      if (this->heading_average[k] < min_heading) {
+        min_heading = this->heading_average[k];
+      }
+      sum_heading += this->heading_average[k];
+    }
+    this->heading_long_average = (sum_heading - min_heading - max_heading) / (HEADING_AVERAGE_SIZE - 2);
+
+    // char buff[100];
+    // sprintf(buff,"j: %d val: %.2f max: %.2f min: %.2f sum: %.2f, heading: %.2f", j,this->heading_average[j], max_heading, min_heading, sum_heading, this->heading_long_average);
+    // serial->println(buff);
+
+  this->heading_short_average = this->heading_short_average + ((this->heading - this->heading_short_average) / this->heading_short_average_size);
+  this->heading_short_average_change = this->heading_short_average_change + (((this->heading - this->heading_short_average) - this->heading_short_average_change) / this->heading_short_average_size);
+  float change = abs(this->heading - this->heading_short_average);
+  if (this->heading_short_average_change_max < change) {
+    this->heading_short_average_change_max = change;
   } else {
-    this->heading_average_initialized = true;
-    this->heading_long_average = heading;
-    this->heading_short_average = heading;
+    this->heading_short_average_change_max -= (this->heading_short_average_change_max - change) / 100.;
   }
-  if (this->heading_long_average_size < COMPASS_LONG_AVERAGE_MAX_SIZE) {
-    this->heading_long_average_size += 1;
-  }
-  if (this->heading_short_average_size < COMPASS_SHORT_AVERAGE_MAX_SIZE) {
-    this->heading_short_average_size += 1;
-  }
-  if (this->mode == 1) {
-    // TODO do we use shot average or long average?
-    this->bearing_correction = this->getCourseCorrection(this->bearing, this->heading_short_average);
-  }
-  this->unlock();
+}
+else {
+  this->heading_average_initialized = true;
+  this->heading_long_average = heading;
+  this->heading_long_average_size = 1;
+  this->heading_short_average = heading;
+}
+
+if (this->heading_short_average_size < COMPASS_SHORT_AVERAGE_MAX_SIZE) {
+  this->heading_short_average_size += 1;
+}
+if (this->mode == 1) {
+  // TODO do we use shot average or long average?
+  this->bearing_correction = this->getCourseCorrection(this->bearing, this->heading_long_average);
+}
+this->unlock();
 }
 
 float AutoPilot::getHeadingLongAverage() {
@@ -319,9 +351,15 @@ float AutoPilot::getHeadingShortAverageChange() {
   return value;
 }
 
+float AutoPilot::getHeadingShortAverageChangeMax() {
+  this->lock();
+  float value = this->heading_short_average_change_max;
+  this->unlock();
+  return value;
+}
 float AutoPilot::getHeadingLongAverageSize() {
   this->lock();
-  float value =this->heading_long_average_size;
+  float value = this->heading_long_average_size;
   this->unlock();
   return value;
 }
@@ -453,6 +491,19 @@ float AutoPilot::getDistance() {
   float value = this->distance;
   this->unlock();
   return value;
+}
+
+float AutoPilot::getSteerAngle() {
+  this->lock();
+  float value = this->steer_angle;
+  this->unlock();
+  return value;
+}
+
+void AutoPilot::setSteerAngle(float steer_angle) {
+  this->lock();
+  this->steer_angle = steer_angle;
+  this->unlock();
 }
 
 void AutoPilot::printAutoPilot() {

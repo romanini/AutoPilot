@@ -8,7 +8,7 @@
 #endif
 #include "AutoPilot.h"
 
-#define DEBUG_ENABLED 0
+#define DEBUG_ENABLED 1
 #if DEBUG_ENABLED
 #define DEBUG_PRINT(x) Serial.print(x)
 #define DEBUG_PRINT2(x, y) Serial.print(x, y)
@@ -37,10 +37,17 @@ AutoPilot autoPilot = AutoPilot(&Serial);
 
 void setup() {
   //Initialize serial
+#if DEBUG_ENABLED
 #if defined(ARDUINO_ARCH_ESP32)  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
-  while (!Serial) { delay(10); }
+  int attempts = 0;
+  while (!Serial && attempts < 200) { 
+    attempts++;
+    delay(10); 
+  }
 #endif
   Serial.begin(38400);
+#endif
+
   Wire.begin();
   setup_wifi();
   setup_publish();
@@ -50,6 +57,7 @@ void setup() {
   setup_gps();
   setup_led();
   setup_motor();
+  setup_pid();
   publish_RESET();
 
 #if defined(ARDUINO_ARCH_ESP32) && MULTI_CORE  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
@@ -59,7 +67,7 @@ void setup() {
 #endif
 
   Serial.println("Setup complete");
-#ifdef DEBUG_ENABLED
+#if DEBUG_ENABLED
   Serial.println("Debug enabled");
 #else
   Serial.println("Debug disabled");
@@ -80,34 +88,37 @@ void loop() {
 
 #if defined(ARDUINO_ARCH_ESP32) && MULTI_CORE  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
 void control_task(void *pvParameters) {
-  int last_mills=millis();
+  int last_mills = millis();
   int cur_mills;
   float setpoint;
   float input;
   for (;;) {  // A Task shall never return or exit.
-    cur_mills=millis();
+    cur_mills = millis();
     check_compass();
 
     if (autoPilot.getMode() > 0) {
-	if (autoPilot.getMode() == 1) 
-	{
-	    // TODO do we want to use short average or long average?
-	    input = autoPilot.getHeadingShortAverage();
-	 } else 
-         {
-	      input = autoPilot.getCourse();
-	 }
-	    setpoint = autoPilot.getBearing();
-	    // Compute PID output
+      if (autoPilot.getMode() == 1) {
+        // TODO do we want to use short average or long average?
+        input = autoPilot.getHeadingLongAverage();
+  //      if(abs(input-autoPilot.getHeadingLongAverage())<3.0)
+   //       input =  autoPilot.getHeadingLongAverage();
+      } else {
+        input = autoPilot.getCourse();
+      }
+      setpoint = autoPilot.getBearing();
+      // Compute PID output
 
-	    float diff_time=cur_mills-last_mills;
-	    diff_time *=0.001;
-	    last_mills = cur_mills;
-	    float steer_angle=pid_loop(setpoint,input,diff_time);
-	    motor_control_loop(steer_angle);
+      float diff_time = cur_mills - last_mills;
+      diff_time *= 0.001;
+      last_mills = cur_mills;
+      float steer_angle = pid_loop(setpoint, input, diff_time);
+      motor_control_loop(steer_angle);
+    } else {
+      float steer_angle = autoPilot.getSteerAngle();
+      motor_control_loop(steer_angle);
     }
     //check_pid();
-    vTaskDelay(100 / portTICK_PERIOD_MS);
+    vTaskDelay(10 / portTICK_PERIOD_MS);
   }
 }
 

@@ -14,6 +14,7 @@
 #endif
 #include <TimeLib.h> // Include the Time library if needed
 
+#define HEADING_AVERAGE_SIZE 100
 class AutoPilot {
 private:
 #if defined(ARDUINO_ARCH_ESP32)  // For Arduino Nano ESP32
@@ -39,6 +40,9 @@ private:
   float heading_long_average;          // long running average forr the heading (most stable)
   float heading_short_average_change;  // rate of change for the short average
   float heading_long_average_change;   // rage of change for the long average
+  float heading_short_average_change_max;
+  float heading_average[HEADING_AVERAGE_SIZE];
+  int heading_average_count;
   bool heading_average_initialized;
   int heading_short_average_size;
   int heading_long_average_size;
@@ -59,6 +63,8 @@ private:
   
   bool destinationChanged; // flag indicating if the destination (waypoint/heading desired) has changed
   bool modeChanged; // flag indicating that the mode has changed
+  float steer_angle;
+
   SerialType *serial;
 
   float toRadians(float degrees);
@@ -102,6 +108,8 @@ public:
   float getHeadingShortAverageChange();
   float getHeadingLongAverageSize();
   float getHeadingShortAverageSize();
+  float getHeadingShortAverageChangeMax();
+  float getHeadingFilteredAverage();
   // float* getFilteredAccelerometerData();
   // void setFilteredAccelerometerData(float data[3]);
   // float* getFilteredMagentometerData();
@@ -117,6 +125,8 @@ public:
   float getSpeed();
   void setSpeed(float speed);
   float getDistance();
+  float getSteerAngle();
+  void setSteerAngle(float steer_angle);
   void printAutoPilot();
 
 };

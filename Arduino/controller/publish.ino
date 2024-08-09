@@ -55,7 +55,8 @@ void publish_APDAT() {
       autoPilot.getHeadingLongAverageSize(), //%d
 
       autoPilot.getHeadingShortAverage(), //%.2f
-      autoPilot.getHeadingShortAverageChange(), //%.2f
+      autoPilot.getHeadingShortAverageChangeMax(), //%.2f
+      //autoPilot.getHeadingShortAverageChange(), //%.2f
       autoPilot.getHeadingShortAverageSize(),  //%d
 
       autoPilot.getHeading(), //%.2f

@@ -27,6 +27,7 @@ char telnet_buffer[BUF_SIZE];
 int telnet_count = BUF_SIZE;
 
 void process_adjust_bearing(CustomClientType& client, char buffer[]);
+void process_steer_angle(CustomClientType& client, char buffer[]);
 void process_mode(CustomClientType& client, char buffer[]);
 void process_print(CustomClientType& client);
 void process_quit(CustomClientType& client);
@@ -65,6 +66,13 @@ void process_adjust_bearing(CustomClientType& client, char buffer[]) {
   DEBUG_PRINTLN(bearing_adjustment);
 }
 
+void process_steer_angle(CustomClientType& client, char buffer[]) {
+  float steer_angle = atof(&buffer[1]);
+  autoPilot.setSteerAngle(steer_angle);
+  client.println("ok");
+  DEBUG_PRINT("set steer angle ");
+  DEBUG_PRINTLN(steer_angle);
+}
 
 void process_mode(CustomClientType& client, char buffer[]) {
   int new_mode = atoi(&buffer[1]);
@@ -209,6 +217,9 @@ void process_telnet(CustomClientType& client, char buffer[]) {
       break;
     case 'q':
       process_quit(client);
+      break;
+    case 's':
+      process_steer_angle(client, buffer);
       break;
     case 'w':
       process_waypoint(client, buffer);
