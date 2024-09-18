@@ -79,7 +79,7 @@ void motor_control_loop(float new_steer_angle) {
     callCount = 0;
     char buffer[100];
     sprintf(buffer, "cur %d, new_mils, %d \n", current_mills, new_mills);
-    DEBUG_PRINT(buffer);
+    //DEBUG_PRINT(buffer);
   } else {
     callCount++;
   }

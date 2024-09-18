@@ -1,25 +1,14 @@
-#if defined(ARDUINO_ARCH_SAMD)  // Check if the board is based on the SAMD architecture (like Arduino Nano 33 IoT)
-#include <WiFiNINA.h>
-typedef WiFiClient CustomClientType;
-#elif defined(ARDUINO_ARCH_ESP32)  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
+
 #include <ESPTelnet.h>
 typedef ESPTelnet CustomClientType;
-#else
-#error "Unsupported board type. Please use Arduino Nano 33 IoT or Arduino Nano ESP32."
-#endif
 #include <TimeLib.h>
 
 #define BUF_SIZE 100
 #define TELNET_PORT 23
 #define COMMAND_PORT 8023
 
-#if defined(ARDUINO_ARCH_SAMD)  // Check if the board is based on the SAMD architecture (like Arduino Nano 33 IoT)
-static WiFiServer telnet_server(TELNET_PORT);
-static WiFiServer command_server(COMMAND_PORT);
-#elif defined(ARDUINO_ARCH_ESP32)  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
 static ESPTelnet telnet_server;
 static ESPTelnet command_server;
-#endif
 
 char command_buffer[BUF_SIZE];
 int command_count = BUF_SIZE;
@@ -38,10 +27,7 @@ void process_command(CustomClientType& client, char buffer[]);
 
 void setup_command() {
   // start the servers:
-#if defined(ARDUINO_ARCH_SAMD)  // Check if the board is based on the SAMD architecture (like Arduino Nano 33 IoT)
-  telnet_server.begin();
-  command_server.begin();
-#elif defined(ARDUINO_ARCH_ESP32)  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
+
   telnet_server.onConnect(onTelnetConnect);
   telnet_server.onConnectionAttempt(onTelnetConnectionAttempt);
   telnet_server.onReconnect(onTelnetReconnect);
@@ -54,7 +40,6 @@ void setup_command() {
   telnet_server.begin(TELNET_PORT);
   command_server.onInputReceived(onCommandInput);
   command_server.begin(COMMAND_PORT);
-#endif
   Serial.println("Command all setup");
 }
 
@@ -93,13 +78,9 @@ void process_mode(CustomClientType& client, char buffer[]) {
 }
 
 void process_quit(CustomClientType& client) {
-#if defined(ARDUINO_ARCH_SAMD)  // Check if the board is based on the SAMD architecture (like Arduino Nano 33 IoT)
-  client.println("Use ^] + q  to disconnect.");
-#elif defined(ARDUINO_ARCH_ESP32)  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
   Serial.println("Closing connection");
   client.println("> disconnecting you");
   client.disconnectClient();
-#endif
 }
 
 void process_print(CustomClientType& client) {
@@ -137,14 +118,6 @@ void process_print(CustomClientType& client) {
   client.println("");
 
   client.print("Heading: ");
-  client.print(autoPilot.getHeadingLongAverage());
-  client.print(" ~");
-  client.print(autoPilot.getHeadingLongAverageChange());
-  client.print(" / ");
-  client.print(autoPilot.getHeadingShortAverage());
-  client.print(" ~");
-  client.print(autoPilot.getHeadingLongAverageChange());
-  client.print(" / ");
   client.print(autoPilot.getHeading());
   client.print(" ");
   client.print("Bearing: ");
@@ -251,7 +224,6 @@ void process_command(CustomClientType& client, char buffer[]) {
   }
 }
 
-#if defined(ARDUINO_ARCH_ESP32)  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
 
 // (optional) callback functions for telnet events
 void onTelnetConnect(String ip) {
@@ -323,44 +295,8 @@ void onCommandInput(String str) {
   process_command(command_server, command_buffer);
   command_server.disconnectClient();
 }
-#endif
 
 void check_command() {
-#if defined(ARDUINO_ARCH_SAMD)                           // Check if the board is based on the SAMD architecture (like Arduino Nano 33 IoT)
-  WiFiClient telnet_client = telnet_server.available();  // listen for incoming clients
-  if (telnet_client) {                                   // if you get a client,
-    if (telnet_client.available()) {                     // if there's bytes to read from the client,
-      char c = telnet_client.read();                     // read a byte, then
-      if (c == '\n') {                                   // if the byte is a newline character
-        telnet_buffer[BUF_SIZE - telnet_count] = 0;
-        process_telnet(telnet_client, telnet_buffer);
-        telnet_count = BUF_SIZE;
-      } else {
-        if (telnet_count > 0) {                        // if you got anything else but a carriage return character,
-          telnet_buffer[BUF_SIZE - telnet_count] = c;  // add it to the end of the currentLine
-          telnet_count--;
-        }
-      }
-    }
-  }
-  WiFiClient command_client = command_server.available();  // listen for incoming clients
-  if (command_client) {                                    // if you get a client,
-    if (command_client.available()) {                      // if there's bytes to read from the client,
-      char c = command_client.read();                      // read a byte, then
-      if (c == '\n') {                                     // if the byte is a newline character
-        command_buffer[BUF_SIZE - command_count] = 0;
-        process_command(command_client, command_buffer);
-        command_count = BUF_SIZE;
-      } else {
-        if (command_count > 0) {                         // if you got anything else but a carriage return character,
-          command_buffer[BUF_SIZE - command_count] = c;  // add it to the end of the currentLine
-          command_count--;
-        }
-      }
-    }
-  }
-#elif defined(ARDUINO_ARCH_ESP32)  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
   telnet_server.loop();
   command_server.loop();
-#endif
 }

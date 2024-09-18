@@ -13,7 +13,7 @@
 #define COMMAND_PORT 8023
 #define COMMAND_DELAY 200
 
-IPAddress processor_ip(10, 20, 1, 2);
+IPAddress processor_ip(10, 20, 1, 1);
 WiFiClient client;
 
 char command[COMMAND_LEN];

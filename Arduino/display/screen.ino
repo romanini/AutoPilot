@@ -80,19 +80,19 @@ void initialize_refresh_rates() {
       case 0:  // speed
         display_refresh_rate[i] = 750;
         break;
-      case 1:  // heading long average
-        display_refresh_rate[i] = 700;
+      case 1:  // heading
+        display_refresh_rate[i] = 400;
         break;
-      case 2:  // heading long average change
-        display_refresh_rate[i] = 700;
+      case 2:  // pitch
+        display_refresh_rate[i] = 400;
         break;
-      case 3:  // heading short average
+      case 3:  // roll
+        display_refresh_rate[i] = 400;
+        break;
+      case 4:  // stability
         display_refresh_rate[i] = 600;
         break;
-      case 4:  // heading short average change
-        display_refresh_rate[i] = 600;
-        break;
-      case 5:  // heading
+      case 5:  // 
         display_refresh_rate[i] = 400;
         break;
       case 6:  // bearing
@@ -150,19 +150,18 @@ void display() {
         display_speed();
         break;
       case 1:
-        display_heading_long_average();
+        display_heading();
         break;
       case 2:
-        display_heading_long_average_change();
+        display_pitch();
         break;
       case 3:
-        display_heading_short_average();
+        display_roll();
         break;
       case 4:
-        display_heading_short_average_change();
+        display_stability();
         break;
       case 5:
-        display_heading();
         break;
       case 6:
         display_bearing();
@@ -209,66 +208,6 @@ void display_speed() {
   tft.drawRGBBitmap(20, 23, speed_value_canvas.getBuffer(), 90, 42);
 }
 
-void display_heading_long_average() {
-  GFXcanvas16 compass_la_value_canvas(107, 32);
-  compass_la_value_canvas.fillScreen(HX8357_BLACK);
-  compass_la_value_canvas.setTextColor(HX8357_YELLOW);
-  compass_la_value_canvas.setFont(&FreeSansBold18pt7b);
-  compass_la_value_canvas.setCursor(0, 29);
-  if (autoPilot.isConnected()) {
-    compass_la_value_canvas.print(autoPilot.getHeadingLongAverage());
-  } else {
-    compass_la_value_canvas.print("");
-  }
-  tft.drawRGBBitmap(20, 105, compass_la_value_canvas.getBuffer(), 107, 32);
-
-  //tft.drawBitmap(20, 105, compass_la_value_canvas.getBuffer(), 107, 32, HX8357_YELLOW, HX8357_BLACK);
-}
-
-void display_heading_long_average_change() {
-  GFXcanvas16 compass_la_change_value_canvas(95, 32);
-  compass_la_change_value_canvas.fillScreen(HX8357_BLACK);
-  compass_la_change_value_canvas.setTextColor(HX8357_YELLOW);
-  compass_la_change_value_canvas.setFont(&FreeSansBold18pt7b);
-  compass_la_change_value_canvas.setCursor(0, 29);
-  if (autoPilot.isConnected()) {
-    compass_la_change_value_canvas.print("~");
-    compass_la_change_value_canvas.print(autoPilot.getHeadingLongAverageChange());
-  } else {
-    compass_la_change_value_canvas.print("");
-  }
-  tft.drawRGBBitmap(35, 143, compass_la_change_value_canvas.getBuffer(), 95, 32);
-}
-
-void display_heading_short_average() {
-  GFXcanvas16 compass_sa_value_canvas(107, 32);
-  compass_sa_value_canvas.fillScreen(HX8357_BLACK);
-  compass_sa_value_canvas.setTextColor(HX8357_YELLOW);
-  compass_sa_value_canvas.setFont(&FreeSansBold18pt7b);
-  compass_sa_value_canvas.setCursor(0, 29);
-  if (autoPilot.isConnected()) {
-    compass_sa_value_canvas.print(autoPilot.getHeadingShortAverage());
-  } else {
-    compass_sa_value_canvas.print("");
-  }
-  tft.drawRGBBitmap(20, 190, compass_sa_value_canvas.getBuffer(), 107, 32);
-}
-
-void display_heading_short_average_change() {
-  GFXcanvas16 compass_sa_change_value_canvas(95, 32);
-  compass_sa_change_value_canvas.fillScreen(HX8357_BLACK);
-  compass_sa_change_value_canvas.setTextColor(HX8357_YELLOW);
-  compass_sa_change_value_canvas.setFont(&FreeSansBold18pt7b);
-  compass_sa_change_value_canvas.setCursor(0, 29);
-  if (autoPilot.isConnected()) {
-    compass_sa_change_value_canvas.print("~");
-    compass_sa_change_value_canvas.print(autoPilot.getHeadingShortAverageChange());
-  } else {
-    compass_sa_change_value_canvas.print("");
-  }
-  tft.drawRGBBitmap(35, 227, compass_sa_change_value_canvas.getBuffer(), 95, 32);
-}
-
 void display_heading() {
   GFXcanvas16 compass_value_canvas(107, 32);
   compass_value_canvas.fillScreen(HX8357_BLACK);
@@ -280,9 +219,66 @@ void display_heading() {
   } else {
     compass_value_canvas.print("");
   }
-  tft.drawRGBBitmap(20, 276, compass_value_canvas.getBuffer(), 107, 32);
+  tft.drawRGBBitmap(20, 101, compass_value_canvas.getBuffer(), 107, 32);
 }
 
+void display_pitch() {
+  GFXcanvas16 compass_value_canvas(107, 32);
+  compass_value_canvas.fillScreen(HX8357_BLACK);
+  compass_value_canvas.setTextColor(HX8357_YELLOW);
+  compass_value_canvas.setFont(&FreeSansBold18pt7b);
+  compass_value_canvas.setCursor(0, 29);
+  if (autoPilot.isConnected()) {
+    compass_value_canvas.print(autoPilot.getPitch());
+  } else {
+    compass_value_canvas.print("");
+  }
+  tft.drawRGBBitmap(20, 158, compass_value_canvas.getBuffer(), 107, 32);
+}
+
+void display_roll() {
+  GFXcanvas16 compass_value_canvas(107, 32);
+  compass_value_canvas.fillScreen(HX8357_BLACK);
+  compass_value_canvas.setTextColor(HX8357_YELLOW);
+  compass_value_canvas.setFont(&FreeSansBold18pt7b);
+  compass_value_canvas.setCursor(0, 29);
+  if (autoPilot.isConnected()) {
+    compass_value_canvas.print(autoPilot.getRoll());
+  } else {
+    compass_value_canvas.print("");
+  }
+  tft.drawRGBBitmap(20, 217, compass_value_canvas.getBuffer(), 107, 32);
+}
+
+void display_stability() {
+  GFXcanvas16 compass_value_canvas(112, 32);
+  compass_value_canvas.fillScreen(HX8357_BLACK);
+  compass_value_canvas.setTextColor(HX8357_YELLOW);
+  compass_value_canvas.setFont(&FreeSansBold12pt7b);
+  compass_value_canvas.setCursor(0, 29);
+  if (autoPilot.isConnected()) {
+    switch (autoPilot.getStabilityClassification()) {
+    case STABILITY_CLASSIFIER_UNKNOWN:
+      compass_value_canvas.print("Unknown");
+      break;
+    case STABILITY_CLASSIFIER_ON_TABLE:
+      compass_value_canvas.print("On Table");
+      break;
+    case STABILITY_CLASSIFIER_STATIONARY:
+      compass_value_canvas.print("Stationary");
+      break;
+    case STABILITY_CLASSIFIER_STABLE:
+      compass_value_canvas.print("Stable");
+      break;
+    case STABILITY_CLASSIFIER_MOTION:
+      compass_value_canvas.print("In Motion");
+      break;
+    }
+  } else {
+    compass_value_canvas.print("");
+  }
+  tft.drawRGBBitmap(20, 279, compass_value_canvas.getBuffer(), 112, 32);
+}
 void display_mode() {
   GFXcanvas16 mode_value_canvas(115, 24);
   mode_value_canvas.fillScreen(HX8357_BLACK);
@@ -468,6 +464,9 @@ void initialize_display() {
   Serial.println("Initializing display");
   initialize_speed();
   initialize_compass();
+  initialize_pitch();
+  initialize_roll();
+  initialize_stability();
   initialize_destination();
   initialize_bearing();
   initialize_volts();
@@ -495,19 +494,65 @@ void initialize_speed() {
 void initialize_compass() {
   int16_t x1, y1;
   uint16_t w, h;
-  // Heading instant, short and long average
-  GFXcanvas1 compass_canvas(160, 239);
+  // Heading 
+  GFXcanvas1 compass_canvas(160, 60);
   compass_canvas.fillScreen(HX8357_BLACK);
   compass_canvas.setFont(&FreeSans9pt7b);
-  compass_canvas.drawRect(0, 0, 160, 239, HX8357_YELLOW);
+  compass_canvas.drawRect(0, 0, 160, 60, HX8357_YELLOW);
   compass_canvas.getTextBounds("Heading", 0, 12, &x1, &y1, &w, &h);
   compass_canvas.fillRect(x1, y1, w + 8, h + 1, HX8357_YELLOW);
   compass_canvas.setCursor(0, 12);
   compass_canvas.setTextColor(HX8357_BLACK);
   compass_canvas.print("Heading");
-  compass_canvas.drawLine(0, 100, 160, 100, HX8357_YELLOW);
-  compass_canvas.drawLine(0, 185, 160, 185, HX8357_YELLOW);
-  tft.drawBitmap(0, 81, compass_canvas.getBuffer(), 160, 239, HX8357_YELLOW, HX8357_BLACK);
+  tft.drawBitmap(0, 81, compass_canvas.getBuffer(), 160, 60, HX8357_YELLOW, HX8357_BLACK);
+}
+
+void initialize_pitch() {
+  int16_t x1, y1;
+  uint16_t w, h;
+  // Pitch
+  GFXcanvas1 compass_canvas(160, 60);
+  compass_canvas.fillScreen(HX8357_BLACK);
+  compass_canvas.setFont(&FreeSans9pt7b);
+  compass_canvas.drawRect(0, 0, 160, 60, HX8357_YELLOW);
+  compass_canvas.getTextBounds("Pitch", 0, 12, &x1, &y1, &w, &h);
+  compass_canvas.fillRect(x1, y1, w + 8, h + 1, HX8357_YELLOW);
+  compass_canvas.setCursor(0, 12);
+  compass_canvas.setTextColor(HX8357_BLACK);
+  compass_canvas.print("Pitch");
+  tft.drawBitmap(0, 141, compass_canvas.getBuffer(), 160, 60, HX8357_YELLOW, HX8357_BLACK);
+}
+
+void initialize_roll() {
+  int16_t x1, y1;
+  uint16_t w, h;
+  // Roll
+  GFXcanvas1 compass_canvas(160, 60);
+  compass_canvas.fillScreen(HX8357_BLACK);
+  compass_canvas.setFont(&FreeSans9pt7b);
+  compass_canvas.drawRect(0, 0, 160, 60, HX8357_YELLOW);
+  compass_canvas.getTextBounds("Roll", 0, 12, &x1, &y1, &w, &h);
+  compass_canvas.fillRect(x1, y1, w + 8, h + 1, HX8357_YELLOW);
+  compass_canvas.setCursor(0, 12);
+  compass_canvas.setTextColor(HX8357_BLACK);
+  compass_canvas.print("Roll");
+  tft.drawBitmap(0, 201, compass_canvas.getBuffer(), 160, 60, HX8357_YELLOW, HX8357_BLACK);
+}
+
+void initialize_stability() {
+  int16_t x1, y1;
+  uint16_t w, h;
+  // Roll
+  GFXcanvas1 compass_canvas(160, 59);
+  compass_canvas.fillScreen(HX8357_BLACK);
+  compass_canvas.setFont(&FreeSans9pt7b);
+  compass_canvas.drawRect(0, 0, 160, 59, HX8357_YELLOW);
+  compass_canvas.getTextBounds("Stability", 0, 12, &x1, &y1, &w, &h);
+  compass_canvas.fillRect(x1, y1, w + 8, h + 1, HX8357_YELLOW);
+  compass_canvas.setCursor(0, 12);
+  compass_canvas.setTextColor(HX8357_BLACK);
+  compass_canvas.print("Stability");
+  tft.drawBitmap(0, 261, compass_canvas.getBuffer(), 160, 59, HX8357_YELLOW, HX8357_BLACK);
 }
 
 void initialize_destination() {

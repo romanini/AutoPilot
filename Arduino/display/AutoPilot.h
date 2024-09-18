@@ -21,6 +21,12 @@
 #define APDAT "APDAT,"
 #define RESET "RESET,"
 
+#define STABILITY_CLASSIFIER_UNKNOWN (0)
+#define STABILITY_CLASSIFIER_ON_TABLE (1)
+#define STABILITY_CLASSIFIER_STATIONARY (2)
+#define STABILITY_CLASSIFIER_STABLE (3)
+#define STABILITY_CLASSIFIER_MOTION (4)
+
 class AutoPilot {
 private:
   int year;
@@ -41,14 +47,10 @@ private:
 
   float heading_desired;     // desired heading if navigating by comapss
 
-  float heading_long_average;          // long running average forr the heading (most stable)
-  float heading_long_average_change;   // rage of change for the long average
-  int heading_long_average_size;
-  float heading_short_average_change;  // rate of change for the short average
-  float heading_short_average;         // short running average for the heading (more stable)
-  int heading_short_average_size;
-
   float heading;                       // direction of the bow is pointing at the moment (changes frequently)
+  float pitch;
+  float roll;  
+  int stability_classification;
   float bearing;             // desired direction of travel use in both modes
   float bearing_correction;  // correction needed to return to proper bearing
   float speed;          // speed of travel according to GPS
@@ -88,13 +90,10 @@ public:
   float getWaypointLat();
   float getWaypointLon();
   float getHeadingDesired();
-  float getHeadingLongAverage();
-  float getHeadingLongAverageChange();  
-  int getHeadingLongAverageSize();
-  float getHeadingShortAverage();
-  float getHeadingShortAverageChange();  
-  int getHeadingShortAverageSize();
   float getHeading();  
+  float getPitch();
+  float getRoll();  
+  int getStabilityClassification();
   float getBearing();
   float getBearingCorrection();
   float getSpeed();

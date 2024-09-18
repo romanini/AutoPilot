@@ -2,33 +2,31 @@
 
 #ifndef AUTOPILOT_H
 #define AUTOPILOT_H
-#if defined(ARDUINO_ARCH_SAMD)  // For Arduino Nano 33 IoT
-  #include <Arduino.h>
-  typedef HardwareSerial SerialType;  // Define SerialType for SAMD
-#elif defined(ARDUINO_ARCH_ESP32)  // For Arduino Nano ESP32
-  #include <USB.h>
-  #include <FreeRTOS.h>
-  typedef USBCDC SerialType;  // Define SerialType for ESP32
-#else
-  #error "Unsupported board type. Please use Arduino Nano 33 IoT or Arduino Nano ESP32."
-#endif
-#include <TimeLib.h> // Include the Time library if needed
 
-#define HEADING_AVERAGE_SIZE 100
+#include <USB.h>
+#include <FreeRTOS.h>
+typedef USBCDC SerialType;  // Define SerialType for ESP32
+
+#include <TimeLib.h>  // Include the Time library if needed
+
+struct euler_t {
+  float yaw;
+  float pitch;
+  float roll;
+};
+
 class AutoPilot {
 private:
-#if defined(ARDUINO_ARCH_ESP32)  // For Arduino Nano ESP32
   SemaphoreHandle_t mutex;
-#endif
-  time_t dateTime; // current time and date in local TZ
+  time_t dateTime;  // current time and date in local TZ
 
-  int motor_stop_time;  // time at which to stop the motor in milliseconds
-  int motor_direction;  // -1 = port (L), 0 = not running, 1 = starbord (R)
-  int motor_last_run_time; // time when the last trun happened, this is needed to allow us to wait before making another turn
+  int motor_stop_time;      // time at which to stop the motor in milliseconds
+  int motor_direction;      // -1 = port (L), 0 = not running, 1 = starbord (R)
+  int motor_last_run_time;  // time when the last trun happened, this is needed to allow us to wait before making another turn
 
-  bool fix;         // indicator if GPS has satellite fix
+  bool fix;        // indicator if GPS has satellite fix
   int fixquality;  // the quality of the GPS fix 1 = GPS, 2=DGPS
-  int satellites;   // number of satellites fixes by GPS
+  int satellites;  // number of satellites fixes by GPS
 
   int mode;                  // 0 = off, 1 = compass, 2 = navigate
   float heading_desired;     // desired heading if navigating by comapss
@@ -36,36 +34,26 @@ private:
   float bearing_correction;  // correction needed to return to proper bearing
 
   float heading;                       // direction of the bow is pointing at the moment (changes frequently)
-  float heading_short_average;         // short running average for the heading (more stable)
-  float heading_long_average;          // long running average forr the heading (most stable)
-  float heading_short_average_change;  // rate of change for the short average
-  float heading_long_average_change;   // rage of change for the long average
-  float heading_short_average_change_max;
-  float heading_average[HEADING_AVERAGE_SIZE];
-  int heading_average_count;
-  bool heading_average_initialized;
-  int heading_short_average_size;
-  int heading_long_average_size;
+  float pitch;
+  float roll;
+  int stability_classification;
   int start_motor;
   bool motor_started;
 
-  // float filtered_magnetometer_data[3]; // // Filtered Magnetometer measurements
-  // float filtered_accelerometer_data[3]; // // Filtered Accelerometer measurements
-
-  bool waypoint_set;    // flag indicating if the waypoint has been set
-  float waypoint_lat;   // desired waypoint latitide
-  float waypoint_lon;   // desired waypoint longitude
-  float location_lat;   // current latitude
+  bool waypoint_set;   // flag indicating if the waypoint has been set
+  float waypoint_lat;  // desired waypoint latitide
+  float waypoint_lon;  // desired waypoint longitude
+  float location_lat;  // current latitude
   float location_lon;  // current longitude
-  float course;         // compass course towads desired waypoint
-  float speed;          // speed of travel according to GPS
-  float distance;       // distance to desired waypoint from current location according to GPS
-  
-  bool destinationChanged; // flag indicating if the destination (waypoint/heading desired) has changed
-  bool modeChanged; // flag indicating that the mode has changed
+  float course;        // compass course towads desired waypoint
+  float speed;         // speed of travel according to GPS
+  float distance;      // distance to desired waypoint from current location according to GPS
+
+  bool destinationChanged;  // flag indicating if the destination (waypoint/heading desired) has changed
+  bool modeChanged;         // flag indicating that the mode has changed
   float steer_angle;
 
-  SerialType *serial;
+  SerialType* serial;
 
   float toRadians(float degrees);
   float toDegrees(float radians);
@@ -81,7 +69,7 @@ public:
   int getStartMotor();
   void setMotorStarted(bool motor_started);
   bool getMotorStarted();
-  
+
   void setDateTime(time_t dateTime);
   time_t getDateTime();
   int getMotorStopTime();
@@ -102,18 +90,12 @@ public:
   float getBearingCorrection();
   float getHeading();
   void setHeading(float heading);
-  float getHeadingLongAverage();
-  float getHeadingShortAverage();
-  float getHeadingLongAverageChange();
-  float getHeadingShortAverageChange();
-  float getHeadingLongAverageSize();
-  float getHeadingShortAverageSize();
-  float getHeadingShortAverageChangeMax();
-  float getHeadingFilteredAverage();
-  // float* getFilteredAccelerometerData();
-  // void setFilteredAccelerometerData(float data[3]);
-  // float* getFilteredMagentometerData();
-  // void setFilteredMagnetometerData(float data[3]);
+  float getPitch();
+  void setPitch(float pitch);
+  float getRoll();
+  void setStabilityClassification(int value);
+  int getStabilityClassification();
+  void setRoll(float roll);  
   bool isWaypointSet();
   float getWaypointLat();
   float getWaypointLon();
@@ -128,7 +110,6 @@ public:
   float getSteerAngle();
   void setSteerAngle(float steer_angle);
   void printAutoPilot();
-
 };
 
 #endif

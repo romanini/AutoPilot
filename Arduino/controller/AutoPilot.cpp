@@ -16,14 +16,12 @@
 AutoPilot::AutoPilot(SerialType* ser) {
   serial = ser;
 
-#if defined(ARDUINO_ARCH_ESP32)  // For Arduino Nano ESP32
   mutex = xSemaphoreCreateRecursiveMutex();
   if (mutex == NULL) {
     serial->println("mutex creation failed");
     while (1)
       ;
   }
-#endif
 
   tmElements_t timeComponents;
   timeComponents.Year = 0;
@@ -47,22 +45,12 @@ AutoPilot::AutoPilot(SerialType* ser) {
   bearing_correction = 0.0;
 
   heading = 0.0;
-  heading_short_average = 0.0;
-  heading_long_average = 0.0;
-  heading_short_average_change = 0.0;
-  heading_long_average_change = 0.0;
-  heading_short_average_change_max = 0.0;
-  heading_average_initialized = false;
-  heading_short_average_size = 0;
-  heading_long_average_size = 0;
-
+  pitch = 0.0;
+  roll = 0.0;
+  stability_classification = 0;
+  
   start_motor = 0;
   motor_started = false;
-
-  for (int i = 0; i < HEADING_AVERAGE_SIZE; i++) {
-    heading_average[i] = 0.0;
-  }
-  heading_average_count = 0;
 
   waypoint_set = false;
   waypoint_lat = 0.0;
@@ -79,11 +67,9 @@ AutoPilot::AutoPilot(SerialType* ser) {
 }
 
 AutoPilot::~AutoPilot() {
-#if defined(ARDUINO_ARCH_ESP32)  // For Arduino Nano ESP32
   if (mutex != NULL) {
     vSemaphoreDelete(mutex);
   }
-#endif
 }
 
 void AutoPilot::setStartMotor(int start_motor) {
@@ -209,7 +195,7 @@ int AutoPilot::setMode(int mode) {
   if ((mode <= 1) || (mode == 2 && this->waypoint_set)) {
     this->mode = mode;
     if (this->mode == 1) {
-      this->heading_desired = this->heading_long_average;
+      this->heading_desired = this->heading;
       this->bearing = this->heading_desired;
     }
     this->modeChanged = true;
@@ -231,7 +217,7 @@ void AutoPilot::adjustHeadingDesired(float change) {
   this->lock();
   if (this->mode > 0) {
     if (this->mode == 2) {
-      this->heading_desired = this->heading_short_average;
+      this->heading_desired = this->heading;
       this->bearing = this->heading_desired;
       this->modeChanged = true;
     }
@@ -271,136 +257,50 @@ void AutoPilot::setHeading(float heading) {
     return;
   }
   this->heading = heading;
-  if (this->heading_average_initialized) {
-    int j = this->heading_average_count % HEADING_AVERAGE_SIZE;
-    this->heading_average[j] = heading;
-    if (this->heading_average_count < HEADING_AVERAGE_SIZE) {
-      this->heading_average_count++;
-    } else {
-      this->heading_average_count = 0;
-    }
-    float max_heading = 0.0;
-    float min_heading = 360.0;
-    float sum_heading = 0.0;
-    for (int k = 0; k < HEADING_AVERAGE_SIZE; k++) {
-      if (this->heading_average[k] > max_heading) {
-        max_heading = this->heading_average[k];
-      }
-      if (this->heading_average[k] < min_heading) {
-        min_heading = this->heading_average[k];
-      }
-      sum_heading += this->heading_average[k];
-    }
-    this->heading_long_average = (sum_heading - min_heading - max_heading) / (HEADING_AVERAGE_SIZE - 2);
-
-    // char buff[100];
-    // sprintf(buff,"j: %d val: %.2f max: %.2f min: %.2f sum: %.2f, heading: %.2f", j,this->heading_average[j], max_heading, min_heading, sum_heading, this->heading_long_average);
-    // serial->println(buff);
-
-  this->heading_short_average = this->heading_short_average + ((this->heading - this->heading_short_average) / this->heading_short_average_size);
-  this->heading_short_average_change = this->heading_short_average_change + (((this->heading - this->heading_short_average) - this->heading_short_average_change) / this->heading_short_average_size);
-  float change = abs(this->heading - this->heading_short_average);
-  if (this->heading_short_average_change_max < change) {
-    this->heading_short_average_change_max = change;
-  } else {
-    this->heading_short_average_change_max -= (this->heading_short_average_change_max - change) / 100.;
+  if (this->mode == 1) {
+    this->bearing_correction = this->getCourseCorrection(this->bearing, this->heading);
   }
-}
-else {
-  this->heading_average_initialized = true;
-  this->heading_long_average = heading;
-  this->heading_long_average_size = 1;
-  this->heading_short_average = heading;
+  this->unlock();
 }
 
-if (this->heading_short_average_size < COMPASS_SHORT_AVERAGE_MAX_SIZE) {
-  this->heading_short_average_size += 1;
-}
-if (this->mode == 1) {
-  // TODO do we use shot average or long average?
-  this->bearing_correction = this->getCourseCorrection(this->bearing, this->heading_long_average);
-}
-this->unlock();
-}
-
-float AutoPilot::getHeadingLongAverage() {
+float AutoPilot::getPitch() {
   this->lock();
-  float value = this->heading_long_average;
+  float value = this->pitch;
   this->unlock();
   return value;
 }
 
-float AutoPilot::getHeadingShortAverage() {
+void AutoPilot::setPitch(float pitch) {
   this->lock();
-  float value = this->heading_short_average;
+  this->pitch = pitch;
+  this->unlock();
+}
+
+float AutoPilot::getRoll() {
+  this->lock();
+  float value = this->roll;
   this->unlock();
   return value;
 }
 
-float AutoPilot::getHeadingLongAverageChange() {
+void AutoPilot::setRoll(float roll) {
   this->lock();
-  float value = this->heading_long_average_change;
+  this->roll = roll;
+  this->unlock();
+}
+
+int AutoPilot::getStabilityClassification() {
+  this->lock();
+  float value = this->stability_classification;
   this->unlock();
   return value;
 }
 
-float AutoPilot::getHeadingShortAverageChange() {
+void AutoPilot::setStabilityClassification(int value) {
   this->lock();
-  float value = this->heading_short_average_change;
+  this->stability_classification = value;
   this->unlock();
-  return value;
 }
-
-float AutoPilot::getHeadingShortAverageChangeMax() {
-  this->lock();
-  float value = this->heading_short_average_change_max;
-  this->unlock();
-  return value;
-}
-float AutoPilot::getHeadingLongAverageSize() {
-  this->lock();
-  float value = this->heading_long_average_size;
-  this->unlock();
-  return value;
-}
-
-float AutoPilot::getHeadingShortAverageSize() {
-  this->lock();
-  float value = this->heading_short_average_size;
-  this->unlock();
-  return value;
-}
-
-// float* AutoPilot::getFilteredAccelerometerData() {
-//   this->lock();
-//   float *value = this->filtered_accelerometer_data;
-//   this->unlock();
-//   return value;
-
-// }
-
-// void AutoPilot::setFilteredAccelerometerData(float data[3]) {
-//   this->lock();
-//   for (int i = 0; i < 3; i++) {
-//     this->filtered_accelerometer_data[i] = data[i];
-//   }
-//   this->unlock();
-// }
-
-// float* AutoPilot::getFilteredMagentometerData() {
-//   this->lock();
-//   float *value = this->filtered_magnetometer_data;
-//   this->unlock();
-//   return value;
-// }
-
-// void AutoPilot::setFilteredMagnetometerData(float data[3]) {
-//   this->lock();
-//   for (int i = 0; i < 3; i++) {
-//     this->filtered_magnetometer_data[i] = data[i];
-//   }
-//   this->unlock();
-// }
 
 bool AutoPilot::isWaypointSet() {
   this->lock();
@@ -542,18 +442,6 @@ void AutoPilot::printAutoPilot() {
   serial->println("");
 
   serial->print("Heading: ");
-  serial->print(this->heading_long_average);
-  serial->print(" ~");
-  serial->print(this->heading_long_average_change);
-  serial->print(" (");
-  serial->print(this->heading_long_average_size);
-  serial->print(") / ");
-  serial->print(this->heading_short_average);
-  serial->print(" ~");
-  serial->print(this->heading_short_average_change);
-  serial->print(" (");
-  serial->print(this->heading_short_average_size);
-  serial->print(") / ");
   serial->print(this->heading);
   serial->print(" ");
   serial->print("Bearing: ");
@@ -626,13 +514,9 @@ float AutoPilot::getBearing(float lat1, float lon1, float lat2, float lon2) {
 }
 
 void AutoPilot::lock() {
-#if defined(ARDUINO_ARCH_ESP32)  // For Arduino Nano ESP32
   xSemaphoreTakeRecursive(mutex, portMAX_DELAY);
-#endif
 }
 
 void AutoPilot::unlock() {
-#if defined(ARDUINO_ARCH_ESP32)  // For Arduino Nano ESP32
   xSemaphoreGiveRecursive(mutex);
-#endif
 }

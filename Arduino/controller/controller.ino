@@ -1,11 +1,5 @@
 #include <Wire.h>
-#if defined(ARDUINO_ARCH_SAMD)  // Check if the board is based on the SAMD architecture (like Arduino Nano 33 IoT)
-#include <WiFiNINA.h>
-#elif defined(ARDUINO_ARCH_ESP32)  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
 #include <WiFi.h>
-#else
-#error "Unsupported board type. Please use Arduino Nano 33 IoT or Arduino Nano ESP32."
-#endif
 #include "AutoPilot.h"
 
 #define DEBUG_ENABLED 1
@@ -38,13 +32,12 @@ AutoPilot autoPilot = AutoPilot(&Serial);
 void setup() {
   //Initialize serial
 #if DEBUG_ENABLED
-#if defined(ARDUINO_ARCH_ESP32)  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
   int attempts = 0;
   while (!Serial && attempts < 200) { 
     attempts++;
     delay(10); 
   }
-#endif
+
   Serial.begin(38400);
 #endif
 
@@ -60,11 +53,9 @@ void setup() {
   setup_pid();
   publish_RESET();
 
-#if defined(ARDUINO_ARCH_ESP32) && MULTI_CORE  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
   xTaskCreatePinnedToCore(control_task, "Task Control", 10000, NULL, 1, NULL, CORE_0);
   xTaskCreatePinnedToCore(command_task, "Task Command", 10000, NULL, 2, NULL, CORE_1);
   Serial.println("Multi-core setup");
-#endif
 
   Serial.println("Setup complete");
 #if DEBUG_ENABLED
@@ -75,18 +66,9 @@ void setup() {
 }
 
 void loop() {
-#if defined(ARDUINO_ARCH_SAMD) || !MULTI_CORE  // Check if the board is based on the SAMD architecture (like Arduino Nano 33 IoT)
-  uint32_t start_time = millis();
-  check_command();
-  check_compass();
-  check_gps();
-  check_motor();
-  check_led();
-  publish_APDAT();
-#endif
+
 }
 
-#if defined(ARDUINO_ARCH_ESP32) && MULTI_CORE  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
 void control_task(void *pvParameters) {
   int last_mills = millis();
   int cur_mills;
@@ -98,10 +80,7 @@ void control_task(void *pvParameters) {
 
     if (autoPilot.getMode() > 0) {
       if (autoPilot.getMode() == 1) {
-        // TODO do we want to use short average or long average?
-        input = autoPilot.getHeadingLongAverage();
-  //      if(abs(input-autoPilot.getHeadingLongAverage())<3.0)
-   //       input =  autoPilot.getHeadingLongAverage();
+        input = autoPilot.getHeading();
       } else {
         input = autoPilot.getCourse();
       }
@@ -132,4 +111,4 @@ void command_task(void *pvParameters) {
   }
 }
 
-#endif
+

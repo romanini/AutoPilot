@@ -35,15 +35,9 @@ void AutoPilot::init() {
   waypoint_lat = 0.0;
   waypoint_lon = 0.0;
   heading_desired = 0.0;
-  heading_short_average = 0.0;
-  heading_long_average = 0.0;
-  heading_short_average_change = 0.0;
-  heading_long_average_change = 0.0;
-  heading_short_average_size = 0;
-  heading_short_average_size = 0;
-  heading_long_average_size = 0;
-  heading_long_average_size = 0;
   heading = 0.0;
+  pitch = 0.0;
+  roll = 0.0;  
   bearing = 0.0;
   bearing_correction = 0.0;
   speed = 0.0;
@@ -112,32 +106,21 @@ float AutoPilot::getHeadingDesired() {
   return this->heading_desired;
 }
 
-float AutoPilot::getHeadingLongAverage() {
-  return this->heading_long_average;
-}
-
-float AutoPilot::getHeadingShortAverage() {
-  return this->heading_short_average;
-}
-
-float AutoPilot::getHeadingLongAverageChange() {
-  return this->heading_long_average_change;
-}
-
-float AutoPilot::getHeadingShortAverageChange() {
-  return this->heading_short_average_change;
-}
-
-int AutoPilot::getHeadingLongAverageSize() {
-  return this->heading_long_average_size;
-}
-
-int AutoPilot::getHeadingShortAverageSize() {
-  return this->heading_short_average_size;
-}
-
 float AutoPilot::getHeading() {
   return this->heading;
+}
+
+float AutoPilot::getPitch() {
+  return this->pitch;
+}
+
+float AutoPilot::getRoll() {
+  return this->roll;
+}
+
+int AutoPilot::getStabilityClassification() {
+  return this->stability_classification;
+
 }
 
 float AutoPilot::getBearing() {
@@ -256,18 +239,6 @@ void AutoPilot::printAutoPilot() {
   serial->println("");
 
   serial->print("Heading: ");
-  serial->print(this->heading_long_average);
-  serial->print(" ~");
-  serial->print(this->heading_long_average_change);
-  serial->print(" (");
-  serial->print(this->heading_long_average_size);
-  serial->print(") / ");
-  serial->print(this->heading_short_average);
-  serial->print(" ~");
-  serial->print(this->heading_short_average_change);
-  serial->print(" (");
-  serial->print(this->heading_short_average_size);
-  serial->print(") / ");
   serial->print(this->heading);
   serial->print(" ");
   serial->print("Bearing: ");
@@ -433,51 +404,30 @@ void AutoPilot::parseAPDAT(char *sentence) {
 
   p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
   if (!isEmpty(p)) {
-    this->heading_long_average = atof(p);
-  } else {
-    this->heading_long_average = 0.0;
-  }
-
-  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
-  if (!isEmpty(p)) {
-    this->heading_long_average_change = atof(p);
-  } else {
-    this->heading_long_average_change = 0.0;
-  }
-
-  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
-  if (!isEmpty(p)) {
-    this->heading_long_average_size = atoi(p);
-  } else {
-    this->heading_long_average_size = 0;
-  }
-
-  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
-  if (!isEmpty(p)) {
-    this->heading_short_average = atof(p);
-  } else {
-    this->heading_short_average = 0.0;
-  }
-
-  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
-  if (!isEmpty(p)) {
-    this->heading_short_average_change = atof(p);
-  } else {
-    this->heading_short_average_change = 0.0;
-  }
-
-  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
-  if (!isEmpty(p)) {
-    this->heading_short_average_size = atoi(p);
-  } else {
-    this->heading_short_average_size = 0;
-  }
-
-  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
-  if (!isEmpty(p)) {
     this->heading = atof(p);
   } else {
     this->heading = 0.0;
+  }
+
+  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
+  if (!isEmpty(p)) {
+    this->pitch = atof(p);
+  } else {
+    this->pitch = 0.0;
+  }
+
+  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
+  if (!isEmpty(p)) {
+    this->roll = atof(p);
+  } else {
+    this->roll = 0.0;
+  }
+
+  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
+  if (!isEmpty(p)) {
+    this->stability_classification = atoi(p);
+  } else {
+    this->stability_classification = 0;
   }
 
   p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
