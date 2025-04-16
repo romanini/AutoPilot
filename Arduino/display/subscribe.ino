@@ -55,7 +55,7 @@ void check_subscription() {
     lastReceiveTime = millis();
     receiveTimeout = false;
 #if DEBUG_ENABLED
-    flash_receive_led();
+    //flash_receive_led();
 #endif    
     // copy the left over to the buffer for next time
     strcpy(buffer, leftover);

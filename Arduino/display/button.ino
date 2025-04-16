@@ -91,15 +91,15 @@ void setup_button() {
   Serial.println("Button and LED setup!");
 }
 
-void flash_receive_led() {
-  receive_flash_count += 1;
-  if (receive_flash_count == RECEIVE_FLASH_COUNT) {
-    receive_flash_count = 0;
-    receive_led_flash_mills = millis();
-    receive_led_state = LOW;
-    pcf.digitalWrite(RECEIVE_LED_PIN, receive_led_state);
-  }
-}
+// void flash_receive_led() {
+//   receive_flash_count += 1;
+//   if (receive_flash_count == RECEIVE_FLASH_COUNT) {
+//     receive_flash_count = 0;
+//     receive_led_flash_mills = millis();
+//     receive_led_state = LOW;
+//     pcf.digitalWrite(RECEIVE_LED_PIN, receive_led_state);
+//   }
+// }
 
 void set_beep(unsigned long duration) {
   beep_on_time = millis();
@@ -125,7 +125,7 @@ void button_pressed(int pin) {
     button_press_times[pin] = millis();
     button_pressed_states[pin] = true;
     // light the LED
-    pcf.digitalWrite(led_pins[pin], LOW);
+    //pcf.digitalWrite(led_pins[pin], LOW);
   }
 }
 
@@ -138,7 +138,7 @@ void button_release(int pin) {
   beep_very_long_triggered[pin] = false;
 
   // turn off LED, yes HIGH is off because it is switched on negative.
-  pcf.digitalWrite(led_pins[pin], HIGH);
+  //pcf.digitalWrite(led_pins[pin], HIGH);
 
   unsigned long press_duration = current_time - button_press_times[pin];
 
@@ -218,12 +218,12 @@ void button_release(int pin) {
   }
 }
 
-void update_receive_led() {
-  if ((receive_led_state == LOW) && (millis() - receive_led_flash_mills > RECEIVE_FLASH_INTERVAL)) {
-    receive_led_state = HIGH;
-    pcf.digitalWrite(RECEIVE_LED_PIN, receive_led_state);
-  }
-}
+// void update_receive_led() {
+//   if ((receive_led_state == LOW) && (millis() - receive_led_flash_mills > RECEIVE_FLASH_INTERVAL)) {
+//     receive_led_state = HIGH;
+//     pcf.digitalWrite(RECEIVE_LED_PIN, receive_led_state);
+//   }
+// }
 
 void check_button_press_diuration(int pin) {
   unsigned long press_duration = millis() - button_press_times[pin];
@@ -263,7 +263,7 @@ void check_button_press_diuration(int pin) {
 }
 
 void check_button() {
-  update_receive_led();
+  //update_receive_led();
   update_beep();
   for (uint8_t pin = 0; pin < num_buttons; pin++) {
     int buttonState = pcf.digitalRead(button_pins[pin]);
