@@ -52,7 +52,7 @@ void check_command() {
 
 void adjust_heading(float change) {
 #ifndef MOCK_SEND
-  command[0] = '/0';
+  command[0] = '\0';
   sprintf(command, "a%.2f", change);
   send_command(command);
   DEBUG_PRINT("adjusting heading ");
@@ -62,7 +62,7 @@ void adjust_heading(float change) {
 
 void set_mode(int mode) {
 #ifndef MOCK_SEND
-  command[0] = '/0';
+  command[0] = '\0';
   sprintf(command, "m%d", mode);
   send_command(command);
   DEBUG_PRINT("set mode ");
