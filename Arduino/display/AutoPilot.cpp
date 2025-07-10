@@ -30,6 +30,7 @@ void AutoPilot::init() {
   fix = false;
   fixquality = 0;
   satellites = 0;
+  navigation_enabled = false;
   mode = 0;
   waypoint_set = false;
   waypoint_lat = 0.0;
@@ -48,6 +49,7 @@ void AutoPilot::init() {
   destinationChanged = true;
   reset = false;
   connected = false;
+  tackRequested = 0;
 }
 
 int AutoPilot::getYear() {
@@ -88,6 +90,10 @@ int AutoPilot::getMode() {
 
 void AutoPilot::setMode(int mode) {
   this->mode = mode;
+}
+
+bool AutoPilot::isNavigationEnabled() {
+  return this->navigation_enabled;
 }
 
 bool AutoPilot::isWaypointSet() {
@@ -203,6 +209,22 @@ bool AutoPilot::isConnected() {
 
 void AutoPilot::setConnected(bool connected) {
   this->connected = connected;
+}
+
+unsigned long AutoPilot::getTackRequested() {
+  return this->tackRequested;
+}
+
+void AutoPilot::setTackRequested(unsigned long time) {
+  this->tackRequested = time;
+}
+
+void AutoPilot::resetTackRequested() {
+  this->tackRequested = 0;
+}
+
+bool AutoPilot::isTackRequested() {
+  return (this->tackRequested > 0);
 }
 
 void AutoPilot::printAutoPilot() {
@@ -340,6 +362,19 @@ void AutoPilot::parseAPDAT(char *sentence) {
     this->satellites = atoi(p);
   } else {
     this->satellites = 0;
+  }
+
+  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
+  int currentNavigationEnabled = this->navigation_enabled;
+  if (!isEmpty(p)) {
+    int navigation = atoi(p);
+    if (navigation > 0) {
+      this->navigation_enabled = true;
+    } else {
+      this->navigation_enabled = false;
+    }
+  } else {
+    this->navigation_enabled = false;
   }
 
   p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.

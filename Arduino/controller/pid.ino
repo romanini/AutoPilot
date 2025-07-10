@@ -35,9 +35,9 @@ float pid_loop(float target, float current, float time) {
 
   if (loopCount >= 100) {
     loopCount = 0;
-    char buffer[100];
-    sprintf(buffer, "PID: target: %.2f, current: %.2f, changeAngle=: %.2f, time: %.2f Pi: %.2f P %.2f\n", target, current, change_angle, time, Pi,P);
-    DEBUG_PRINT(buffer);
+    // char buffer[100];
+    // sprintf(buffer, "PID: target: %.2f, current: %.2f, changeAngle=: %.2f, time: %.2f Pi: %.2f P %.2f\n", target, current, change_angle, time, Pi,P);
+    // DEBUG_PRINT(buffer);
   } else {
     loopCount++;
   }

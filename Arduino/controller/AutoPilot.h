@@ -28,6 +28,7 @@ private:
   int fixquality;  // the quality of the GPS fix 1 = GPS, 2=DGPS
   int satellites;  // number of satellites fixes by GPS
 
+  bool navigation_enabled;     // indicates navigation is enabled.  Used for when navigating and we want to disable navigation temporeraly and then return to the previous navigation.
   int mode;                  // 0 = off, 1 = compass, 2 = navigate
   float heading_desired;     // desired heading if navigating by comapss
   float bearing;             // desired direction of travel use in both modes
@@ -84,6 +85,8 @@ public:
   int getSatellites();
   int getMode();
   int setMode(int mode);
+  bool isNavigationEndabled();
+  void setNavigationEnabled(bool enable);
   float getHeadingDesired();
   void adjustHeadingDesired(float change);
   float getBearing();

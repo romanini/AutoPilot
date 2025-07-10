@@ -71,4 +71,15 @@ void set_mode(int mode) {
 #endif
 }
 
+void set_navigation(int nav) {
+#ifndef MOCK_SEND
+  command[0] = '/0';
+  sprintf(command, "n%d", nav);
+  send_command(command);
+  DEBUG_PRINT("set navigation ");
+  DEBUG_PRINTLN(nav);
+
+#endif
+}
+
 

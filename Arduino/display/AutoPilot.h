@@ -1,3 +1,4 @@
+#include <sys/_intsup.h>
 //#include "api/HardwareSerial.h"
 #ifndef AUTOPILOT_H
 #define AUTOPILOT_H
@@ -39,6 +40,7 @@ private:
   int fixquality;  // the quality of the GPS fix 1 = GPS, 2=DGPS
   int satellites;   // number of satellites fixes by GPS
 
+  bool navigation_enabled;
   int mode;                  // 0 = off, 1 = compass, 2 = navigate
 
   bool waypoint_set;    // flag indicating if the waypoint has been set
@@ -60,6 +62,7 @@ private:
   float location_lat;   // current latitude
   float location_lon;  // current longitude
   bool destinationChanged;
+  unsigned long tackRequested;
   float battery_voltage;
   int battery_voltage_average_size;
   float input_voltage;
@@ -86,6 +89,8 @@ public:
   int getSatellites();
   int getMode();
   void setMode(int mode);
+  bool isNavigationEnabled();
+  void setNavigationEnabled(bool nav);
   bool isWaypointSet();
   float getWaypointLat();
   float getWaypointLon();
@@ -112,6 +117,10 @@ public:
   void setConnected(bool connected);
   void printAutoPilot();
   void parse(char *buffer);
+  unsigned long getTackRequested();
+  void setTackRequested(unsigned long time);
+  void resetTackRequested();
+  bool isTackRequested();
 };
 
 #endif

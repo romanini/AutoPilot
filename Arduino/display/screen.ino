@@ -26,6 +26,7 @@ SPIClass* vspi = NULL;
 #endif
 
 int autoPilotMode = 0;
+bool isEnabled = false;
 uint32_t display_refresh_timer[DISPLAY_SEGMENTS];
 int display_refresh_selector = 0;
 
@@ -92,7 +93,7 @@ void initialize_refresh_rates() {
       case 4:  // stability
         display_refresh_rate[i] = 600;
         break;
-      case 5:  // 
+      case 5:  //
         display_refresh_rate[i] = 400;
         break;
       case 6:  // bearing
@@ -131,8 +132,9 @@ void initialize_refresh_rates() {
 // effectively time-slice the display() function by having it refresh a small part of the display each time.  For the distination we special case
 // that one since it changes so infrequently that we only refresh it when it changes.
 void display() {
-  if (autoPilot.getMode() != autoPilotMode) {
+  if ((autoPilot.getMode() != autoPilotMode) || (autoPilot.isNavigationEnabled() != isEnabled)) {
     autoPilotMode = autoPilot.getMode();
+    isEnabled = autoPilot.isNavigationEnabled();
     DEBUG_PRINTLN("display Mode ");
     display_mode();
     DEBUG_PRINTLN("done display Mode");
@@ -258,21 +260,21 @@ void display_stability() {
   compass_value_canvas.setCursor(0, 29);
   if (autoPilot.isConnected()) {
     switch (autoPilot.getStabilityClassification()) {
-    case STABILITY_CLASSIFIER_UNKNOWN:
-      compass_value_canvas.print("Unknown");
-      break;
-    case STABILITY_CLASSIFIER_ON_TABLE:
-      compass_value_canvas.print("On Table");
-      break;
-    case STABILITY_CLASSIFIER_STATIONARY:
-      compass_value_canvas.print("Stationary");
-      break;
-    case STABILITY_CLASSIFIER_STABLE:
-      compass_value_canvas.print("Stable");
-      break;
-    case STABILITY_CLASSIFIER_MOTION:
-      compass_value_canvas.print("In Motion");
-      break;
+      case STABILITY_CLASSIFIER_UNKNOWN:
+        compass_value_canvas.print("Unknown");
+        break;
+      case STABILITY_CLASSIFIER_ON_TABLE:
+        compass_value_canvas.print("On Table");
+        break;
+      case STABILITY_CLASSIFIER_STATIONARY:
+        compass_value_canvas.print("Stationary");
+        break;
+      case STABILITY_CLASSIFIER_STABLE:
+        compass_value_canvas.print("Stable");
+        break;
+      case STABILITY_CLASSIFIER_MOTION:
+        compass_value_canvas.print("In Motion");
+        break;
     }
   } else {
     compass_value_canvas.print("");
@@ -282,26 +284,28 @@ void display_stability() {
 void display_mode() {
   GFXcanvas16 mode_value_canvas(115, 24);
   mode_value_canvas.fillScreen(HX8357_BLACK);
-  if (autoPilot.getMode() == 2) {
-    mode_value_canvas.setTextColor(0xF57F);
-    mode_value_canvas.setFont(&FreeSansBold12pt7b);
-    mode_value_canvas.setCursor(5, 18);
-    mode_value_canvas.print("waypoint");
-  } else if (autoPilot.getMode() == 1) {
-    mode_value_canvas.setTextColor(0xF57F);
-    mode_value_canvas.setFont(&FreeSansBold12pt7b);
-    mode_value_canvas.setCursor(0, 18);
-    mode_value_canvas.print("compass");
-  } else if (autoPilot.getMode() == 0) {
-    mode_value_canvas.setTextColor(0xF57F);
-    mode_value_canvas.setFont(&FreeSansBold12pt7b);
-    mode_value_canvas.setCursor(0, 18);
-    mode_value_canvas.print("disabled");    
+  if (autoPilot.isNavigationEnabled()) {
+    if (autoPilot.getMode() == 2) {
+      mode_value_canvas.setTextColor(0xF57F);
+      mode_value_canvas.setFont(&FreeSansBold12pt7b);
+      mode_value_canvas.setCursor(5, 18);
+      mode_value_canvas.print("waypoint");
+    } else if (autoPilot.getMode() == 1) {
+      mode_value_canvas.setTextColor(0xF57F);
+      mode_value_canvas.setFont(&FreeSansBold12pt7b);
+      mode_value_canvas.setCursor(0, 18);
+      mode_value_canvas.print("compass");
+    } else {
+      mode_value_canvas.setTextColor(0xF57F);
+      mode_value_canvas.setFont(&FreeSansBold12pt7b);
+      mode_value_canvas.setCursor(8, 18);
+      mode_value_canvas.print("none");
+    }
   } else {
     mode_value_canvas.setTextColor(0xF57F);
     mode_value_canvas.setFont(&FreeSansBold12pt7b);
     mode_value_canvas.setCursor(0, 18);
-    mode_value_canvas.print("no link");
+    mode_value_canvas.print("disbled");
   }
   tft.drawRGBBitmap(185, 20, mode_value_canvas.getBuffer(), 115, 24);
 }
@@ -494,7 +498,7 @@ void initialize_speed() {
 void initialize_compass() {
   int16_t x1, y1;
   uint16_t w, h;
-  // Heading 
+  // Heading
   GFXcanvas1 compass_canvas(160, 60);
   compass_canvas.fillScreen(HX8357_BLACK);
   compass_canvas.setFont(&FreeSans9pt7b);

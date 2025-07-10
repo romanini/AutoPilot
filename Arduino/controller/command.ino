@@ -18,6 +18,7 @@ int telnet_count = BUF_SIZE;
 void process_adjust_bearing(CustomClientType& client, char buffer[]);
 void process_steer_angle(CustomClientType& client, char buffer[]);
 void process_mode(CustomClientType& client, char buffer[]);
+void process_navigation(CustomClientType& client, char buffer[]);
 void process_print(CustomClientType& client);
 void process_quit(CustomClientType& client);
 void process_waypoint(CustomClientType& client, char buffer[]);
@@ -57,6 +58,18 @@ void process_steer_angle(CustomClientType& client, char buffer[]) {
   client.println("ok");
   DEBUG_PRINT("set steer angle ");
   DEBUG_PRINTLN(steer_angle);
+}
+
+void process_navigation(CustomClientType& client, char buffer[]) {
+  int new_nav = atoi(&buffer[1]);
+  if (new_nav >= 0 && new_nav <= 1) {
+    autoPilot.setNavigationEnabled(new_nav == 1);
+    DEBUG_PRINT("set navigation ");
+    DEBUG_PRINT(new_nav);
+    client.println("ok");
+  } else {
+    client.println("Invalid Navigation");
+  }
 }
 
 void process_mode(CustomClientType& client, char buffer[]) {
@@ -103,6 +116,12 @@ void process_print(CustomClientType& client) {
   }
   client.println("");
 
+  client.print("Navigation: ");
+  if (autoPilot.isNavigationEndabled()) {
+    client.print("enabled ");
+  } else {
+    client.print("disabled ");
+  }
   client.print("Destination: ");
   if (autoPilot.getMode() == 2) {
     client.print("waypoint ");
@@ -170,6 +189,7 @@ void process_help(CustomClientType& client) {
   client.println("Possible commands:\n");
   client.println("\ta<heading offset> \t- Adjust heading to be <heading offset> from current heading.");
   client.println("\tm<0|1|2> \t\t- Set the current mode 0 = off, 1 = compass, 2 = waypoint.");
+  client.println("\tn<0|1> \t\t- Navigation 0 = off, 1 = on");
   client.println("\tp \t\t\t- Print current auto pilot status.");
   client.println("\tq \t\t\t- Quit the current session.");
   client.println("\tw<lat,long> \t\t- Set the waypoint to <lat,long>.");
@@ -185,6 +205,9 @@ void process_telnet(CustomClientType& client, char buffer[]) {
     case 'm':
       process_mode(client, buffer);
       break;
+    case 'n':
+      process_navigation(client, buffer);
+      break;      
     case 'p':
       process_print(client);
       break;
@@ -215,6 +238,9 @@ void process_command(CustomClientType& client, char buffer[]) {
     case 'm':
       process_mode(client, buffer);
       break;
+    case 'n':
+      process_navigation(client, buffer);
+      break;       
     case 'q':
       process_quit(client);
       break;

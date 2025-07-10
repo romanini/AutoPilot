@@ -39,6 +39,7 @@ AutoPilot::AutoPilot(SerialType* ser) {
   fixquality = 0;
   satellites = 0;
 
+  navigation_enabled = true;
   mode = 0;
   heading_desired = 0.0;
   bearing = 0.0;
@@ -200,10 +201,34 @@ int AutoPilot::setMode(int mode) {
     }
     this->modeChanged = true;
     this->destinationChanged = true;
+    if (this->mode > 0) {
+      this->setNavigationEnabled(true);
+    }
     retval = 0;
   }
   this->unlock();
   return retval;
+}
+
+bool AutoPilot::isNavigationEndabled() {
+  this->lock();
+  bool value = this->navigation_enabled;
+  this->unlock();
+  return value;
+}
+
+void AutoPilot::setNavigationEnabled(bool enable) {
+  this->lock();
+  if (this->navigation_enabled == false && enable == true) {
+    // if we are re-enabling and current mode is compass we should stat to navigate to current heading to previous one.
+    if (this->mode == 1) {
+      this->heading_desired = this->heading;
+      this->bearing = this->heading_desired;
+    }
+    this->destinationChanged = true;    
+  } 
+  this->navigation_enabled = enable;
+  this->unlock();  
 }
 
 float AutoPilot::getHeadingDesired() {
