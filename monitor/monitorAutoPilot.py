@@ -20,6 +20,7 @@ class AutoPilot:
         self.fix = False
         self.fixquality = 0
         self.satellites = 0
+        self.nav_nabled = 0
         self.mode = 0
         self.waypoint_set = False
         self.waypoint_lat = 0.0
@@ -64,25 +65,26 @@ class AutoPilot:
         self.fix = int(fields[6]) > 0 if fields[6] else False
         self.fixquality = int(fields[7]) if fields[7] else 0
         self.satellites = int(fields[8]) if fields[8] else 0
-        self.mode = int(fields[9]) if fields[9] else 0
-        self.waypoint_set = int(fields[10]) > 0 if fields[10] else False
-        self.waypoint_lat = float(fields[11]) if fields[11] else 0.0
-        self.waypoint_lon = float(fields[12]) if fields[12] else 0.0
-        self.heading_desired = float(fields[13]) if fields[13] else 0.0
-        self.heading_long_average = float(fields[14]) if fields[14] else 0.0
-        self.heading_long_average_change = float(fields[15]) if fields[15] else 0.0
-        self.heading_long_average_size = int(fields[16]) if fields[16] else 0
-        self.heading_short_average = float(fields[17]) if fields[17] else 0.0
-        self.heading_short_average_change = float(fields[18]) if fields[18] else 0.0
-        self.heading_short_average_size = int(fields[19]) if fields[19] else 0
-        self.heading = float(fields[20]) if fields[20] else 0.0
-        self.bearing = float(fields[21]) if fields[21] else 0.0
-        self.bearing_correction = float(fields[22]) if fields[22] else 0.0
-        self.speed = float(fields[23]) if fields[23] else 0.0
-        self.distance = float(fields[24]) if fields[24] else 0.0
-        self.course = float(fields[25]) if fields[25] else 0.0
-        self.location_lat = float(fields[26]) if fields[26] else 0.0
-        self.location_lon = float(fields[27]) if fields[27] else 0.0
+        self.nav_enabled = int(fields[9]) if fields[9] else 0
+        self.mode = int(fields[10]) if fields[10] else 0
+        self.waypoint_set = int(fields[11]) > 0 if fields[11] else False
+        self.waypoint_lat = float(fields[12]) if fields[12] else 0.0
+        self.waypoint_lon = float(fields[13]) if fields[13] else 0.0
+        self.heading_desired = float(fields[14]) if fields[14] else 0.0
+        self.heading_long_average = float(fields[15]) if fields[15] else 0.0
+        self.heading_long_average_change = float(fields[16]) if fields[16] else 0.0
+        self.heading_long_average_size = int(fields[17]) if fields[17] else 0
+        self.heading_short_average = float(fields[18]) if fields[18] else 0.0
+        self.heading_short_average_change = float(fields[19]) if fields[19] else 0.0
+        self.heading_short_average_size = int(fields[20]) if fields[20] else 0
+        self.heading = float(fields[21]) if fields[21] else 0.0
+        self.bearing = float(fields[22]) if fields[22] else 0.0
+        self.bearing_correction = float(fields[23]) if fields[23] else 0.0
+        self.speed = float(fields[24]) if fields[24] else 0.0
+        self.distance = float(fields[25]) if fields[25] else 0.0
+        self.course = float(fields[26]) if fields[26] else 0.0
+        self.location_lat = float(fields[27]) if fields[27] else 0.0
+        self.location_lon = float(fields[28]) if fields[28] else 0.0
 
     def parseRESET(self, sentence):
         self.reset = True
@@ -91,9 +93,10 @@ class AutoPilot:
         print(f"Date&Time: {self.month}/{self.day}/{self.year:02d} {self.hour}:{self.minute:02d}")
         fixquality_desc = "n/a" if self.fixquality == 0 else "GPS" if self.fixquality == 1 else "DGPS"
         print(f"Fix: {fixquality_desc} ({self.satellites})" if self.fix else "No Fix")
-        mode_desc = "navigate" if self.mode == 2 else "compass" if self.mode == 1 else "disabled" if self.mode == 0 else "N/A"
+        enabled = "disabled" if self.nav_enabled == 0 else "enabled"
+        mode_desc = "navigate" if self.mode == 2 else "compass" if self.mode == 1 else "N/A"
         destination = f"{self.waypoint_lat}, {self.waypoint_lon}" if self.mode == 2 else f"{self.heading_desired}" if self.mode == 1 else "N/A"
-        print(f"Destination: {mode_desc} {destination}")
+        print(f"Destination: {enabled} {mode_desc} {destination}")
         print(f"Heading: {self.heading_long_average} ~ {self.heading_long_average_change} ({self.heading_long_average_size}) / "
               f"{self.heading_short_average} ~ {self.heading_short_average_change} ({self.heading_short_average_size}) / "
               f"{self.heading} Bearing: {self.bearing} {abs(self.bearing_correction)} {'R' if self.bearing_correction > 0 else 'L'}")
