@@ -29,6 +29,7 @@ int autoPilotMode = 0;
 bool isEnabled = false;
 uint32_t display_refresh_timer[DISPLAY_SEGMENTS];
 int display_refresh_selector = 0;
+uint16_t backgroundColor = HX8357_BLACK;
 
 Adafruit_HX8357 tft = Adafruit_HX8357(TFT_CS, TFT_DC, TFT_RST);
 
@@ -201,11 +202,10 @@ void display() {
 void display_speed() {
   GFXcanvas1 speed_value_canvas(90, 42);
   uint16_t foregroundColor = HX8357_CYAN;
-  uint16_t backgroundColor = HX8357_BLACK;
-  speed_value_canvas.fillScreen(0); // Background index
+  speed_value_canvas.fillScreen(0);  // Background index
 
   if (autoPilot.hasFix()) {
-    speed_value_canvas.setTextColor(1); // Foreground index
+    speed_value_canvas.setTextColor(1);  // Foreground index
     speed_value_canvas.setFont(&FreeSansBold24pt7b);
     speed_value_canvas.setCursor(0, 37);
     speed_value_canvas.print(autoPilot.getSpeed(), 2);
@@ -218,16 +218,15 @@ void display_speed() {
 void display_heading() {
   GFXcanvas1 compass_value_canvas(107, 32);
   uint16_t foregroundColor = HX8357_YELLOW;
-  uint16_t backgroundColor = HX8357_BLACK;
-  compass_value_canvas.fillScreen(0); // Background index
+  compass_value_canvas.fillScreen(0);  // Background index
 
-  compass_value_canvas.setTextColor(1); // Foreground index
+  compass_value_canvas.setTextColor(1);  // Foreground index
   compass_value_canvas.setFont(&FreeSansBold18pt7b);
   compass_value_canvas.setCursor(0, 29);
   if (autoPilot.isConnected()) {
     compass_value_canvas.print(autoPilot.getHeading());
   } else {
-    compass_value_canvas.print(""); // This will print with foreground color on background
+    compass_value_canvas.print("");  // This will print with foreground color on background
   }
   tft.drawBitmap(20, 101, compass_value_canvas.getBuffer(), 107, 32, foregroundColor, backgroundColor);
 }
@@ -235,10 +234,9 @@ void display_heading() {
 void display_pitch() {
   GFXcanvas1 compass_value_canvas(107, 32);
   uint16_t foregroundColor = HX8357_YELLOW;
-  uint16_t backgroundColor = HX8357_BLACK;
-  compass_value_canvas.fillScreen(0); // Background index
+  compass_value_canvas.fillScreen(0);  // Background index
 
-  compass_value_canvas.setTextColor(1); // Foreground index
+  compass_value_canvas.setTextColor(1);  // Foreground index
   compass_value_canvas.setFont(&FreeSansBold18pt7b);
   compass_value_canvas.setCursor(0, 29);
   if (autoPilot.isConnected()) {
@@ -252,10 +250,9 @@ void display_pitch() {
 void display_roll() {
   GFXcanvas1 compass_value_canvas(107, 32);
   uint16_t foregroundColor = HX8357_YELLOW;
-  uint16_t backgroundColor = HX8357_BLACK;
-  compass_value_canvas.fillScreen(0); // Background index
+  compass_value_canvas.fillScreen(0);  // Background index
 
-  compass_value_canvas.setTextColor(1); // Foreground index
+  compass_value_canvas.setTextColor(1);  // Foreground index
   compass_value_canvas.setFont(&FreeSansBold18pt7b);
   compass_value_canvas.setCursor(0, 29);
   if (autoPilot.isConnected()) {
@@ -269,10 +266,9 @@ void display_roll() {
 void display_stability() {
   GFXcanvas1 compass_value_canvas(112, 32);
   uint16_t foregroundColor = HX8357_YELLOW;
-  uint16_t backgroundColor = HX8357_BLACK;
-  compass_value_canvas.fillScreen(0); // Background index
+  compass_value_canvas.fillScreen(0);  // Background index
 
-  compass_value_canvas.setTextColor(1); // Foreground index
+  compass_value_canvas.setTextColor(1);  // Foreground index
   compass_value_canvas.setFont(&FreeSansBold12pt7b);
   compass_value_canvas.setCursor(0, 29);
   if (autoPilot.isConnected()) {
@@ -301,54 +297,50 @@ void display_stability() {
 void display_mode() {
   GFXcanvas1 mode_value_canvas(115, 24);
   uint16_t foregroundColor = 0xF57F;
-  uint16_t backgroundColor = HX8357_BLACK;
-  mode_value_canvas.fillScreen(0); // Background index
+  mode_value_canvas.fillScreen(0);  // Background index
 
-  mode_value_canvas.setTextColor(1); // Foreground index
+  mode_value_canvas.setTextColor(1);  // Foreground index
   mode_value_canvas.setFont(&FreeSansBold12pt7b);
 
   if (autoPilot.isNavigationEnabled()) {
-    if (autoPilot.getMode() == 2) {
-      mode_value_canvas.setCursor(5, 18);
-      mode_value_canvas.print("waypoint");
-    } else if (autoPilot.getMode() == 1) {
+    if (autoPilot.isTackRequested()) {
       mode_value_canvas.setCursor(0, 18);
-      mode_value_canvas.print("compass");
+      mode_value_canvas.print("ready to tack");
     } else {
-      mode_value_canvas.setCursor(8, 18);
-      mode_value_canvas.print("none");
+      if (autoPilot.getMode() == 2) {
+        mode_value_canvas.setCursor(5, 18);
+        mode_value_canvas.print("waypoint");
+      } else if (autoPilot.getMode() == 1) {
+        mode_value_canvas.setCursor(0, 18);
+        mode_value_canvas.print("compass");
+      }
     }
   } else {
     mode_value_canvas.setCursor(0, 18);
-    mode_value_canvas.print("disabled"); // Fixed typo
+    mode_value_canvas.print("disabled");  // Fixed typo
   }
   tft.drawBitmap(185, 20, mode_value_canvas.getBuffer(), 115, 24, foregroundColor, backgroundColor);
 }
 
 void display_destination() {
-  GFXcanvas1 destination_value_canvas(139, 50); // Changed to GFXcanvas1
-  uint16_t foregroundColor = 0xF57F; // Default foreground color used in this canvas
-  uint16_t backgroundColor = HX8357_BLACK;
+  GFXcanvas1 destination_value_canvas(139, 50);  // Changed to GFXcanvas1
+  uint16_t foregroundColor = 0xF57F;             // Default foreground color used in this canvas
 
-  destination_value_canvas.fillScreen(0); // Use 0 for background index
-
-  if (autoPilot.getMode() == 2) {
-    destination_value_canvas.setTextColor(1); // Use 1 for foreground index
-    destination_value_canvas.setFont(&FreeSansBold12pt7b);
-    destination_value_canvas.setCursor(23, 18);
-    destination_value_canvas.print(autoPilot.getWaypointLat(), 6);
-    destination_value_canvas.setCursor(0, 45);
-    destination_value_canvas.println(autoPilot.getWaypointLon(), 6);
-  } else if (autoPilot.getMode() == 1) {
-    destination_value_canvas.setTextColor(1); // Use 1 for foreground index
-    destination_value_canvas.setFont(&FreeSansBold24pt7b);
-    destination_value_canvas.setCursor(10, 35);
-    destination_value_canvas.print(autoPilot.getHeadingDesired(), 1);
-  } else {
-    // In case of mode 0 or disabled, we might want to display nothing or ensure background is cleared
-    // The fillScreen(0) above handles clearing. If specific "empty" text style is needed, set it here.
-    // No text is printed, so no need to set text color if it's empty.
-    // If you wanted to print "" with a specific color, you would set setTextColor(1)
+  destination_value_canvas.fillScreen(0);  // Use 0 for background index
+  if (autoPilot.isNavigationEnabled()) {
+    if (autoPilot.getMode() == 2) {
+      destination_value_canvas.setTextColor(1);  // Use 1 for foreground index
+      destination_value_canvas.setFont(&FreeSansBold12pt7b);
+      destination_value_canvas.setCursor(23, 18);
+      destination_value_canvas.print(autoPilot.getWaypointLat(), 6);
+      destination_value_canvas.setCursor(0, 45);
+      destination_value_canvas.println(autoPilot.getWaypointLon(), 6);
+    } else if (autoPilot.getMode() == 1) {
+      destination_value_canvas.setTextColor(1);  // Use 1 for foreground index
+      destination_value_canvas.setFont(&FreeSansBold24pt7b);
+      destination_value_canvas.setCursor(10, 35);
+      destination_value_canvas.print(autoPilot.getHeadingDesired(), 1);
+    }
   }
   tft.drawBitmap(171, 52, destination_value_canvas.getBuffer(), 139, 50, foregroundColor, backgroundColor);
 }
@@ -356,12 +348,11 @@ void display_destination() {
 void display_bearing() {
   GFXcanvas1 bearing_value_canvas(115, 42);
   uint16_t foregroundColor = 0xFC09;
-  uint16_t backgroundColor = HX8357_BLACK;
-  bearing_value_canvas.fillScreen(0); // Background index
+  bearing_value_canvas.fillScreen(0);  // Background index
 
   if (autoPilot.getMode() > 0) {
     bearing_value_canvas.setFont(&FreeSansBold18pt7b);
-    bearing_value_canvas.setTextColor(1); // Foreground index
+    bearing_value_canvas.setTextColor(1);  // Foreground index
     bearing_value_canvas.setCursor(0, 29);
     bearing_value_canvas.print(autoPilot.getBearing(), 1);
   }
@@ -372,11 +363,10 @@ void display_bearing() {
 void display_bearing_correction() {
   GFXcanvas1 bearing_correction_value_canvas(115, 32);
   uint16_t foregroundColor = 0xFC09;
-  uint16_t backgroundColor = HX8357_BLACK;
-  bearing_correction_value_canvas.fillScreen(0); // Background index
+  bearing_correction_value_canvas.fillScreen(0);  // Background index
 
   if (autoPilot.getMode() > 0) {
-    bearing_correction_value_canvas.setTextColor(1); // Foreground index
+    bearing_correction_value_canvas.setTextColor(1);  // Foreground index
     bearing_correction_value_canvas.setFont(&FreeSansBold18pt7b);
     bearing_correction_value_canvas.setCursor(0, 29);
     bearing_correction_value_canvas.print((autoPilot.getBearingCorrection() > 0) ? autoPilot.getBearingCorrection() : autoPilot.getBearingCorrection() * -1.0, 1);
@@ -389,10 +379,9 @@ void display_bearing_correction() {
 void display_volts() {
   GFXcanvas1 volts_value_canvas(120, 22);
   uint16_t foregroundColor = HX8357_WHITE;
-  uint16_t backgroundColor = HX8357_BLACK;
-  volts_value_canvas.fillScreen(0); // Background index
+  volts_value_canvas.fillScreen(0);  // Background index
 
-  volts_value_canvas.setTextColor(1); // Foreground index
+  volts_value_canvas.setTextColor(1);  // Foreground index
   volts_value_canvas.setFont(&FreeSansBold12pt7b);
   volts_value_canvas.setCursor(0, 18);
   volts_value_canvas.print(autoPilot.getBatteryVoltage(), 2);
@@ -404,16 +393,13 @@ void display_volts() {
 void display_distance() {
   GFXcanvas1 distance_value_canvas(90, 42);
   uint16_t foregroundColor = HX8357_CYAN;
-  uint16_t backgroundColor = HX8357_BLACK;
-  distance_value_canvas.fillScreen(0); // Background index
+  distance_value_canvas.fillScreen(0);  // Background index
 
-  distance_value_canvas.setTextColor(1); // Foreground index
+  distance_value_canvas.setTextColor(1);  // Foreground index
   distance_value_canvas.setFont(&FreeSansBold24pt7b);
   distance_value_canvas.setCursor(0, 37);
   if (autoPilot.isWaypointSet() && autoPilot.hasFix()) {
     distance_value_canvas.print(autoPilot.getDistance(), 2);
-  } else {
-    distance_value_canvas.print(""); // Will be drawn with foregroundColor on backgroundColor
   }
   tft.drawBitmap(341, 23, distance_value_canvas.getBuffer(), 90, 42, foregroundColor, backgroundColor);
 }
@@ -421,11 +407,10 @@ void display_distance() {
 void display_course() {
   GFXcanvas1 course_value_canvas(115, 42);
   uint16_t foregroundColor = 0x7FE8;
-  uint16_t backgroundColor = HX8357_BLACK;
-  course_value_canvas.fillScreen(0); // Background index
+  course_value_canvas.fillScreen(0);  // Background index
 
   if (autoPilot.hasFix()) {
-    course_value_canvas.setTextColor(1); // Foreground index
+    course_value_canvas.setTextColor(1);  // Foreground index
     course_value_canvas.setFont(&FreeSansBold24pt7b);
     course_value_canvas.setCursor(0, 40);
     course_value_canvas.print(autoPilot.getCourse(), 1);
@@ -437,11 +422,10 @@ void display_course() {
 void display_location_lat() {
   GFXcanvas1 location_lat_value_canvas(115, 22);
   uint16_t foregroundColor = 0x7FE8;
-  uint16_t backgroundColor = HX8357_BLACK;
-  location_lat_value_canvas.fillScreen(0); // Background index
+  location_lat_value_canvas.fillScreen(0);  // Background index
 
   if (autoPilot.hasFix()) {
-    location_lat_value_canvas.setTextColor(1); // Foreground index
+    location_lat_value_canvas.setTextColor(1);  // Foreground index
     location_lat_value_canvas.setFont(&FreeSansBold12pt7b);
     location_lat_value_canvas.setCursor(0, 18);
     location_lat_value_canvas.print(autoPilot.getLocationLat(), 6);
@@ -453,11 +437,10 @@ void display_location_lat() {
 void display_location_lon() {
   GFXcanvas1 location_lon_value_canvas(139, 22);
   uint16_t foregroundColor = 0x7FE8;
-  uint16_t backgroundColor = HX8357_BLACK;
-  location_lon_value_canvas.fillScreen(0); // Background index
+  location_lon_value_canvas.fillScreen(0);  // Background index
 
   if (autoPilot.hasFix()) {
-    location_lon_value_canvas.setTextColor(1); // Foreground index
+    location_lon_value_canvas.setTextColor(1);  // Foreground index
     location_lon_value_canvas.setFont(&FreeSansBold12pt7b);
     location_lon_value_canvas.setCursor(0, 18);
     location_lon_value_canvas.print(autoPilot.getLocationLon(), 6);
@@ -469,10 +452,9 @@ void display_location_lon() {
 void display_datetime() {
   GFXcanvas1 date_time_value_canvas(165, 22);
   uint16_t foregroundColor = HX8357_WHITE;
-  uint16_t backgroundColor = HX8357_BLACK;
-  date_time_value_canvas.fillScreen(0); // Background index
+  date_time_value_canvas.fillScreen(0);  // Background index
 
-  date_time_value_canvas.setTextColor(1); // Foreground index
+  date_time_value_canvas.setTextColor(1);  // Foreground index
   date_time_value_canvas.setFont(&FreeSansBold12pt7b);
   date_time_value_canvas.setCursor(0, 18);
   if (autoPilot.hasFix()) {
@@ -488,10 +470,9 @@ void display_datetime() {
 void display_fix() {
   GFXcanvas1 gps_fix_value_canvas(110, 22);
   uint16_t foregroundColor = HX8357_WHITE;
-  uint16_t backgroundColor = HX8357_BLACK;
-  gps_fix_value_canvas.fillScreen(0); // Background index
+  gps_fix_value_canvas.fillScreen(0);  // Background index
 
-  gps_fix_value_canvas.setTextColor(1); // Foreground index
+  gps_fix_value_canvas.setTextColor(1);  // Foreground index
   gps_fix_value_canvas.setFont(&FreeSansBold12pt7b);
   gps_fix_value_canvas.setCursor(0, 18);
   if (autoPilot.hasFix()) {

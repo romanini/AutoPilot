@@ -26,13 +26,10 @@ class AutoPilot:
         self.waypoint_lat = 0.0
         self.waypoint_lon = 0.0
         self.heading_desired = 0.0
-        self.heading_long_average = 0.0
-        self.heading_long_average_change = 0.0
-        self.heading_long_average_size = 0
-        self.heading_short_average = 0.0
-        self.heading_short_average_change = 0.0
-        self.heading_short_average_size = 0
         self.heading = 0.0
+        self.pitch = 0.0
+        self.roll = 0
+        self.stability = 0
         self.bearing = 0.0
         self.bearing_correction = 0.0
         self.speed = 0.0
@@ -40,12 +37,6 @@ class AutoPilot:
         self.course = 0.0
         self.location_lat = 0.0
         self.location_lon = 0.0
-        self.destinationChanged = True
-        self.battery_voltage = 0.0
-        self.battery_voltage_average_size = 0
-        self.input_voltage = 0.0
-        self.input_voltage_average_size = 0
-        self.reset = False
 
     def parse(self, sentence):
         if sentence.startswith("APDAT,"):
@@ -71,20 +62,17 @@ class AutoPilot:
         self.waypoint_lat = float(fields[12]) if fields[12] else 0.0
         self.waypoint_lon = float(fields[13]) if fields[13] else 0.0
         self.heading_desired = float(fields[14]) if fields[14] else 0.0
-        self.heading_long_average = float(fields[15]) if fields[15] else 0.0
-        self.heading_long_average_change = float(fields[16]) if fields[16] else 0.0
-        self.heading_long_average_size = int(fields[17]) if fields[17] else 0
-        self.heading_short_average = float(fields[18]) if fields[18] else 0.0
-        self.heading_short_average_change = float(fields[19]) if fields[19] else 0.0
-        self.heading_short_average_size = int(fields[20]) if fields[20] else 0
-        self.heading = float(fields[21]) if fields[21] else 0.0
-        self.bearing = float(fields[22]) if fields[22] else 0.0
-        self.bearing_correction = float(fields[23]) if fields[23] else 0.0
-        self.speed = float(fields[24]) if fields[24] else 0.0
-        self.distance = float(fields[25]) if fields[25] else 0.0
-        self.course = float(fields[26]) if fields[26] else 0.0
-        self.location_lat = float(fields[27]) if fields[27] else 0.0
-        self.location_lon = float(fields[28]) if fields[28] else 0.0
+        self.heading = float(fields[15]) if fields[15] else 0.0
+        self.pitch = float(fields[16]) if fields[16] else 0.0
+        self.roll = float(fields[17]) if fields[17] else 0.0
+        self.stability = float(fields[18]) if fields[18] else 0.0
+        self.bearing = float(fields[19]) if fields[19] else 0.0
+        self.bearing_correction = float(fields[20]) if fields[20] else 0.0
+        self.speed = float(fields[21]) if fields[21] else 0.0
+        self.distance = float(fields[22]) if fields[22] else 0.0
+        self.course = float(fields[23]) if fields[23] else 0.0
+        self.location_lat = float(fields[24]) if fields[24] else 0.0
+        self.location_lon = float(fields[25]) if fields[25] else 0.0
 
     def parseRESET(self, sentence):
         self.reset = True
@@ -97,9 +85,8 @@ class AutoPilot:
         mode_desc = "navigate" if self.mode == 2 else "compass" if self.mode == 1 else "N/A"
         destination = f"{self.waypoint_lat}, {self.waypoint_lon}" if self.mode == 2 else f"{self.heading_desired}" if self.mode == 1 else "N/A"
         print(f"Destination: {enabled} {mode_desc} {destination}")
-        print(f"Heading: {self.heading_long_average} ~ {self.heading_long_average_change} ({self.heading_long_average_size}) / "
-              f"{self.heading_short_average} ~ {self.heading_short_average_change} ({self.heading_short_average_size}) / "
-              f"{self.heading} Bearing: {self.bearing} {abs(self.bearing_correction)} {'R' if self.bearing_correction > 0 else 'L'}")
+        print(f"Heading: {self.heading} {self.pitch} {self.roll} {self.stability}  "
+              f"Bearing: {self.bearing} {abs(self.bearing_correction)} {'R' if self.bearing_correction > 0 else 'L'}")
         print(f"Speed: {self.speed} Distance: {self.distance} Course: {self.course}")
         print(f"Location: {self.location_lat}, {self.location_lon}\n")
 

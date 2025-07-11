@@ -219,7 +219,7 @@ void AutoPilot::setTackRequested(unsigned long time) {
   this->tackRequested = time;
 }
 
-void AutoPilot::resetTackRequested() {
+void AutoPilot::cancelTackRequested() {
   this->tackRequested = 0;
 }
 
@@ -376,13 +376,16 @@ void AutoPilot::parseAPDAT(char *sentence) {
   } else {
     this->navigation_enabled = false;
   }
+  if (currentNavigationEnabled != this->navigation_enabled) {
+    this->destinationChanged = true;
+  }
 
   p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
   int currentMode = this->mode;
   if (!isEmpty(p)) {
     this->mode = atoi(p);
   } else {
-    this->mode = 0;
+    this->mode = 1;
   }
   if (currentMode != this->mode) {
     this->destinationChanged = true;

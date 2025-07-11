@@ -119,7 +119,7 @@ public:
   void parse(char *buffer);
   unsigned long getTackRequested();
   void setTackRequested(unsigned long time);
-  void resetTackRequested();
+  void cancelTackRequested();
   bool isTackRequested();
 };
 
