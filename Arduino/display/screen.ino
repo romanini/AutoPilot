@@ -311,27 +311,31 @@ void display_mode() {
 }
 
 void display_destination() {
-  GFXcanvas16 destination_value_canvas(139, 50);
-  destination_value_canvas.fillScreen(HX8357_BLACK);
+  GFXcanvas1 destination_value_canvas(139, 50); // Changed to GFXcanvas1
+  uint16_t foregroundColor = 0xF57F; // Default foreground color used in this canvas
+  uint16_t backgroundColor = HX8357_BLACK;
+
+  destination_value_canvas.fillScreen(0); // Use 0 for background index
+
   if (autoPilot.getMode() == 2) {
-    destination_value_canvas.setTextColor(0xF57F);
+    destination_value_canvas.setTextColor(1); // Use 1 for foreground index
     destination_value_canvas.setFont(&FreeSansBold12pt7b);
     destination_value_canvas.setCursor(23, 18);
     destination_value_canvas.print(autoPilot.getWaypointLat(), 6);
     destination_value_canvas.setCursor(0, 45);
     destination_value_canvas.println(autoPilot.getWaypointLon(), 6);
   } else if (autoPilot.getMode() == 1) {
-    destination_value_canvas.setTextColor(0xF57F);
+    destination_value_canvas.setTextColor(1); // Use 1 for foreground index
     destination_value_canvas.setFont(&FreeSansBold24pt7b);
     destination_value_canvas.setCursor(10, 35);
     destination_value_canvas.print(autoPilot.getHeadingDesired(), 1);
   } else {
-    destination_value_canvas.setTextColor(0xF57F);
-    destination_value_canvas.setFont(&FreeSansBold24pt7b);
-    destination_value_canvas.setCursor(30, 35);
-    destination_value_canvas.print("");
+    // In case of mode 0 or disabled, we might want to display nothing or ensure background is cleared
+    // The fillScreen(0) above handles clearing. If specific "empty" text style is needed, set it here.
+    // No text is printed, so no need to set text color if it's empty.
+    // If you wanted to print "" with a specific color, you would set setTextColor(1)
   }
-  tft.drawRGBBitmap(171, 52, destination_value_canvas.getBuffer(), 139, 50);
+  tft.drawBitmap(171, 52, destination_value_canvas.getBuffer(), 139, 50, foregroundColor, backgroundColor);
 }
 
 void display_bearing() {
