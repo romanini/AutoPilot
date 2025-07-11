@@ -199,35 +199,46 @@ void display() {
 }
 
 void display_speed() {
-  GFXcanvas16 speed_value_canvas(90, 42);
+  GFXcanvas1 speed_value_canvas(90, 42);
+  uint16_t foregroundColor = HX8357_CYAN;
+  uint16_t backgroundColor = HX8357_BLACK;
+  speed_value_canvas.fillScreen(0); // Background index
+
   if (autoPilot.hasFix()) {
-    speed_value_canvas.fillScreen(HX8357_BLACK);
-    speed_value_canvas.setTextColor(HX8357_CYAN);
+    speed_value_canvas.setTextColor(1); // Foreground index
     speed_value_canvas.setFont(&FreeSansBold24pt7b);
     speed_value_canvas.setCursor(0, 37);
     speed_value_canvas.print(autoPilot.getSpeed(), 2);
   }
-  tft.drawRGBBitmap(20, 23, speed_value_canvas.getBuffer(), 90, 42);
+  // If no fix, the canvas remains cleared (black background)
+  // and will be drawn as such, effectively showing nothing or just background.
+  tft.drawBitmap(20, 23, speed_value_canvas.getBuffer(), 90, 42, foregroundColor, backgroundColor);
 }
 
 void display_heading() {
-  GFXcanvas16 compass_value_canvas(107, 32);
-  compass_value_canvas.fillScreen(HX8357_BLACK);
-  compass_value_canvas.setTextColor(HX8357_YELLOW);
+  GFXcanvas1 compass_value_canvas(107, 32);
+  uint16_t foregroundColor = HX8357_YELLOW;
+  uint16_t backgroundColor = HX8357_BLACK;
+  compass_value_canvas.fillScreen(0); // Background index
+
+  compass_value_canvas.setTextColor(1); // Foreground index
   compass_value_canvas.setFont(&FreeSansBold18pt7b);
   compass_value_canvas.setCursor(0, 29);
   if (autoPilot.isConnected()) {
     compass_value_canvas.print(autoPilot.getHeading());
   } else {
-    compass_value_canvas.print("");
+    compass_value_canvas.print(""); // This will print with foreground color on background
   }
-  tft.drawRGBBitmap(20, 101, compass_value_canvas.getBuffer(), 107, 32);
+  tft.drawBitmap(20, 101, compass_value_canvas.getBuffer(), 107, 32, foregroundColor, backgroundColor);
 }
 
 void display_pitch() {
-  GFXcanvas16 compass_value_canvas(107, 32);
-  compass_value_canvas.fillScreen(HX8357_BLACK);
-  compass_value_canvas.setTextColor(HX8357_YELLOW);
+  GFXcanvas1 compass_value_canvas(107, 32);
+  uint16_t foregroundColor = HX8357_YELLOW;
+  uint16_t backgroundColor = HX8357_BLACK;
+  compass_value_canvas.fillScreen(0); // Background index
+
+  compass_value_canvas.setTextColor(1); // Foreground index
   compass_value_canvas.setFont(&FreeSansBold18pt7b);
   compass_value_canvas.setCursor(0, 29);
   if (autoPilot.isConnected()) {
@@ -235,13 +246,16 @@ void display_pitch() {
   } else {
     compass_value_canvas.print("");
   }
-  tft.drawRGBBitmap(20, 158, compass_value_canvas.getBuffer(), 107, 32);
+  tft.drawBitmap(20, 158, compass_value_canvas.getBuffer(), 107, 32, foregroundColor, backgroundColor);
 }
 
 void display_roll() {
-  GFXcanvas16 compass_value_canvas(107, 32);
-  compass_value_canvas.fillScreen(HX8357_BLACK);
-  compass_value_canvas.setTextColor(HX8357_YELLOW);
+  GFXcanvas1 compass_value_canvas(107, 32);
+  uint16_t foregroundColor = HX8357_YELLOW;
+  uint16_t backgroundColor = HX8357_BLACK;
+  compass_value_canvas.fillScreen(0); // Background index
+
+  compass_value_canvas.setTextColor(1); // Foreground index
   compass_value_canvas.setFont(&FreeSansBold18pt7b);
   compass_value_canvas.setCursor(0, 29);
   if (autoPilot.isConnected()) {
@@ -249,13 +263,16 @@ void display_roll() {
   } else {
     compass_value_canvas.print("");
   }
-  tft.drawRGBBitmap(20, 217, compass_value_canvas.getBuffer(), 107, 32);
+  tft.drawBitmap(20, 217, compass_value_canvas.getBuffer(), 107, 32, foregroundColor, backgroundColor);
 }
 
 void display_stability() {
-  GFXcanvas16 compass_value_canvas(112, 32);
-  compass_value_canvas.fillScreen(HX8357_BLACK);
-  compass_value_canvas.setTextColor(HX8357_YELLOW);
+  GFXcanvas1 compass_value_canvas(112, 32);
+  uint16_t foregroundColor = HX8357_YELLOW;
+  uint16_t backgroundColor = HX8357_BLACK;
+  compass_value_canvas.fillScreen(0); // Background index
+
+  compass_value_canvas.setTextColor(1); // Foreground index
   compass_value_canvas.setFont(&FreeSansBold12pt7b);
   compass_value_canvas.setCursor(0, 29);
   if (autoPilot.isConnected()) {
@@ -279,35 +296,33 @@ void display_stability() {
   } else {
     compass_value_canvas.print("");
   }
-  tft.drawRGBBitmap(20, 279, compass_value_canvas.getBuffer(), 112, 32);
+  tft.drawBitmap(20, 279, compass_value_canvas.getBuffer(), 112, 32, foregroundColor, backgroundColor);
 }
 void display_mode() {
-  GFXcanvas16 mode_value_canvas(115, 24);
-  mode_value_canvas.fillScreen(HX8357_BLACK);
+  GFXcanvas1 mode_value_canvas(115, 24);
+  uint16_t foregroundColor = 0xF57F;
+  uint16_t backgroundColor = HX8357_BLACK;
+  mode_value_canvas.fillScreen(0); // Background index
+
+  mode_value_canvas.setTextColor(1); // Foreground index
+  mode_value_canvas.setFont(&FreeSansBold12pt7b);
+
   if (autoPilot.isNavigationEnabled()) {
     if (autoPilot.getMode() == 2) {
-      mode_value_canvas.setTextColor(0xF57F);
-      mode_value_canvas.setFont(&FreeSansBold12pt7b);
       mode_value_canvas.setCursor(5, 18);
       mode_value_canvas.print("waypoint");
     } else if (autoPilot.getMode() == 1) {
-      mode_value_canvas.setTextColor(0xF57F);
-      mode_value_canvas.setFont(&FreeSansBold12pt7b);
       mode_value_canvas.setCursor(0, 18);
       mode_value_canvas.print("compass");
     } else {
-      mode_value_canvas.setTextColor(0xF57F);
-      mode_value_canvas.setFont(&FreeSansBold12pt7b);
       mode_value_canvas.setCursor(8, 18);
       mode_value_canvas.print("none");
     }
   } else {
-    mode_value_canvas.setTextColor(0xF57F);
-    mode_value_canvas.setFont(&FreeSansBold12pt7b);
     mode_value_canvas.setCursor(0, 18);
-    mode_value_canvas.print("disbled");
+    mode_value_canvas.print("disabled"); // Fixed typo
   }
-  tft.drawRGBBitmap(185, 20, mode_value_canvas.getBuffer(), 115, 24);
+  tft.drawBitmap(185, 20, mode_value_canvas.getBuffer(), 115, 24, foregroundColor, backgroundColor);
 }
 
 void display_destination() {
@@ -339,98 +354,125 @@ void display_destination() {
 }
 
 void display_bearing() {
-  GFXcanvas16 bearing_value_canvas(115, 42);
+  GFXcanvas1 bearing_value_canvas(115, 42);
+  uint16_t foregroundColor = 0xFC09;
+  uint16_t backgroundColor = HX8357_BLACK;
+  bearing_value_canvas.fillScreen(0); // Background index
+
   if (autoPilot.getMode() > 0) {
-    bearing_value_canvas.fillScreen(HX8357_BLACK);
     bearing_value_canvas.setFont(&FreeSansBold18pt7b);
-    bearing_value_canvas.setTextColor(0xFC09);
+    bearing_value_canvas.setTextColor(1); // Foreground index
     bearing_value_canvas.setCursor(0, 29);
     bearing_value_canvas.print(autoPilot.getBearing(), 1);
   }
-  tft.drawRGBBitmap(182, 130, bearing_value_canvas.getBuffer(), 115, 42);
+  // If mode is not > 0, canvas is cleared and drawn as such (effectively black)
+  tft.drawBitmap(182, 130, bearing_value_canvas.getBuffer(), 115, 42, foregroundColor, backgroundColor);
 }
 
 void display_bearing_correction() {
-  GFXcanvas16 bearing_correction_value_canvas(115, 32);
+  GFXcanvas1 bearing_correction_value_canvas(115, 32);
+  uint16_t foregroundColor = 0xFC09;
+  uint16_t backgroundColor = HX8357_BLACK;
+  bearing_correction_value_canvas.fillScreen(0); // Background index
+
   if (autoPilot.getMode() > 0) {
-    bearing_correction_value_canvas.fillScreen(HX8357_BLACK);
-    bearing_correction_value_canvas.setTextColor(0xFC09);
+    bearing_correction_value_canvas.setTextColor(1); // Foreground index
     bearing_correction_value_canvas.setFont(&FreeSansBold18pt7b);
     bearing_correction_value_canvas.setCursor(0, 29);
     bearing_correction_value_canvas.print((autoPilot.getBearingCorrection() > 0) ? autoPilot.getBearingCorrection() : autoPilot.getBearingCorrection() * -1.0, 1);
     bearing_correction_value_canvas.println((autoPilot.getBearingCorrection() > 0) ? " R" : " L");
   }
-  tft.drawRGBBitmap(187, 169, bearing_correction_value_canvas.getBuffer(), 115, 32);
+  // If mode is not > 0, canvas is cleared and drawn as such (effectively black)
+  tft.drawBitmap(187, 169, bearing_correction_value_canvas.getBuffer(), 115, 32, foregroundColor, backgroundColor);
 }
 
 void display_volts() {
-  GFXcanvas16 volts_value_canvas(120, 22);
-  volts_value_canvas.fillScreen(HX8357_BLACK);
-  volts_value_canvas.setTextColor(HX8357_WHITE);
+  GFXcanvas1 volts_value_canvas(120, 22);
+  uint16_t foregroundColor = HX8357_WHITE;
+  uint16_t backgroundColor = HX8357_BLACK;
+  volts_value_canvas.fillScreen(0); // Background index
+
+  volts_value_canvas.setTextColor(1); // Foreground index
   volts_value_canvas.setFont(&FreeSansBold12pt7b);
   volts_value_canvas.setCursor(0, 18);
   volts_value_canvas.print(autoPilot.getBatteryVoltage(), 2);
   volts_value_canvas.print(" / ");
   volts_value_canvas.println(autoPilot.getInputVoltage(), 1);
-  tft.drawRGBBitmap(181, 239, volts_value_canvas.getBuffer(), 120, 22);
+  tft.drawBitmap(181, 239, volts_value_canvas.getBuffer(), 120, 22, foregroundColor, backgroundColor);
 }
 
 void display_distance() {
-  GFXcanvas16 distance_value_canvas(90, 42);
-  distance_value_canvas.fillScreen(HX8357_BLACK);
-  distance_value_canvas.setTextColor(HX8357_CYAN);
+  GFXcanvas1 distance_value_canvas(90, 42);
+  uint16_t foregroundColor = HX8357_CYAN;
+  uint16_t backgroundColor = HX8357_BLACK;
+  distance_value_canvas.fillScreen(0); // Background index
+
+  distance_value_canvas.setTextColor(1); // Foreground index
   distance_value_canvas.setFont(&FreeSansBold24pt7b);
   distance_value_canvas.setCursor(0, 37);
   if (autoPilot.isWaypointSet() && autoPilot.hasFix()) {
     distance_value_canvas.print(autoPilot.getDistance(), 2);
   } else {
-    distance_value_canvas.print("");
+    distance_value_canvas.print(""); // Will be drawn with foregroundColor on backgroundColor
   }
-  tft.drawRGBBitmap(341, 23, distance_value_canvas.getBuffer(), 90, 42);
+  tft.drawBitmap(341, 23, distance_value_canvas.getBuffer(), 90, 42, foregroundColor, backgroundColor);
 }
 
 void display_course() {
-  GFXcanvas16 course_value_canvas(115, 42);
+  GFXcanvas1 course_value_canvas(115, 42);
+  uint16_t foregroundColor = 0x7FE8;
+  uint16_t backgroundColor = HX8357_BLACK;
+  course_value_canvas.fillScreen(0); // Background index
+
   if (autoPilot.hasFix()) {
-    course_value_canvas.fillScreen(HX8357_BLACK);
-    course_value_canvas.setTextColor(0x7FE8);
+    course_value_canvas.setTextColor(1); // Foreground index
     course_value_canvas.setFont(&FreeSansBold24pt7b);
     course_value_canvas.setCursor(0, 40);
     course_value_canvas.print(autoPilot.getCourse(), 1);
   }
-  tft.drawRGBBitmap(341, 113, course_value_canvas.getBuffer(), 115, 42);
+  // If no fix, canvas is cleared and drawn as such
+  tft.drawBitmap(341, 113, course_value_canvas.getBuffer(), 115, 42, foregroundColor, backgroundColor);
 }
 
 void display_location_lat() {
-  GFXcanvas16 location_lat_value_canvas(115, 22);
-  if (autoPilot.hasFix()) {
+  GFXcanvas1 location_lat_value_canvas(115, 22);
+  uint16_t foregroundColor = 0x7FE8;
+  uint16_t backgroundColor = HX8357_BLACK;
+  location_lat_value_canvas.fillScreen(0); // Background index
 
-    location_lat_value_canvas.fillScreen(HX8357_BLACK);
-    location_lat_value_canvas.setTextColor(0x7FE8);
+  if (autoPilot.hasFix()) {
+    location_lat_value_canvas.setTextColor(1); // Foreground index
     location_lat_value_canvas.setFont(&FreeSansBold12pt7b);
     location_lat_value_canvas.setCursor(0, 18);
     location_lat_value_canvas.print(autoPilot.getLocationLat(), 6);
   }
-  tft.drawRGBBitmap(354, 200, location_lat_value_canvas.getBuffer(), 115, 22);
+  // If no fix, canvas is cleared and drawn as such
+  tft.drawBitmap(354, 200, location_lat_value_canvas.getBuffer(), 115, 22, foregroundColor, backgroundColor);
 }
 
 void display_location_lon() {
-  GFXcanvas16 location_lon_value_canvas(139, 22);
-  if (autoPilot.hasFix()) {
+  GFXcanvas1 location_lon_value_canvas(139, 22);
+  uint16_t foregroundColor = 0x7FE8;
+  uint16_t backgroundColor = HX8357_BLACK;
+  location_lon_value_canvas.fillScreen(0); // Background index
 
-    location_lon_value_canvas.fillScreen(HX8357_BLACK);
-    location_lon_value_canvas.setTextColor(0x7FE8);
+  if (autoPilot.hasFix()) {
+    location_lon_value_canvas.setTextColor(1); // Foreground index
     location_lon_value_canvas.setFont(&FreeSansBold12pt7b);
     location_lon_value_canvas.setCursor(0, 18);
     location_lon_value_canvas.print(autoPilot.getLocationLon(), 6);
   }
-  tft.drawRGBBitmap(331, 230, location_lon_value_canvas.getBuffer(), 139, 22);
+  // If no fix, canvas is cleared and drawn as such
+  tft.drawBitmap(331, 230, location_lon_value_canvas.getBuffer(), 139, 22, foregroundColor, backgroundColor);
 }
 
 void display_datetime() {
-  GFXcanvas16 date_time_value_canvas(165, 22);
-  date_time_value_canvas.fillScreen(HX8357_BLACK);
-  date_time_value_canvas.setTextColor(HX8357_WHITE);
+  GFXcanvas1 date_time_value_canvas(165, 22);
+  uint16_t foregroundColor = HX8357_WHITE;
+  uint16_t backgroundColor = HX8357_BLACK;
+  date_time_value_canvas.fillScreen(0); // Background index
+
+  date_time_value_canvas.setTextColor(1); // Foreground index
   date_time_value_canvas.setFont(&FreeSansBold12pt7b);
   date_time_value_canvas.setCursor(0, 18);
   if (autoPilot.hasFix()) {
@@ -440,13 +482,16 @@ void display_datetime() {
   } else {
     date_time_value_canvas.print("");
   }
-  tft.drawRGBBitmap(181, 293, date_time_value_canvas.getBuffer(), 165, 22);
+  tft.drawBitmap(181, 293, date_time_value_canvas.getBuffer(), 165, 22, foregroundColor, backgroundColor);
 }
 
 void display_fix() {
-  GFXcanvas16 gps_fix_value_canvas(110, 22);
-  gps_fix_value_canvas.fillScreen(HX8357_BLACK);
-  gps_fix_value_canvas.setTextColor(HX8357_WHITE);
+  GFXcanvas1 gps_fix_value_canvas(110, 22);
+  uint16_t foregroundColor = HX8357_WHITE;
+  uint16_t backgroundColor = HX8357_BLACK;
+  gps_fix_value_canvas.fillScreen(0); // Background index
+
+  gps_fix_value_canvas.setTextColor(1); // Foreground index
   gps_fix_value_canvas.setFont(&FreeSansBold12pt7b);
   gps_fix_value_canvas.setCursor(0, 18);
   if (autoPilot.hasFix()) {
@@ -464,8 +509,8 @@ void display_fix() {
     gps_fix_value_canvas.print(autoPilot.getSatellites());
     gps_fix_value_canvas.print(")");
   }
-
-  tft.drawRGBBitmap(360, 293, gps_fix_value_canvas.getBuffer(), 110, 22);
+  // If no fix, canvas is cleared and drawn as such
+  tft.drawBitmap(360, 293, gps_fix_value_canvas.getBuffer(), 110, 22, foregroundColor, backgroundColor);
 }
 
 void initialize_display() {
