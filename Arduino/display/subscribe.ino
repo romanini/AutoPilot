@@ -35,7 +35,7 @@ void check_subscription() {
   if (!receiveTimeout && (lastReceiveTime < millis() - LAST_RECEIVE_MAX_TIME)) {
     receiveTimeout = true;
     autoPilot.init();
-    autoPilot.setMode(-1);
+    autoPilot.setConnected(false);
   }
   if (receiveTimeout && (lastConnect < millis() - RECONNECT_INTERVAL )) {
     Serial.println("UDP receive timeout and reconnect interval reached. Attempting to restore connection.");
@@ -43,7 +43,6 @@ void check_subscription() {
 
     if (ensure_wifi_connected()) {
       Serial.println("WiFi connection confirmed/re-established. Resetting UDP.");
-      udp.stop();
       setup_subscribe(); // This calls udp.begin()
       // Optionally, reset receiveTimeout to give UDP a fresh chance immediately,
       // or let it be set by the normal packet handling logic.

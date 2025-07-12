@@ -38,7 +38,7 @@ void AutoPilot::init() {
   heading_desired = 0.0;
   heading = 0.0;
   pitch = 0.0;
-  roll = 0.0;  
+  roll = 0.0;
   bearing = 0.0;
   bearing_correction = 0.0;
   speed = 0.0;
@@ -47,6 +47,7 @@ void AutoPilot::init() {
   location_lat = 0.0;
   location_lon = 0.0;
   destinationChanged = true;
+  modeChanged = true;
   reset = false;
   connected = false;
   tackRequested = 0;
@@ -126,7 +127,6 @@ float AutoPilot::getRoll() {
 
 int AutoPilot::getStabilityClassification() {
   return this->stability_classification;
-
 }
 
 float AutoPilot::getBearing() {
@@ -160,6 +160,12 @@ float AutoPilot::getLocationLon() {
 bool AutoPilot::hasDestinationChanged() {
   bool retval = this->destinationChanged;
   this->destinationChanged = false;
+  return retval;
+}
+
+bool AutoPilot::hasModeChanged() {
+  bool retval = this->modeChanged;
+  this->modeChanged = false;
   return retval;
 }
 
@@ -208,6 +214,10 @@ bool AutoPilot::isConnected() {
 }
 
 void AutoPilot::setConnected(bool connected) {
+  if (this->connected != connected) {
+    this->modeChanged = true;
+    this->destinationChanged = true;
+  }
   this->connected = connected;
 }
 
@@ -217,10 +227,12 @@ unsigned long AutoPilot::getTackRequested() {
 
 void AutoPilot::setTackRequested(unsigned long time) {
   this->tackRequested = time;
+  this->modeChanged = true;
 }
 
-void AutoPilot::resetTackRequested() {
+void AutoPilot::cancelTackRequested() {
   this->tackRequested = 0;
+  this->modeChanged = true;
 }
 
 bool AutoPilot::isTackRequested() {
@@ -376,16 +388,21 @@ void AutoPilot::parseAPDAT(char *sentence) {
   } else {
     this->navigation_enabled = false;
   }
+  if (currentNavigationEnabled != this->navigation_enabled) {
+    this->destinationChanged = true;
+    this->modeChanged = true;
+  }
 
   p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
   int currentMode = this->mode;
   if (!isEmpty(p)) {
     this->mode = atoi(p);
   } else {
-    this->mode = 0;
+    this->mode = 1;
   }
   if (currentMode != this->mode) {
     this->destinationChanged = true;
+    this->modeChanged = true;
   }
 
   p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
