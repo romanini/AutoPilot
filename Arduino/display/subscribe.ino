@@ -32,9 +32,11 @@ void check_subscription() {
   if (!receiveTimeout && (lastReceiveTime < millis() - LAST_RECEIVE_MAX_TIME)) {
     receiveTimeout = true;
     autoPilot.init();
-    autoPilot.setMode(-1);
+    autoPilot.setConnected(false);
   }
   if (receiveTimeout && (lastConnect < millis() - RECONNECT_INTERVAL )) {
+    DEBUG_PRINTLN("Attempting to reconnect");
+    setup_wifi();
     udp.stop();
     setup_subscribe();
   }
