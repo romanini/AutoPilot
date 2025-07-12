@@ -7,6 +7,9 @@
 #error "Unsupported board type. Please use Arduino Nano 33 IoT or Arduino Nano ESP32."
 #endif
 
+// Forward declaration for the function in wifi.ino
+bool ensure_wifi_connected();
+
 #define DATA_SIZE 300
 #define LAST_RECEIVE_MAX_TIME 10000
 #define RECONNECT_INTERVAL 30000
@@ -35,8 +38,21 @@ void check_subscription() {
     autoPilot.setMode(-1);
   }
   if (receiveTimeout && (lastConnect < millis() - RECONNECT_INTERVAL )) {
-    udp.stop();
-    setup_subscribe();
+    Serial.println("UDP receive timeout and reconnect interval reached. Attempting to restore connection.");
+    lastConnect = millis(); // Update lastConnect time immediately to prevent rapid retries
+
+    if (ensure_wifi_connected()) {
+      Serial.println("WiFi connection confirmed/re-established. Resetting UDP.");
+      udp.stop();
+      setup_subscribe(); // This calls udp.begin()
+      // Optionally, reset receiveTimeout to give UDP a fresh chance immediately,
+      // or let it be set by the normal packet handling logic.
+      // receiveTimeout = false;
+      // lastReceiveTime = millis(); // If resetting receiveTimeout
+    } else {
+      Serial.println("Failed to re-establish WiFi connection. Will retry later.");
+      // No need to try UDP setup if WiFi is down.
+    }
   }
   if (packetSize) {
     //DEBUG_PRINT("Received packet: ");
