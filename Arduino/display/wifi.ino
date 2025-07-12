@@ -17,51 +17,23 @@ char pass[] = SECRET_PASS;  // your network password (use for WPA, or use as key
 
 int wifi_status = WL_IDLE_STATUS;
 
+void connect_wifi(int retries) {
+
+
 void setup_wifi() {
-  Serial.print("Using ");
-  Serial.println(WIFI_LIB_NAME);
-
-#if defined(ARDUINO_ARCH_SAMD)
-  // check for the WiFi module:
-  if (WiFi.status() == WL_NO_MODULE) {
-    Serial.println("Communication with WiFi module failed!");
-    // don't continue
-    while (true)
-      ;
+  if (!connect_wifi(10)) {
+    autoPilot.setConnected(false);
   }
-
-  String fv = WiFi.firmwareVersion();
-  if (fv < WIFI_FIRMWARE_LATEST_VERSION) {
-    Serial.println("Please upgrade the firmware");
-  }
-
-  // attempt to connect to WiFi network:
-  while (wifi_status != WL_CONNECTED) {
-    Serial.print("Attempting to connect to SSID: ");
-    Serial.println(ssid);
-    // Connect to WPA/WPA2 network. Change this line if using open or WEP network:
-    wifi_status = WiFi.begin(ssid, pass);
-    // wait 10 seconds for connection:
-    delay(5000);
-  }
-#elif defined(ARDUINO_ARCH_ESP32)  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
-  Serial.print("Attempting to connect to SSID: ");
-  Serial.println(ssid);
-  // Connect to WPA/WPA2 network. Change this line if using open or WEP network:
-  wifi_status = WiFi.begin(ssid, pass);
-
-  // attempt to connect to WiFi network:
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-
-  }
-#endif
   // you're connected now, so print out the status:
   print_wifi_status();
 }
 
 // Function to ensure WiFi is connected. Returns true if connected, false otherwise.
 bool ensure_wifi_connected() {
+  connect_wifi(5);
+}
+
+bool connect_wifi(int maxRetries) {
   Serial.println("Ensuring WiFi connection...");
 #if defined(ARDUINO_ARCH_SAMD)
   if (WiFi.status() == WL_CONNECTED) {
@@ -75,7 +47,6 @@ bool ensure_wifi_connected() {
   delay(500); // Wait for disconnection to complete
 
   // Attempt to connect for a certain number of retries
-  const int maxRetries = 5; // Or a time-based approach
   for (int retry = 0; retry < maxRetries; ++retry) {
     Serial.print("Attempting to connect to SSID: ");
     Serial.println(ssid);
