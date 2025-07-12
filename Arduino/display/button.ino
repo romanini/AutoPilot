@@ -7,7 +7,7 @@
 #define ADJUSTMENT_AMOUNT_SHORT 1.0
 #define ADJUSTMENT_AMOUNT_LONG 10.0
 #define ADJUSTMENT_AMOUNT_TACK 90.0
-#define TACK_REQUEST_TIMEOUT 5000
+#define TACK_REQUEST_TIMEOUT 30000
 
 #define PORT_ADJUST_BUTTON_PIN 3
 #define STARBORD_ADJUST_BUTTON_PIN 2
@@ -161,6 +161,10 @@ void button_release(int pin) {
         adjust_heading(adjustment);
         DEBUG_PRINT("Port Adjust ");
         DEBUG_PRINTLN(adjustment);
+        if (autoPilot.isTackRequested()) {
+          DEBUG_PRINTLN("Clearing Tack");
+          autoPilot.cancelTackRequested();
+        }
       }
       break;
     case STARBORD_ADJUST_BUTTON_PIN:
@@ -172,6 +176,9 @@ void button_release(int pin) {
         adjust_heading(adjustment);
         DEBUG_PRINT("Starbord Adjust ");
         DEBUG_PRINTLN(adjustment);
+        if (autoPilot.isTackRequested()) {
+          autoPilot.cancelTackRequested();
+        }
       }
       break;
     case NAVIGATION_DISABLE_BUTTON_PIN:
@@ -182,6 +189,9 @@ void button_release(int pin) {
         set_navigation(1);
         DEBUG_PRINTLN("Enabling Navigation");
       }
+      if (autoPilot.isTackRequested()) {
+        autoPilot.cancelTackRequested();
+      }
       DEBUG_PRINTLN("Navigation on/off Button Pressed");
       break;
     case MODE_BUTTON_PIN:
@@ -189,19 +199,26 @@ void button_release(int pin) {
         if (autoPilot.isWaypointSet()) {
           set_mode(2);
           DEBUG_PRINTLN("GPS Mode");
-        } 
+        }
       } else if (autoPilot.getMode() == 2) {
         set_mode(1);
         DEBUG_PRINTLN("Compass Mode");
       }
+      if (autoPilot.isTackRequested()) {
+        autoPilot.cancelTackRequested();
+      }
       DEBUG_PRINTLN("Mode Button Pressed");
       break;
     case TACK_BUTTON_PIN:
+      unsigned long tr = autoPilot.getTackRequested();
+      bool itr = autoPilot.isTackRequested();
       DEBUG_PRINT("Tack Request time ");
-      DEBUG_PRINTLN(autoPilot.getTackRequested());
+      DEBUG_PRINTLN(tr);
       DEBUG_PRINT("isTackRequested() ");
-      DEBUG_PRINTLN(autoPilot.isTackRequested());
-      if (!autoPilot.isTackRequested()) {
+      DEBUG_PRINTLN(itr);
+      if (autoPilot.isTackRequested()) {
+        autoPilot.cancelTackRequested();
+      } else {
         // if we are navigating towards a waypoint but we request a tack switch to compass mode
         // so that we can adjust the heading by 90 degrees
         if (autoPilot.getMode() == 2) {
@@ -215,13 +232,6 @@ void button_release(int pin) {
       }
       DEBUG_PRINTLN("Tack Button Pressed");
       break;
-  }
-
-    // if tack is requested and a button has been pressed you reset tack requesed either because the new button pressed is port of starbord
-  // in which case you are executing the tack, or because you are changing mode or disableing which cancels the tack or it is the tack button which also
-  // cancels the tack.
-  if (autoPilot.isTackRequested()) {
-    autoPilot.cancelTackRequested();
   }
 }
 

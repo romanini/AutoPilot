@@ -62,6 +62,7 @@ private:
   float location_lat;   // current latitude
   float location_lon;  // current longitude
   bool destinationChanged;
+  bool modeChanged;
   unsigned long tackRequested;
   float battery_voltage;
   int battery_voltage_average_size;
@@ -107,6 +108,7 @@ public:
   float getLocationLat();
   float getLocationLon();
   bool hasDestinationChanged();
+  bool hasModeChanged();
   float getBatteryVoltage();
   void setBatteryVoltage(float voltage);
   float getInputVoltage();

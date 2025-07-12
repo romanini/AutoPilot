@@ -133,7 +133,7 @@ void initialize_refresh_rates() {
 // effectively time-slice the display() function by having it refresh a small part of the display each time.  For the distination we special case
 // that one since it changes so infrequently that we only refresh it when it changes.
 void display() {
-  if ((autoPilot.getMode() != autoPilotMode) || (autoPilot.isNavigationEnabled() != isEnabled)) {
+  if (autoPilot.hasModeChanged()) {
     autoPilotMode = autoPilot.getMode();
     isEnabled = autoPilot.isNavigationEnabled();
     DEBUG_PRINTLN("display Mode ");
@@ -225,8 +225,6 @@ void display_heading() {
   compass_value_canvas.setCursor(0, 29);
   if (autoPilot.isConnected()) {
     compass_value_canvas.print(autoPilot.getHeading());
-  } else {
-    compass_value_canvas.print("");  // This will print with foreground color on background
   }
   tft.drawBitmap(20, 101, compass_value_canvas.getBuffer(), 107, 32, foregroundColor, backgroundColor);
 }
@@ -241,8 +239,6 @@ void display_pitch() {
   compass_value_canvas.setCursor(0, 29);
   if (autoPilot.isConnected()) {
     compass_value_canvas.print(autoPilot.getPitch());
-  } else {
-    compass_value_canvas.print("");
   }
   tft.drawBitmap(20, 158, compass_value_canvas.getBuffer(), 107, 32, foregroundColor, backgroundColor);
 }
@@ -257,8 +253,6 @@ void display_roll() {
   compass_value_canvas.setCursor(0, 29);
   if (autoPilot.isConnected()) {
     compass_value_canvas.print(autoPilot.getRoll());
-  } else {
-    compass_value_canvas.print("");
   }
   tft.drawBitmap(20, 217, compass_value_canvas.getBuffer(), 107, 32, foregroundColor, backgroundColor);
 }
@@ -289,8 +283,6 @@ void display_stability() {
         compass_value_canvas.print("In Motion");
         break;
     }
-  } else {
-    compass_value_canvas.print("");
   }
   tft.drawBitmap(20, 279, compass_value_canvas.getBuffer(), 112, 32, foregroundColor, backgroundColor);
 }
@@ -302,22 +294,27 @@ void display_mode() {
   mode_value_canvas.setTextColor(1);  // Foreground index
   mode_value_canvas.setFont(&FreeSansBold12pt7b);
 
-  if (autoPilot.isNavigationEnabled()) {
-    if (autoPilot.isTackRequested()) {
+  if (!autoPilot.isConnected()) {
       mode_value_canvas.setCursor(0, 18);
-      mode_value_canvas.print("ready to tack");
-    } else {
-      if (autoPilot.getMode() == 2) {
-        mode_value_canvas.setCursor(5, 18);
-        mode_value_canvas.print("waypoint");
-      } else if (autoPilot.getMode() == 1) {
-        mode_value_canvas.setCursor(0, 18);
-        mode_value_canvas.print("compass");
-      }
-    }
+      mode_value_canvas.print("no link");    
   } else {
-    mode_value_canvas.setCursor(0, 18);
-    mode_value_canvas.print("disabled");  // Fixed typo
+    if (autoPilot.isNavigationEnabled()) {
+      if (autoPilot.isTackRequested()) {
+        mode_value_canvas.setCursor(0, 18);
+        mode_value_canvas.print("<- tack ->");
+      } else {
+        if (autoPilot.getMode() == 2) {
+          mode_value_canvas.setCursor(5, 18);
+          mode_value_canvas.print("waypoint");
+        } else if (autoPilot.getMode() == 1) {
+          mode_value_canvas.setCursor(0, 18);
+          mode_value_canvas.print("compass");
+        }
+      }
+    } else {
+      mode_value_canvas.setCursor(0, 18);
+      mode_value_canvas.print("disabled");
+    }
   }
   tft.drawBitmap(185, 20, mode_value_canvas.getBuffer(), 115, 24, foregroundColor, backgroundColor);
 }
