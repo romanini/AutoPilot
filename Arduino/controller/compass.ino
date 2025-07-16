@@ -39,6 +39,11 @@ void setup_compass(void) {
   }
   setReports();
 
+  // get the initial compass reading 
+  check_compass();
+  // we start in compass mode
+  autoPilot.setMode(1);
+
   Serial.println("Compass all setup");
   delay(100);
 }

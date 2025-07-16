@@ -78,7 +78,7 @@ void control_task(void *pvParameters) {
     cur_mills = millis();
     check_compass();
 
-    if (autoPilot.getMode() > 0) {
+    if (autoPilot.isNavigationEndabled()) {
       if (autoPilot.getMode() == 1) {
         input = autoPilot.getHeading();
       } else {

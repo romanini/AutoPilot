@@ -39,7 +39,7 @@ AutoPilot::AutoPilot(SerialType* ser) {
   fixquality = 0;
   satellites = 0;
 
-  navigation_enabled = true;
+  navigation_enabled = false;
   mode = 0;
   heading_desired = 0.0;
   bearing = 0.0;
@@ -201,9 +201,6 @@ int AutoPilot::setMode(int mode) {
     }
     this->modeChanged = true;
     this->destinationChanged = true;
-    if (this->mode > 0) {
-      this->setNavigationEnabled(true);
-    }
     retval = 0;
   }
   this->unlock();

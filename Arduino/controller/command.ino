@@ -74,7 +74,7 @@ void process_navigation(CustomClientType& client, char buffer[]) {
 
 void process_mode(CustomClientType& client, char buffer[]) {
   int new_mode = atoi(&buffer[1]);
-  if (new_mode >= 0 && new_mode <= 2) {
+  if (new_mode >= 1 && new_mode <= 2) {
     int ret = autoPilot.setMode(new_mode);
     DEBUG_PRINT("set mode ");
     DEBUG_PRINT(new_mode);
