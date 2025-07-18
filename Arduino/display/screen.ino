@@ -40,7 +40,11 @@ void setup_screen() {
 #if defined(ARDUINO_ARCH_ESP32)  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
   vspi = new SPIClass(FSPI);
   vspi->begin(VSPI_SCLK, VSPI_MISO, VSPI_MOSI, VSPI_SS);  //SCLK, MISO, MOSI, SS
-  Adafruit_HX8357 tft = Adafruit_HX8357(vspi, TFT_CS, TFT_DC, TFT_RST);
+  Serial.print("Using VSPI MISO: "); Serial.println(VSPI_MISO);
+  Serial.print("Using VSPI MOSI: "); Serial.println(VSPI_MOSI);
+  Serial.print("Using VSPI SCLK: "); Serial.println(VSPI_SCLK);
+  Serial.print("Using VSPI SS: "); Serial.println(VSPI_SS);
+  tft = Adafruit_HX8357(vspi, TFT_CS, TFT_DC, TFT_RST);
 #endif
 
   Serial.println("Setting up Display");
