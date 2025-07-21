@@ -188,7 +188,7 @@ void process_waypoint(CustomClientType& client, char buffer[]) {
 void process_help(CustomClientType& client) {
   client.println("Possible commands:\n");
   client.println("\ta<heading offset> \t- Adjust heading to be <heading offset> from current heading.");
-  client.println("\tm<0|1|2> \t\t- Set the current mode 0 = off, 1 = compass, 2 = waypoint.");
+  client.println("\tm<0|1|2> \t\t- Set the current 1 = compass, 2 = waypoint.");
   client.println("\tn<0|1> \t\t- Navigation 0 = off, 1 = on");
   client.println("\tp \t\t\t- Print current auto pilot status.");
   client.println("\tq \t\t\t- Quit the current session.");

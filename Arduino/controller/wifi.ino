@@ -21,18 +21,21 @@ void setup_wifi() {
   Serial.print("Using ");
   Serial.println(WIFI_LIB_NAME);
 
+  WiFi.softAPConfig(ip, gateway, subnet);
+  WiFi.mode(WIFI_MODE_APSTA);
 
-//  WiFi.config(ip, dns, gateway, subnet);
-    WiFi.softAPConfig(ip, gateway, subnet);
-//  WiFi.mode(WIFI_STA);
+  // start the Soft‑AP
+  Serial.print("Starting SoftAP ...");
+  if (!WiFi.softAP(ssid, pass)) {
+    Serial.print(".");
+    while(true) { delay(1000); }
+  }
+  Serial.println(WiFi.softAPSSID());
 
   Serial.print("Attempting to connect to SSID: ");
   Serial.println(ssid);
   // Connect to WPA/WPA2 network. Change this line if using open or WEP network:
   wifi_status = WiFi.begin(ssid, pass);
-//  wifi_status = WiFi.softAP(ssid, pass);
-  // attempt to connect to WiFi network:
-  // while (WiFi.status() != WL_CONNECTED) {
   while (!wifi_status) {
     delay(500);
   }

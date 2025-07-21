@@ -19,10 +19,10 @@ int display_refresh_rate[DISPLAY_SEGMENTS];
 
 #if defined(ARDUINO_ARCH_ESP32)  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
 SPIClass* vspi = NULL;
-#define VSPI_MISO 12
-#define VSPI_MOSI 11
+#define VSPI_MISO 11
+#define VSPI_MOSI 12
 #define VSPI_SCLK 13
-#define VSPI_SS SS
+#define VSPI_SS 10
 #endif
 
 int autoPilotMode = 0;
