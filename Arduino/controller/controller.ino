@@ -48,6 +48,7 @@ void setup() {
   setup_motor();
   setup_compass();
   setup_gps();
+  setup_garmin();
   setup_led();
   setup_motor();
   setup_pid();
@@ -105,6 +106,7 @@ void command_task(void *pvParameters) {
   for (;;) {  // A Task shall never return or exit.
     check_command();
     check_gps();
+    check_garmin();
     check_led();
     publish_APDAT();
     vTaskDelay(100 / portTICK_PERIOD_MS);

@@ -79,28 +79,31 @@ void update_tack() {
 }
 
 void button_pressed(int pin) {
-  switch (button_pins[pin]) {
-    case PORT_ADJUST_BUTTON_PIN:
-    case STARBORD_ADJUST_BUTTON_PIN:
-    case TACK_BUTTON_PIN:
-      // no action if we are in mode = 0 or disabled navigation
-      if (autoPilot.getMode() == 0 || !autoPilot.isNavigationEnabled()) {
-        // the button press didn't happen
-        return;
-      }
-      break;
-    case MODE_BUTTON_PIN:
-      // no action if navigation is disabled
-      if (!autoPilot.isNavigationEnabled()) {
-        // the button press didn't happen
-        return;
-      }
-      break;
+  // if we are not connected then buttons are useless
+  if (autoPilot.isConnected()) {
+    switch (button_pins[pin]) {
+      case PORT_ADJUST_BUTTON_PIN:
+      case STARBORD_ADJUST_BUTTON_PIN:
+      case TACK_BUTTON_PIN:
+        // no action if we are in mode = 0 or disabled navigation
+        if (autoPilot.getMode() == 0 || !autoPilot.isNavigationEnabled()) {
+          // the button press didn't happen
+          return;
+        }
+        break;
+      case MODE_BUTTON_PIN:
+        // no action if navigation is disabled
+        if (!autoPilot.isNavigationEnabled()) {
+          // the button press didn't happen
+          return;
+        }
+        break;
+    }
+    button_press_times[pin] = millis();
+    button_pressed_states[pin] = true;
+    DEBUG_PRINT("Button Released ");
+    DEBUG_PRINTLN(pin);
   }
-  button_press_times[pin] = millis();
-  button_pressed_states[pin] = true;
-  DEBUG_PRINT("Button Released ");
-  DEBUG_PRINTLN(pin);
 }
 
 void button_release(int pin) {
