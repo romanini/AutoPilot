@@ -16,9 +16,9 @@
 #define TACK_BUTTON_PIN 6
 
 #define BEEP_PIN 7
-#define BEEP_INTERVAL 50
-#define BEEP_HOLD_INTERVAL 100
-#define BEEP_TACK_INTERVAL 1000
+#define BEEP_INTERVAL 25
+#define BEEP_HOLD_INTERVAL 50
+#define BEEP_TACK_INTERVAL 500
 
 #define BUTTON_HOLD_TIME 1000
 
@@ -46,7 +46,7 @@ void setup_button() {
   }
 
   pinMode(BEEP_PIN, OUTPUT);
-  digitalWrite(BEEP_PIN, HIGH);
+  digitalWrite(BEEP_PIN, LOW);
 
   Serial.println("Button setup!");
 }
@@ -54,7 +54,7 @@ void setup_button() {
 void set_beep(unsigned long duration) {
   beep_on_time = millis();
   beep_off_time = beep_on_time + duration;
-  beep_state = LOW;
+  beep_state = HIGH;
   digitalWrite(BEEP_PIN, beep_state);
   DEBUG_PRINT("Set Beep on for ");
   DEBUG_PRINTLN(duration);
@@ -62,8 +62,8 @@ void set_beep(unsigned long duration) {
 
 void update_beep() {
   unsigned long currentTime = millis();
-  if (beep_state == LOW && currentTime >= beep_off_time) {
-    beep_state = HIGH;
+  if (beep_state == HIGH && currentTime >= beep_off_time) {
+    beep_state = LOW;
     digitalWrite(BEEP_PIN, beep_state);
     DEBUG_PRINTLN("Beep Off");
   }
@@ -133,24 +133,24 @@ void button_release(int pin) {
     } else {
       unsigned long pressDuration = button_release_times[pin] - button_press_times[pin];
       if (pressDuration < BUTTON_HOLD_TIME) {
-        // DEBUG_PRINT("Button ");
-        // DEBUG_PRINT(pin);
-        // DEBUG_PRINTLN(" Clicked");
-        // set_beep(BEEP_TACK_INTERVAL);
+        DEBUG_PRINT("Button ");
+        DEBUG_PRINT(pin);
+        DEBUG_PRINTLN(" Clicked");
+        set_beep(BEEP_INTERVAL);
         adjustment = ADJUSTMENT_AMOUNT_SHORT;
       } else {
-        // DEBUG_PRINT("Button ");
-        // DEBUG_PRINT(pin);
-        // DEBUG_PRINTLN(" Held");
-        // set_beep(BEEP_HOLD_INTERVAL);
+        DEBUG_PRINT("Button ");
+        DEBUG_PRINT(pin);
+        DEBUG_PRINTLN(" Held");
+        set_beep(BEEP_HOLD_INTERVAL);
         adjustment = ADJUSTMENT_AMOUNT_LONG;
       }
     }
   } else {
-    // DEBUG_PRINT("Button ");
-    // DEBUG_PRINT(pin);
-    // DEBUG_PRINTLN(" Clicked");
-    // set_beep(BEEP_INTERVAL);
+    DEBUG_PRINT("Button ");
+    DEBUG_PRINT(pin);
+    DEBUG_PRINTLN(" Clicked");
+    set_beep(BEEP_INTERVAL);
   }
 
   switch (button_pins[pin]) {
@@ -242,7 +242,6 @@ void check_button_press_diuration(int pin) {
   unsigned long press_duration = millis() - button_press_times[pin];
 
   if (button_pins[pin] == PORT_ADJUST_BUTTON_PIN || button_pins[pin] == STARBORD_ADJUST_BUTTON_PIN) {
-    // Note this looks a bit strange but beep_state == HIGH means it is NOT beeping becasue it is switched on negative pole.
     if (press_duration >= BUTTON_HOLD_TIME && !beep_long_triggered[pin]) {
       DEBUG_PRINT("Button ");
       DEBUG_PRINT(pin);
