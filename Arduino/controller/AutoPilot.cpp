@@ -221,6 +221,7 @@ void AutoPilot::setNavigationEnabled(bool enable) {
     if (this->mode == 1) {
       this->heading_desired = this->heading;
       this->bearing = this->heading_desired;
+      this->bearing_correction = 0;
     }
     this->destinationChanged = true;    
   } 
