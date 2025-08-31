@@ -59,7 +59,7 @@ void quaternionToEuler(float qr, float qi, float qj, float qk, euler_t* ypr) {
   ypr->pitch = asin(-2.0 * (qi * qk - qj * qr) / (sqi + sqj + sqk + sqr));
   ypr->roll = atan2(2.0 * (qj * qk + qi * qr), (-sqi - sqj + sqk + sqr));
 
-  ypr->yaw = fmod((ypr->yaw * RAD_TO_DEG) + 360, 360);
+  ypr->yaw = fmod(350-(ypr->yaw * RAD_TO_DEG) , 360);
   ypr->pitch = fmod((ypr->pitch * RAD_TO_DEG) + 360, 360);
   ypr->roll = fmod((ypr->roll * RAD_TO_DEG) + 360, 360);
 }
