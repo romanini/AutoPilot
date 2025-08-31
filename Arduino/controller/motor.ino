@@ -1,8 +1,8 @@
 
 #define MAX_MOTOR_PLUS 255
 #define MAX_MOTOR_NEG 255
-#define MOTOR_NEG_PIN D5
-#define MOTOR_PLUS_PIN D3
+#define MOTOR_NEG_PIN D3
+#define MOTOR_PLUS_PIN D5
 #define DIRECTION_POSITIVE "starbord"
 #define DIRECTION_NEGATIVE "port"
 #define MIN_DEGREE_ADJUST 0.5
