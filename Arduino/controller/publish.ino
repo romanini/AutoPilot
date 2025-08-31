@@ -54,7 +54,7 @@ void publish_APDAT() {
             autoPilot.getLocationLon()   //%.2f
     );
 
-    DEBUG_PRINTLN(serialzied_data);
+    //DEBUG_PRINTLN(serialzied_data);
 
     udpClient.broadcastTo(serialzied_data, BROADCAST_PORT);
     flash_led();

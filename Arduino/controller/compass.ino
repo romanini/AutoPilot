@@ -12,7 +12,7 @@ Adafruit_BNO08x bno08x(BNO08X_RESET);
 sh2_SensorValue_t sensorValue;
 
 void setReports(void) {
-  if (!bno08x.enableReport(SH2_GYRO_INTEGRATED_RV, 2000)) {
+  if (!bno08x.enableReport(SH2_ROTATION_VECTOR, 2000)) {
     Serial.println("Could not enable Gyro Integrated Rotation Vevtor");
   }
   if (!bno08x.enableReport(SH2_STABILITY_CLASSIFIER)) {
@@ -73,12 +73,12 @@ void check_compass() {
   if (bno08x.getSensorEvent(&sensorValue)) {
     // in this demo only one report type will be received depending on FAST_MODE define (above)
     switch (sensorValue.sensorId) {
-      case SH2_GYRO_INTEGRATED_RV:
+      case SH2_ROTATION_VECTOR:
         // faster (more noise?)
-        quaternionToEuler(sensorValue.un.gyroIntegratedRV.real,
-                          sensorValue.un.gyroIntegratedRV.i,
-                          sensorValue.un.gyroIntegratedRV.j,
-                          sensorValue.un.gyroIntegratedRV.k, &ypr);
+        quaternionToEuler(sensorValue.un.rotationVector.real,
+                          sensorValue.un.rotationVector.i,
+                          sensorValue.un.rotationVector.j,
+                          sensorValue.un.rotationVector.k, &ypr);
         autoPilot.setHeading(ypr.yaw);
         autoPilot.setPitch(ypr.pitch);
         autoPilot.setRoll(ypr.roll);
