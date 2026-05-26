@@ -9,20 +9,25 @@
 #include <TimeLib.h>
 
 // These are 'flexible' lines that can be changed
-#define TFT_CS 10
-#define TFT_DC 9
-#define TFT_RST 8  // RST can be set to -1 if you tie it to Arduino's reset
-#define DISPLAY_UPDATE_RATE 400
+#define TFT_CS D10
+#define TFT_DC D9
+#define TFT_RST -1  // RST can be set to -1 if you tie it to Arduino's reset
+#define DISPLAY_UPDATE_RATE 200
 #define DISPLAY_SEGMENTS 15
+
+#define SPI_MISO D12
+#define SPI_MOSI D11
+#define SPI_SCLK D13
+
+static constexpr uint32_t TFT_SPI_HZ = 24000000; // try 40 MHz; drop to 24 MHz if unstable
 
 int display_refresh_rate[DISPLAY_SEGMENTS];
 
 #if defined(ARDUINO_ARCH_ESP32)  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
-SPIClass* vspi = NULL;
-#define VSPI_MISO 11
-#define VSPI_MOSI 12
-#define VSPI_SCLK 13
-#define VSPI_SS 10
+Adafruit_HX8357 tft = Adafruit_HX8357(&SPI, TFT_CS, TFT_DC, TFT_RST);
+#else
+Adafruit_HX8357 tft = Adafruit_HX8357(TFT_CS, TFT_DC, TFT_RST);
+
 #endif
 
 int autoPilotMode = 0;
@@ -31,24 +36,23 @@ uint32_t display_refresh_timer[DISPLAY_SEGMENTS];
 int display_refresh_selector = 0;
 uint16_t backgroundColor = HX8357_BLACK;
 
-Adafruit_HX8357 tft = Adafruit_HX8357(TFT_CS, TFT_DC, TFT_RST);
 
 void setup_screen() {
   Serial.println("Starting Setup Display");
 
 // Use hardware SPI (on Uno, #13, #12, #11) and the above for CS/DC
 #if defined(ARDUINO_ARCH_ESP32)  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
-  vspi = new SPIClass(FSPI);
-  vspi->begin(VSPI_SCLK, VSPI_MISO, VSPI_MOSI, VSPI_SS);  //SCLK, MISO, MOSI, SS
-  Serial.print("Using VSPI MISO: "); Serial.println(VSPI_MISO);
-  Serial.print("Using VSPI MOSI: "); Serial.println(VSPI_MOSI);
-  Serial.print("Using VSPI SCLK: "); Serial.println(VSPI_SCLK);
-  Serial.print("Using VSPI SS: "); Serial.println(VSPI_SS);
-  tft = Adafruit_HX8357(vspi, TFT_CS, TFT_DC, TFT_RST);
+  // Control lines defaults
+  pinMode(TFT_CS, OUTPUT);   
+  digitalWrite(TFT_CS, HIGH);
+  pinMode(TFT_DC, OUTPUT);
+
+  SPI.begin(SPI_SCLK, SPI_MISO, SPI_MOSI, TFT_CS);  // SCK, MISO, MOSI, SS
 #endif
 
   Serial.println("Setting up Display");
-  tft.begin();
+  tft.begin(TFT_SPI_HZ);
+  delay(20);
   Serial.println("started");
 
   // read diagnostics (optional but can help debug problems)
@@ -84,10 +88,10 @@ void initialize_refresh_rates() {
   for (int i = 0; i < DISPLAY_SEGMENTS; i++) {
     switch (i) {
       case 0:  // speed
-        display_refresh_rate[i] = 750;
+        display_refresh_rate[i] = 200;
         break;
       case 1:  // heading
-        display_refresh_rate[i] = 400;
+        display_refresh_rate[i] = 200;
         break;
       case 2:  // pitch
         display_refresh_rate[i] = 400;
@@ -102,16 +106,16 @@ void initialize_refresh_rates() {
         display_refresh_rate[i] = 400;
         break;
       case 6:  // bearing
-        display_refresh_rate[i] = 900;
+        display_refresh_rate[i] = 400;
         break;
       case 7:  // bearing correction
-        display_refresh_rate[i] = 900;
+        display_refresh_rate[i] = 300;
         break;
       case 8:  // distance
         display_refresh_rate[i] = 1250;
         break;
       case 9:  //course
-        display_refresh_rate[i] = 800;
+        display_refresh_rate[i] = 450;
         break;
       case 10:  // location lat
         display_refresh_rate[i] = 850;
@@ -126,7 +130,7 @@ void initialize_refresh_rates() {
         display_refresh_rate[i] = 15000;
         break;
       case 14:  // volts
-        display_refresh_rate[i] = 10000;
+        display_refresh_rate[i] = 1000;
     }
   }
 }

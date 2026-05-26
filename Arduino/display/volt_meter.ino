@@ -1,4 +1,4 @@
-#define CHECK_INTERVAL 5000
+#define CHECK_INTERVAL 1000
 
 // Battery 4.2 max R1 = 10k, R2 = 22k ratio = 0.6875
 const int batteryVoltagePin = A0;
@@ -18,7 +18,7 @@ void check_voltage() {
     int sensorValue = analogRead(batteryVoltagePin);                        // Read the analog input
     // DEBUG_PRINT("Sensor Value: ");
     // DEBUG_PRINTLN(sensorValue);
-    float voltage = (sensorValue * (3.3 / 1023.0) / batteryVoltageDividerRatio) * batteryCorrectionFactor;  // Convert to actual voltage
+    float voltage = (sensorValue * (3.3 / 4095.0) / batteryVoltageDividerRatio) * batteryCorrectionFactor;  // Convert to actual voltage
     // DEBUG_PRINT("Battery Voltage: ");
     // DEBUG_PRINTLN(voltage);
     autoPilot.setBatteryVoltage(voltage);
@@ -26,7 +26,7 @@ void check_voltage() {
     sensorValue = analogRead(inputVoltagePin);                          // Read the analog input
     // DEBUG_PRINT("Sensor Value: ");
     // DEBUG_PRINTLN(sensorValue);
-    voltage = (sensorValue * (3.3 / 1023.0) / inputVoltageDividerRatio) * inputCorrectionFactor;  // Convert to actual voltage
+    voltage = (sensorValue * (3.3 / 4095.0) / inputVoltageDividerRatio) * inputCorrectionFactor;  // Convert to actual voltage
     // DEBUG_PRINT("Input Voltage: ");
     // DEBUG_PRINTLN(voltage);
     autoPilot.setInputVoltage(voltage);
