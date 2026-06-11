@@ -58,6 +58,7 @@ private:
 
   float toRadians(float degrees);
   float toDegrees(float radians);
+  float normalizeDegrees(float degrees);
   float getCourseCorrection(float bearing, float course);
   float getDistance(float lat1, float lon1, float lat2, float lon2);
   float getBearing(float lat1, float lon1, float lat2, float lon2);

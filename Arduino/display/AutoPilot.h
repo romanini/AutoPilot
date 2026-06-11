@@ -28,8 +28,11 @@
 #define STABILITY_CLASSIFIER_STABLE (3)
 #define STABILITY_CLASSIFIER_MOTION (4)
 
+#define LOCAL_COMMAND_SUPPRESS_MS 2250
+
 class AutoPilot {
 private:
+  SemaphoreHandle_t mutex;
   int year;
   int month;
   int day;
@@ -72,13 +75,19 @@ private:
   bool reset;
   bool connected;
 
+  unsigned long localCommandTime;
+
   bool isEmpty(char *ptart);
+  float getCourseCorrection(float bearing, float course);
   SerialType *serial;
   void parseAPDAT(char *buffer);
   void parseRESET(char *buffer);
-
+  float normalizeDegrees(float degrees);
+  void lock();
+  void unlock();
 public:
   AutoPilot(SerialType* ser);
+  ~AutoPilot();
   void init();
   int getYear();
   int getMonth();
@@ -96,6 +105,7 @@ public:
   float getWaypointLat();
   float getWaypointLon();
   float getHeadingDesired();
+  void adjustHeadingDesired(float change);
   float getHeading();  
   float getPitch();
   float getRoll();  

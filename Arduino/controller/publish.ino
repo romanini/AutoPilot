@@ -21,7 +21,7 @@ void publish_APDAT() {
   if (millis() - last_publish_time_mills > PUBLISH_INTERVAL) {
     last_publish_time_mills = millis();
     time_t currentTime = autoPilot.getDateTime();
-    sprintf(serialzied_data, "~APDAT,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%f,%.2f,%.2f,%.2f,%.2f,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f$",
+    sprintf(serialzied_data, "~APDAT,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%f,%.2f,%.2f,%.2f,%.2f,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.6f,%.6f$",
             year(currentTime) % 100,    // %d
             month(currentTime),         //%d
             day(currentTime),           //%d
@@ -50,8 +50,8 @@ void publish_APDAT() {
             autoPilot.getDistance(),  // %.2f
             autoPilot.getCourse(),    //%.2f
 
-            autoPilot.getLocationLat(),  //%.2f
-            autoPilot.getLocationLon()   //%.2f
+            autoPilot.getLocationLat(),  //%.6f
+            autoPilot.getLocationLon()   //%.6f
     );
 
     //DEBUG_PRINTLN(serialzied_data);

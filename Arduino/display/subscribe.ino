@@ -63,25 +63,36 @@ void check_subscription() {
   if (!receiveTimeout) {
     char packetBuffer[DATA_SIZE];  // Buffer to hold incoming packets
     int packetSize = udp.parsePacket();
-    char leftover[699];
+    char leftover[sizeof(buffer)];
     if (packetSize) {
       //DEBUG_PRINT("Received packet: ");
       //DEBUG_PRINT(packetSize);
-      int len = udp.read(packetBuffer, DATA_SIZE);  // Read the packet into the buffer
-      if (len > 0) {
-        packetBuffer[len] = '\0';  // Null-terminate the received data
-        //DEBUG_PRINT(" packet Buffer: ");
-        //DEBUG_PRINT(packetBuffer); // Print received data
+      // Read at most DATA_SIZE - 1 so there is always room for the NUL
+      // terminator written below (avoids an off-by-one write at packetBuffer[DATA_SIZE]).
+      int len = udp.read(packetBuffer, DATA_SIZE - 1);  // Read the packet into the buffer
+      if (len < 0) {
+        len = 0;
       }
-      // add what we received to what was left over before
-      strcat(buffer, packetBuffer);
+      packetBuffer[len] = '\0';  // Null-terminate the received data
+      //DEBUG_PRINT(" packet Buffer: ");
+      //DEBUG_PRINT(packetBuffer); // Print received data
+
+      // add what we received to what was left over before, but never overflow
+      // buffer. If it won't fit, the accumulated data is malformed (we never
+      // saw a terminating '$'), so drop it and resync on the next '~'.
+      if (strlen(buffer) + (size_t)len < sizeof(buffer)) {
+        strcat(buffer, packetBuffer);
+      } else {
+        buffer[0] = '\0';
+      }
       char *start = strchr(buffer, '~');  //find the start of the sentence
       if (start != NULL) {
         start++;                         //move past the ~
         char *end = strchr(start, '$');  // find the end of the sentence
         if (end != NULL) {
-          // copy off the leftover
-          strcpy(leftover, end + 1);
+          // copy off the leftover (bounded so we can't overrun leftover[])
+          strncpy(leftover, end + 1, sizeof(leftover) - 1);
+          leftover[sizeof(leftover) - 1] = '\0';
           //DEBUG_PRINT(" leftover ");
           //DEBUG_PRINT(leftover);
           // put a null at the end of the sentence

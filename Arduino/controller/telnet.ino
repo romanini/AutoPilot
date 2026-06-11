@@ -1,3 +1,6 @@
+// Interactive telnet server (port 23) for debugging / manual control.
+// Machine-to-machine commands from the displays / OpenCPN come in over UDP
+// instead - see subscribe.ino.
 
 #include <ESPTelnet.h>
 typedef ESPTelnet CustomClientType;
@@ -5,16 +8,15 @@ typedef ESPTelnet CustomClientType;
 
 #define BUF_SIZE 100
 #define TELNET_PORT 23
-#define COMMAND_PORT 8023
 
 static ESPTelnet telnet_server;
-static ESPTelnet command_server;
 
-char command_buffer[BUF_SIZE];
-int command_count = BUF_SIZE;
 char telnet_buffer[BUF_SIZE];
 int telnet_count = BUF_SIZE;
 
+// Explicit forward declarations: these signatures use CustomClientType, so they
+// must be declared before Arduino's auto-prototype pass (which runs before the
+// typedef above is visible at the top of the combined sketch).
 void process_adjust_bearing(CustomClientType& client, char buffer[]);
 void process_steer_angle(CustomClientType& client, char buffer[]);
 void process_mode(CustomClientType& client, char buffer[]);
@@ -24,24 +26,15 @@ void process_quit(CustomClientType& client);
 void process_waypoint(CustomClientType& client, char buffer[]);
 void process_help(CustomClientType& client);
 void process_telnet(CustomClientType& client, char buffer[]);
-void process_command(CustomClientType& client, char buffer[]);
 
-void setup_command() {
-  // start the servers:
-
+void setup_telnet() {
   telnet_server.onConnect(onTelnetConnect);
   telnet_server.onConnectionAttempt(onTelnetConnectionAttempt);
   telnet_server.onReconnect(onTelnetReconnect);
-  telnet_server.onDisconnect(onTelnetDisconnect);  
-  command_server.onConnect(onCommandConnect);
-  command_server.onConnectionAttempt(onCommandConnectionAttempt);
-  command_server.onReconnect(onCommandReconnect);
-  command_server.onDisconnect(onCommandDisconnect);
+  telnet_server.onDisconnect(onTelnetDisconnect);
   telnet_server.onInputReceived(onTelnetInput);
   telnet_server.begin(TELNET_PORT);
-  command_server.onInputReceived(onCommandInput);
-  command_server.begin(COMMAND_PORT);
-  Serial.println("Command all setup");
+  Serial.println("Telnet all setup");
 }
 
 void process_adjust_bearing(CustomClientType& client, char buffer[]) {
@@ -188,7 +181,7 @@ void process_waypoint(CustomClientType& client, char buffer[]) {
 void process_help(CustomClientType& client) {
   client.println("Possible commands:\n");
   client.println("\ta<heading offset> \t- Adjust heading to be <heading offset> from current heading.");
-  client.println("\tm<0|1|2> \t\t- Set the current 1 = compass, 2 = waypoint.");
+  client.println("\tm<1|2> \t\t- Set the mode 1 = compass, 2 = waypoint.");
   client.println("\tn<0|1> \t\t- Navigation 0 = off, 1 = on");
   client.println("\tp \t\t\t- Print current auto pilot status.");
   client.println("\tq \t\t\t- Quit the current session.");
@@ -198,16 +191,20 @@ void process_help(CustomClientType& client) {
 
 void process_telnet(CustomClientType& client, char buffer[]) {
   char command = buffer[0];
+  bool show_state = false;  // echo current state after state-changing commands
   switch (command) {
     case 'a':
       process_adjust_bearing(client, buffer);
+      show_state = true;
       break;
     case 'm':
       process_mode(client, buffer);
+      show_state = true;
       break;
     case 'n':
       process_navigation(client, buffer);
-      break;      
+      show_state = true;
+      break;
     case 'p':
       process_print(client);
       break;
@@ -216,9 +213,11 @@ void process_telnet(CustomClientType& client, char buffer[]) {
       break;
     case 's':
       process_steer_angle(client, buffer);
+      show_state = true;
       break;
     case 'w':
       process_waypoint(client, buffer);
+      show_state = true;
       break;
     case '?':
       process_help(client);
@@ -227,26 +226,11 @@ void process_telnet(CustomClientType& client, char buffer[]) {
       client.println("-1 Command not understood");
       break;
   }
-}
-
-void process_command(CustomClientType& client, char buffer[]) {
-  char command = buffer[0];
-  switch (command) {
-    case 'a':
-      process_adjust_bearing(client, buffer);
-      break;
-    case 'm':
-      process_mode(client, buffer);
-      break;
-    case 'n':
-      process_navigation(client, buffer);
-      break;       
-    case 'q':
-      process_quit(client);
-      break;
-    default:
-      client.println("-1 Command not understood");
-      break;
+  // After a command that changes state, echo the full status (same output as the
+  // 'p' command) so the operator sees the result. Skipped for 'p' (already
+  // printed), '?' (help), 'q' (client disconnected), and unknown commands.
+  if (show_state) {
+    process_print(client);
   }
 }
 
@@ -279,30 +263,6 @@ void onTelnetConnectionAttempt(String ip) {
   Serial.println(" tried to connected");
 }
 
-void onCommandConnect(String ip) {
-  Serial.print("- Command: ");
-  Serial.print(ip);
-  Serial.println(" connected");
-}
-
-void onCommandDisconnect(String ip) {
-  Serial.print("- Command: ");
-  Serial.print(ip);
-  Serial.println(" disconnected");
-}
-
-void onCommandReconnect(String ip) {
-  Serial.print("- Command: ");
-  Serial.print(ip);
-  Serial.println(" reconnected");
-}
-
-void onCommandConnectionAttempt(String ip) {
-  Serial.print("- Command: ");
-  Serial.print(ip);
-  Serial.println(" tried to connected");
-}
-
 void onTelnetInput(String str) {
   int len = str.length() + 1;
   str.toCharArray(telnet_buffer, len);
@@ -310,19 +270,6 @@ void onTelnetInput(String str) {
   process_telnet(telnet_server, telnet_buffer);
 }
 
-void onCommandInput(String str) {
-  Serial.print("Got command input: '");
-  Serial.print(str);
-  Serial.println("'");
-
-  int len = str.length() + 1;
-  str.toCharArray(command_buffer, len);
-  command_count = BUF_SIZE - len;
-  process_command(command_server, command_buffer);
-  command_server.disconnectClient();
-}
-
-void check_command() {
+void check_telnet() {
   telnet_server.loop();
-  command_server.loop();
 }

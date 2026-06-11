@@ -24,7 +24,7 @@ void setup_compass(void) {
   // Try to initialize!
   int attempts = 0;
   boolean bno08Initialized = false;
-  while (!bno08Initialized && attempts < 20) {
+  while (!bno08Initialized && attempts < 50) {
     bno08Initialized = bno08x.begin_I2C();
     if (!bno08Initialized) {
       attempts++;
@@ -32,8 +32,14 @@ void setup_compass(void) {
     }
   }
   if (!bno08Initialized) {
-    Serial.println("Failed to find BNO08x chip");
-    while (1) { delay(10); }
+    // The compass is essential (heading drives steering), so we can't continue
+    // without it. Rather than hang here forever - which would also prevent the
+    // display link, GPS, telnet and the FreeRTOS tasks from ever starting -
+    // reboot and try again. A transient I2C glitch will clear on the retry.
+    Serial.println("Failed to find BNO08x chip - rebooting to retry");
+    Serial.flush();
+    delay(1000);  // let the message flush and avoid a tight reboot loop
+    ESP.restart();
   } else {
     Serial.println("BNO08x Found!");
   }

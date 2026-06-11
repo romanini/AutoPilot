@@ -44,7 +44,8 @@ void setup() {
   Wire.begin();
   setup_wifi();
   setup_publish();
-  setup_command();
+  setup_telnet();
+  setup_subscribe();
   setup_motor();
   setup_compass();
   setup_gps();
@@ -104,7 +105,7 @@ void control_task(void *pvParameters) {
 
 void command_task(void *pvParameters) {
   for (;;) {  // A Task shall never return or exit.
-    check_command();
+    check_telnet();
     check_gps();
     check_garmin();
     check_led();

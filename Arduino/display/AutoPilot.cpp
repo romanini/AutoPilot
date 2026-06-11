@@ -5,6 +5,7 @@
 #else
 #error "Unsupported board type. Please use an AVR, SAMD, or ESP32 based board."
 #endif
+#include <Arduino.h>
 #include <cstdlib>
 #include <cstring>
 #include "AutoPilot.h"
@@ -14,12 +15,27 @@
 
 AutoPilot::AutoPilot(SerialType *ser) {
   serial = ser;
+
+  mutex = xSemaphoreCreateRecursiveMutex();
+  if (mutex == NULL) {
+    serial->println("mutex creation failed");
+    while (1)
+      ;
+  }
+
   battery_voltage = 0.0;
   battery_voltage_average_size = 0;
   input_voltage = 0.0;
   input_voltage_average_size = 0;
   this->init();
 }
+
+AutoPilot::~AutoPilot() {
+  if (mutex != NULL) {
+    vSemaphoreDelete(mutex);
+  }
+}
+
 
 void AutoPilot::init() {
   year = 0;
@@ -31,7 +47,7 @@ void AutoPilot::init() {
   fixquality = 0;
   satellites = 0;
   navigation_enabled = false;
-  mode = 0;
+  mode = 1;
   waypoint_set = false;
   waypoint_lat = 0.0;
   waypoint_lon = 0.0;
@@ -51,129 +67,260 @@ void AutoPilot::init() {
   reset = false;
   connected = false;
   tackRequested = 0;
+  localCommandTime = 0;
 }
 
 int AutoPilot::getYear() {
-  return this->year;
+  this->lock();
+  int value =this->year;
+  this->unlock();
+  return value;
 }
 
 int AutoPilot::getMonth() {
-  return this->month;
+  this->lock();
+  int value =this->month;
+  this->unlock();
+  return value;
 }
 
 int AutoPilot::getDay() {
-  return this->day;
+  this->lock();
+  int value =this->day;
+  this->unlock();
+  return value;
 }
 
 int AutoPilot::getHour() {
-  return this->hour;
+  this->lock();
+  int value =this->hour;
+  this->unlock();
+  return value;
 }
 
 int AutoPilot::getMinute() {
-  return this->minute;
+  this->lock();
+  int value =this->minute;
+  this->unlock();
+  return value;
 }
 
 bool AutoPilot::hasFix() {
-  return this->fix;
+  this->lock();
+  bool value =this->fix;
+  this->unlock();
+  return value;
 }
 
 int AutoPilot::getFixquality() {
-  return this->fixquality;
+  this->lock();
+  int value =this->fixquality;
+  this->unlock();
+  return value;
 }
 
 int AutoPilot::getSatellites() {
-  return this->satellites;
+  this->lock();
+  int value =this->satellites;
+  this->unlock();
+  return value;
 }
 
 int AutoPilot::getMode() {
-  return this->mode;
+  this->lock();
+  int value =this->mode;
+  this->unlock();
+  return value;
 }
 
-void AutoPilot::setMode(int mode) {
-  this->mode = mode;
+void AutoPilot::setMode(int new_mode) {
+  this->lock();
+  this->localCommandTime = millis();
+  if ((new_mode == 1) || (new_mode == 2 && this->waypoint_set)) {
+    this->mode = new_mode;
+    if (this->mode == 1) {
+      this->heading_desired = this->heading;
+      this->bearing = this->heading_desired;
+    }
+    this->modeChanged = true;
+    this->destinationChanged = true;
+  }
+  this->unlock();
 }
 
 bool AutoPilot::isNavigationEnabled() {
-  return this->navigation_enabled;
+  this->lock();
+  bool value =this->navigation_enabled;
+  this->unlock();
+  return value;
+}
+
+void AutoPilot::setNavigationEnabled(bool enable) {
+  this->lock();
+  this->localCommandTime = millis();
+  if (this->navigation_enabled == false && enable == true) {
+    // if we are re-enabling and current mode is compass we should stat to navigate to current heading to previous one.
+    if (this->mode == 1) {
+      this->heading_desired = this->heading;
+      this->bearing = this->heading_desired;
+      this->bearing_correction = 0;
+    }
+  }
+  this->modeChanged = true;
+  this->destinationChanged = true;
+  this->navigation_enabled = enable;
+  this->unlock();  
 }
 
 bool AutoPilot::isWaypointSet() {
-  return this->waypoint_set;
+  this->lock();
+  bool value =this->waypoint_set;
+  this->unlock();
+  return value;
 }
 
 float AutoPilot::getWaypointLat() {
-  return this->waypoint_lat;
+  this->lock();
+  float value =this->waypoint_lat;
+  this->unlock();
+  return value;
 }
 
 float AutoPilot::getWaypointLon() {
-  return this->waypoint_lon;
+  this->lock();
+  float value =this->waypoint_lon;
+  this->unlock();
+  return value;
 }
 
 float AutoPilot::getHeadingDesired() {
-  return this->heading_desired;
+  this->lock();
+  float value =this->heading_desired;
+  this->unlock();
+  return value;
 }
 
 float AutoPilot::getHeading() {
-  return this->heading;
+  this->lock();
+  float value =this->heading;
+  this->unlock();
+  return value;
+}
+
+void AutoPilot::adjustHeadingDesired(float change) {
+  this->lock();
+  this->localCommandTime = millis();
+  if (this->mode > 0) {
+    if (this->mode == 2) {
+      this->heading_desired = this->heading;
+      this->bearing = this->heading_desired;
+      this->modeChanged = true;
+    }
+    this->mode = 1;
+    this->heading_desired = normalizeDegrees(this->heading_desired + change);
+    this->bearing = this->heading_desired;
+    this->destinationChanged = true;
+    this->bearing_correction = this->getCourseCorrection(this->bearing, this->heading);
+
+  }
+  this->unlock();
 }
 
 float AutoPilot::getPitch() {
-  return this->pitch;
+  this->lock();
+  float value =this->pitch;
+  this->unlock();
+  return value;
 }
 
 float AutoPilot::getRoll() {
-  return this->roll;
+  this->lock();
+  float value =this->roll;
+  this->unlock();
+  return value;
 }
 
 int AutoPilot::getStabilityClassification() {
-  return this->stability_classification;
+  this->lock();
+  int value =this->stability_classification;
+  this->unlock();
+  return value;
 }
 
 float AutoPilot::getBearing() {
-  return this->bearing;
+  this->lock();
+  float value =this->bearing;
+  this->unlock();
+  return value;
 }
 
 float AutoPilot::getBearingCorrection() {
-  return this->bearing_correction;
+  this->lock();
+  float value =this->bearing_correction;
+  this->unlock();
+  return value;
 }
 
 float AutoPilot::getSpeed() {
-  return this->speed;
+  this->lock();
+  float value =this->speed;
+  this->unlock();
+  return value;
 }
 
 float AutoPilot::getDistance() {
-  return this->distance;
+  this->lock();
+  float value =this->distance;
+  this->unlock();
+  return value;
 }
 
 float AutoPilot::getCourse() {
-  return this->course;
+  this->lock();
+  float value =this->course;
+  this->unlock();
+  return value;
 }
 
 float AutoPilot::getLocationLat() {
-  return this->location_lat;
+  this->lock();
+  float value =this->location_lat;
+  this->unlock();
+  return value;
 }
 
 float AutoPilot::getLocationLon() {
-  return this->location_lon;
+  this->lock();
+  float value =this->location_lon;
+  this->unlock();
+  return value;
 }
 
 bool AutoPilot::hasDestinationChanged() {
-  bool retval = this->destinationChanged;
+  this->lock();
+  bool value = this->destinationChanged;
   this->destinationChanged = false;
-  return retval;
+  this->unlock();
+  return value;
 }
 
 bool AutoPilot::hasModeChanged() {
-  bool retval = this->modeChanged;
+  this->lock();
+  bool value = this->modeChanged;
   this->modeChanged = false;
-  return retval;
+  this->unlock();
+  return value;
 }
 
 float AutoPilot::getBatteryVoltage() {
-  return this->battery_voltage;
+  this->lock();
+  float value =this->battery_voltage;
+  this->unlock();
+  return value;
 }
 
 void AutoPilot::setBatteryVoltage(float voltage) {
+  this->lock();
   if (voltage > 0.2) {
     if (this->battery_voltage_average_size < BATTERY_VOLTS_AVERAGE_MAX_SIZE) {
       this->battery_voltage_average_size += 1;
@@ -183,13 +330,18 @@ void AutoPilot::setBatteryVoltage(float voltage) {
     this->battery_voltage = 0.0;
     this->battery_voltage_average_size = 0;
   }
+  this->unlock();
 }
 
 float AutoPilot::getInputVoltage() {
-  return this->input_voltage;
+  this->lock();
+  float value =this->input_voltage;
+  this->unlock();
+  return value;
 }
 
 void AutoPilot::setInputVoltage(float voltage) {
+  this->lock();
   if (voltage > 0.2) {
     if (this->input_voltage_average_size < INPUT_VOLTS_AVERAGE_MAX_SIZE) {
       this->input_voltage_average_size += 1;
@@ -199,44 +351,65 @@ void AutoPilot::setInputVoltage(float voltage) {
     this->input_voltage = 0.0;
     this->input_voltage_average_size = 0;
   }
+  this->unlock();
 }
 
 bool AutoPilot::getReset() {
-  return this->reset;
+  this->lock();
+  bool value =this->reset;
+  this->unlock();
+  return value;
 }
 
 void AutoPilot::setReset(bool value) {
+  this->lock();
   this->reset = value;
+  this->unlock();
 }
 
 bool AutoPilot::isConnected() {
-  return this->connected;
+  this->lock();
+  bool value =this->connected;
+  this->unlock();
+  return value;
 }
 
 void AutoPilot::setConnected(bool connected) {
+  this->lock();
   if (this->connected != connected) {
     this->modeChanged = true;
     this->destinationChanged = true;
   }
   this->connected = connected;
+  this->unlock();
 }
 
 unsigned long AutoPilot::getTackRequested() {
-  return this->tackRequested;
+  this->lock();
+  unsigned long value =this->tackRequested;
+  this->unlock();
+  return value;
 }
 
 void AutoPilot::setTackRequested(unsigned long time) {
+  this->lock();
   this->tackRequested = time;
   this->modeChanged = true;
+  this->unlock();
 }
 
 void AutoPilot::cancelTackRequested() {
+  this->lock();
   this->tackRequested = 0;
   this->modeChanged = true;
+  this->unlock();
 }
 
 bool AutoPilot::isTackRequested() {
-  return (this->tackRequested > 0);
+  this->lock();
+  bool value =(this->tackRequested > 0);
+  this->unlock();
+  return value;
 }
 
 void AutoPilot::printAutoPilot() {
@@ -312,45 +485,63 @@ void AutoPilot::parse(char *sentence) {
   }
 }
 
+// Advance to the character after the next comma. Returns NULL if there is no
+// further field (no more commas, or the input is already NULL). All field reads
+// below guard with isEmpty(), and isEmpty(NULL) == true, so a short/garbled
+// sentence simply leaves the remaining fields at their default (0) values
+// instead of dereferencing an invalid pointer.
+static char *advance_field(char *p) {
+  if (p == NULL) {
+    return NULL;
+  }
+  char *comma = strchr(p, ',');
+  return (comma == NULL) ? NULL : comma + 1;
+}
+
 void AutoPilot::parseAPDAT(char *sentence) {
   char *p = sentence;  // Pointer to move through the sentence -- good parsers are non-destructive
 
-  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
+  // The parser runs on the command task while the display task reads these
+  // fields through the locked getters; hold the lock so the whole update is
+  // atomic (and so the modeChanged/destinationChanged flags can't be lost).
+  this->lock();
+
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
   if (!isEmpty(p)) {
     this->year = atoi(p);
   } else {
     this->year = 0;
   }
 
-  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
   if (!isEmpty(p)) {
     this->month = atoi(p);
   } else {
     this->month = 0;
   }
 
-  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
   if (!isEmpty(p)) {
     this->day = atoi(p);
   } else {
     this->day = 0;
   }
 
-  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
   if (!isEmpty(p)) {
     this->hour = atoi(p);
   } else {
     this->hour = 0;
   }
 
-  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
   if (!isEmpty(p)) {
     this->minute = atoi(p);
   } else {
     this->minute = 0;
   }
 
-  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
   if (!isEmpty(p)) {
     int fix = atoi(p);
     if (fix > 0) {
@@ -362,50 +553,56 @@ void AutoPilot::parseAPDAT(char *sentence) {
     this->fix = false;
   }
 
-  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
   if (!isEmpty(p)) {
     this->fixquality = atoi(p);
   } else {
     this->fixquality = 0;
   }
 
-  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
   if (!isEmpty(p)) {
     this->satellites = atoi(p);
   } else {
     this->satellites = 0;
   }
 
-  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
-  int currentNavigationEnabled = this->navigation_enabled;
-  if (!isEmpty(p)) {
-    int navigation = atoi(p);
-    if (navigation > 0) {
-      this->navigation_enabled = true;
+  bool suppressLocalFields = (millis() - this->localCommandTime) < LOCAL_COMMAND_SUPPRESS_MS;
+
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
+  if (!suppressLocalFields) {
+    int currentNavigationEnabled = this->navigation_enabled;
+    if (!isEmpty(p)) {
+      int navigation = atoi(p);
+      if (navigation > 0) {
+        this->navigation_enabled = true;
+      } else {
+        this->navigation_enabled = false;
+      }
     } else {
       this->navigation_enabled = false;
     }
-  } else {
-    this->navigation_enabled = false;
-  }
-  if (currentNavigationEnabled != this->navigation_enabled) {
-    this->destinationChanged = true;
-    this->modeChanged = true;
+    if (currentNavigationEnabled != this->navigation_enabled) {
+      this->destinationChanged = true;
+      this->modeChanged = true;
+    }
   }
 
-  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
-  int currentMode = this->mode;
-  if (!isEmpty(p)) {
-    this->mode = atoi(p);
-  } else {
-    this->mode = 1;
-  }
-  if (currentMode != this->mode) {
-    this->destinationChanged = true;
-    this->modeChanged = true;
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
+  if (!suppressLocalFields) {
+    int currentMode = this->mode;
+    if (!isEmpty(p)) {
+      this->mode = atoi(p);
+    } else {
+      this->mode = 1;
+    }
+    if (currentMode != this->mode) {
+      this->destinationChanged = true;
+      this->modeChanged = true;
+    }
   }
 
-  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
   int currentWaypointSet = this->waypoint_set;
   if (!isEmpty(p)) {
     int waypoint_set = atoi(p);
@@ -421,7 +618,7 @@ void AutoPilot::parseAPDAT(char *sentence) {
     this->destinationChanged = true;
   }
 
-  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
   float currentWaypointLat = this->waypoint_lat;
   if (!isEmpty(p)) {
     this->waypoint_lat = atof(p);
@@ -432,7 +629,7 @@ void AutoPilot::parseAPDAT(char *sentence) {
     this->destinationChanged = true;
   }
 
-  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
   float currentWaypointLon = this->waypoint_lon;
   if (!isEmpty(p)) {
     this->waypoint_lon = atof(p);
@@ -443,93 +640,101 @@ void AutoPilot::parseAPDAT(char *sentence) {
     this->destinationChanged = true;
   }
 
-  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
-  float currentHeadingDesired = this->heading_desired;
-  if (!isEmpty(p)) {
-    this->heading_desired = atof(p);
-  } else {
-    this->heading_desired = 0.0;
-  }
-  if ((currentHeadingDesired != this->heading_desired) && (this->mode == 1)) {
-    this->destinationChanged = true;
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
+  if (!suppressLocalFields) {
+    float currentHeadingDesired = this->heading_desired;
+    if (!isEmpty(p)) {
+      this->heading_desired = atof(p);
+    } else {
+      this->heading_desired = 0.0;
+    }
+    if ((currentHeadingDesired != this->heading_desired) && (this->mode == 1)) {
+      this->destinationChanged = true;
+    }
   }
 
-  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
   if (!isEmpty(p)) {
     this->heading = atof(p);
   } else {
     this->heading = 0.0;
   }
 
-  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
   if (!isEmpty(p)) {
     this->pitch = atof(p);
   } else {
     this->pitch = 0.0;
   }
 
-  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
   if (!isEmpty(p)) {
     this->roll = atof(p);
   } else {
     this->roll = 0.0;
   }
 
-  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
   if (!isEmpty(p)) {
     this->stability_classification = atoi(p);
   } else {
     this->stability_classification = 0;
   }
 
-  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
-  if (!isEmpty(p)) {
-    this->bearing = atof(p);
-  } else {
-    this->bearing = 0.0;
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
+  if (!suppressLocalFields) {
+    if (!isEmpty(p)) {
+      this->bearing = atof(p);
+    } else {
+      this->bearing = 0.0;
+    }
   }
 
-  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
-  if (!isEmpty(p)) {
-    this->bearing_correction = atof(p);
-  } else {
-    this->bearing_correction = 0.0;
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
+  if (!suppressLocalFields) {
+    if (!isEmpty(p)) {
+      this->bearing_correction = atof(p);
+    } else {
+      this->bearing_correction = 0.0;
+    }
   }
 
-  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
   if (!isEmpty(p)) {
     this->speed = atof(p);
   } else {
     this->speed = 0.0;
   }
 
-  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
   if (!isEmpty(p)) {
     this->distance = atof(p);
   } else {
     this->distance = 0.0;
   }
 
-  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
   if (!isEmpty(p)) {
     this->course = atof(p);
   } else {
     this->course = 0.0;
   }
 
-  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
   if (!isEmpty(p)) {
     this->location_lat = atof(p);
   } else {
     this->location_lat = 0.0;
   }
 
-  p = strchr(p, ',') + 1;  // Skip to char after the next comma, then check.
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
   if (!isEmpty(p)) {
     this->location_lon = atof(p);
   } else {
     this->location_lon = 0.0;
   }
+
+  this->unlock();
 }
 
 // For now the only thing to reset is the command connection
@@ -549,8 +754,36 @@ void AutoPilot::parseRESET(char *sentence) {
 */
 /**************************************************************************/
 bool AutoPilot::isEmpty(char *pStart) {
-  if (',' != *pStart && '*' != *pStart && pStart != NULL)
+  if (pStart != NULL && ',' != *pStart && '*' != *pStart)
     return false;
   else
     return true;
+}
+
+float AutoPilot::getCourseCorrection(float bearing, float course) {
+  float correction = bearing - course;
+  if (correction > 180.0) {
+    correction -= 360.0;
+  } else if (correction < -180.0) {
+    correction += 360.0;
+  }
+  return correction;
+}
+
+float AutoPilot::normalizeDegrees(float degrees) {
+  // Map any angle (positive or negative, any magnitude) to a compass bearing in
+  // the range [0, 360).  e.g. -90 -> 270, 450 -> 90, -450 -> 270, 360 -> 0.
+  degrees = fmodf(degrees, 360.0f);
+  if (degrees < 0.0f) {
+    degrees += 360.0f;
+  }
+  return degrees;
+}
+
+void AutoPilot::lock() {
+  xSemaphoreTakeRecursive(mutex, portMAX_DELAY);
+}
+
+void AutoPilot::unlock() {
+  xSemaphoreGiveRecursive(mutex);
 }

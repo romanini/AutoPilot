@@ -8,6 +8,7 @@
 #define GPS_UPDATE_RATE 50
 #define MAX_CHARS_TO_READ 100
 #define MAX_SENTENCES_PER_CYCLE 10
+#define GPS_MAX_READ_MILLIS 100  // hard cap on time spent in check_gps() per call so we don't starve other tasks (e.g. telnet)
 
 // Connect to the GPS on the hardware port
 Adafruit_GPS gps = Adafruit_GPS(&GPSSerial);
@@ -35,6 +36,14 @@ void setup_gps() {
   gps.sendCommand(PMTK_API_SET_FIX_CTL_1HZ);  // 5 Hz fix position update rate
   gps.sendCommand(PMTK_ENABLE_WAAS);
 
+  // Enable MTK static navigation: when the computed speed is below this
+  // threshold (0.2 m/s ~= 0.39 kn, the MTK minimum) the receiver reports speed 0
+  // AND freezes its position output, killing the stationary speed/position jitter
+  // at the source. (Body "PMTK386,0.2" -> NMEA checksum 0x3F; recompute the
+  // checksum if you change the value.) AutoPilot::setSpeed()'s deadband backstops
+  // this in case the module ignores the command or it is lost across a reset.
+  gps.sendCommand("$PMTK386,0.2*3F");
+
   delay(1000);
 
   // Ask for firmware version
@@ -48,7 +57,12 @@ void check_gps() {
   int chars_read = 0;
   char c = 0;
   int sentence_left_to_read = MAX_SENTENCES_PER_CYCLE;
+  uint32_t read_start_millis = millis();
   do {
+    if (millis() - read_start_millis > GPS_MAX_READ_MILLIS) {
+      // Don't let a busy GPS stream hog this task - come back next cycle for more.
+      return;
+    }
     do {
       c = gps.read();
       chars_read++;

@@ -1,6 +1,8 @@
 #include <HardwareSerial.h>
 
 #define DEBUG_GARMIN 1
+#define GARMIN_MAX_CHARS_PER_LINE 120   // bail out of a line if it runs long, rather than spinning
+#define GARMIN_MAX_READ_MILLIS 100        // hard cap on time spent per port per call so we don't starve other tasks (e.g. telnet)
 
 #define GARMIN_TX_A A1
 #define GARMIN_RX_A A0
@@ -28,7 +30,8 @@ void setup_garmin() {
 
 void check_garmin() {
   String line;
-  while (true) {
+  uint32_t read_start_millis = millis();
+  while (line.length() < GARMIN_MAX_CHARS_PER_LINE && (millis() - read_start_millis) <= GARMIN_MAX_READ_MILLIS) {
     if (!Serial1Port.available()) break;
     char c = Serial1Port.read();
     if (c == '\n' || c == '\r') break;
@@ -43,7 +46,8 @@ void check_garmin() {
 #endif
 
   line.clear();
-  while (true) {
+  read_start_millis = millis();
+  while (line.length() < GARMIN_MAX_CHARS_PER_LINE && (millis() - read_start_millis) <= GARMIN_MAX_READ_MILLIS) {
     if (!Serial2Port.available()) break;
     char c = Serial2Port.read();
     if (c == '\n' || c == '\r') break;

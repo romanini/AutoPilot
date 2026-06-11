@@ -142,7 +142,7 @@ void button_release(int pin) {
         DEBUG_PRINT("Button ");
         DEBUG_PRINT(pin);
         DEBUG_PRINTLN(" Held");
-        set_beep(BEEP_HOLD_INTERVAL);
+        //set_beep(BEEP_HOLD_INTERVAL);
         adjustment = ADJUSTMENT_AMOUNT_LONG;
       }
     }
@@ -249,20 +249,20 @@ void check_button_press_diuration(int pin) {
       set_beep(BEEP_HOLD_INTERVAL);
       beep_long_triggered[pin] = true;
     } else if (press_duration >= 25 && press_duration < 100 && !beep_short_triggered[pin]) {
-      DEBUG_PRINT("Button ");
-      DEBUG_PRINT(pin);
-      DEBUG_PRINTLN(" Pressed <>");
-      set_beep(BEEP_INTERVAL);
-      beep_short_triggered[pin] = true;
+      // DEBUG_PRINT("Button ");
+      // DEBUG_PRINT(pin);
+      // DEBUG_PRINTLN(" Pressed <>");
+      // set_beep(BEEP_INTERVAL);
+      // beep_short_triggered[pin] = true;
     }
   } else {
     if (press_duration >= 25 && !beep_short_triggered[pin]) {
-      DEBUG_PRINT("Button ");
-      DEBUG_PRINT(pin);
-      DEBUG_PRINTLN(" Pressed");
-      set_beep(BEEP_INTERVAL);
-      beep_short_triggered[pin] = true;
-      beep_long_triggered[pin] = true;
+      // DEBUG_PRINT("Button ");
+      // DEBUG_PRINT(pin);
+      // DEBUG_PRINTLN(" Pressed");
+      // set_beep(BEEP_INTERVAL);
+      // beep_short_triggered[pin] = true;
+      // beep_long_triggered[pin] = true;
     }
   }
 }

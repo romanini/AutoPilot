@@ -1,0 +1,97 @@
+// UDP command intake (port 8889). The displays and the OpenCPN soft unit send
+// commands as connectionless datagrams framed as "~APCMD,<command>$".  This is
+// the counterpart to publish.ino (which broadcasts telemetry): the controller
+// "subscribes" to incoming commands here.  UDP has no single-client connection
+// limit, so any number of senders can issue commands concurrently, and unicast
+// to the controller means no other display sees them (no filtering needed).
+
+#include <AsyncUDP.h>
+
+#define UDP_COMMAND_PORT 8889    // displays / OpenCPN send "~APCMD,<cmd>$" datagrams here
+#define CMD_BUFFER_SIZE 100      // max command datagram we will accept
+
+static AsyncUDP udpCommandServer;
+
+// Explicit forward declarations (AsyncUDPPacket isn't visible to Arduino's
+// auto-prototype pass at the top of the combined sketch).
+void process_udp_command(AsyncUDPPacket packet);
+void dispatch_command(char buffer[]);
+
+void setup_subscribe() {
+  if (udpCommandServer.listen(UDP_COMMAND_PORT)) {
+    udpCommandServer.onPacket(process_udp_command);
+    Serial.print("UDP command server listening on port ");
+    Serial.println(UDP_COMMAND_PORT);
+  } else {
+    Serial.println("Failed to start UDP command server");
+  }
+  Serial.println("Subscribe all setup");
+}
+
+// Handle a command datagram of the form "~APCMD,<command>$".
+// Runs in the AsyncUDP task context; all autopilot access below is mutex
+// protected, so this is safe against the control and command tasks.
+void process_udp_command(AsyncUDPPacket packet) {
+  size_t len = packet.length();
+  if (len == 0 || len >= CMD_BUFFER_SIZE) {
+    return;  // empty, or too large to be one of our commands
+  }
+  char buffer[CMD_BUFFER_SIZE];
+  memcpy(buffer, packet.data(), len);
+  buffer[len] = '\0';
+
+  if (strncmp(buffer, "~APCMD,", 7) != 0) {
+    return;  // not a command frame - ignore
+  }
+  char* cmd = buffer + 7;        // skip past "~APCMD,"
+  char* end = strchr(cmd, '$');  // find the frame terminator
+  if (end == NULL) {
+    return;  // unterminated frame - ignore
+  }
+  *end = '\0';                   // trim the trailing '$'
+
+  Serial.print("Got UDP command: '");
+  Serial.print(cmd);
+  Serial.println("'");
+  dispatch_command(cmd);
+}
+
+// Apply a command (e.g. "n1", "m2", "a-10.00", "w37.1,-122.3"). There is no
+// client to reply to - the sender learns the new state from the next telemetry
+// broadcast - so we just validate and update the autopilot directly.
+void dispatch_command(char buffer[]) {
+  switch (buffer[0]) {
+    case 'a': {
+      float adjustment = atof(&buffer[1]);
+      autoPilot.adjustHeadingDesired(adjustment);
+      break;
+    }
+    case 'm': {
+      int new_mode = atoi(&buffer[1]);
+      if (new_mode >= 1 && new_mode <= 2) {
+        autoPilot.setMode(new_mode);
+      }
+      break;
+    }
+    case 'n': {
+      int new_nav = atoi(&buffer[1]);
+      if (new_nav >= 0 && new_nav <= 1) {
+        autoPilot.setNavigationEnabled(new_nav == 1);
+      }
+      break;
+    }
+    case 'w': {
+      char* coordinates = strtok(&buffer[1], ",");
+      if (coordinates != NULL) {
+        float lat = atof(coordinates);
+        coordinates = strtok(NULL, ",");
+        if (coordinates != NULL) {
+          autoPilot.setWaypoint(lat, atof(coordinates));
+        }
+      }
+      break;
+    }
+    default:
+      break;
+  }
+}

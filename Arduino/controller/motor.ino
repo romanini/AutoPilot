@@ -91,11 +91,11 @@ void motor_control_loop(float new_steer_angle) {
   } else {
     if (new_mills < current_mills) {
       move_motor(-1);
-      DEBUG_PRINTLN("move_motor(-1)");
+      //DEBUG_PRINTLN("move_motor(-1)");
     }  
     if (new_mills > current_mills) {
       move_motor(1);
-      DEBUG_PRINTLN("move_motor(1)");
+      //DEBUG_PRINTLN("move_motor(1)");
     }  
   }
 }

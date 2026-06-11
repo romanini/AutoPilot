@@ -12,6 +12,10 @@
 #define R 6371000.0                           // Earth's mean radius in meters
 #define METERS_TO_NAUTICAL_MILES 0.000539957  // Conversion factor: 1 meter = 0.000539957 nautical miles
 #define PI std::acos(-1.0)
+// A stationary GPS still reports a jittery non-zero speed (measured up to ~0.6 kn).
+// Snap anything below this to zero. Keep this >= the PMTK386 static-nav threshold
+// set in setup_gps() (0.2 m/s ~= 0.39 kn) so it acts as a true backstop.
+#define GPS_SPEED_DEADBAND_KNOTS 0.8
 
 AutoPilot::AutoPilot(SerialType* ser) {
   serial = ser;
@@ -40,7 +44,7 @@ AutoPilot::AutoPilot(SerialType* ser) {
   satellites = 0;
 
   navigation_enabled = false;
-  mode = 0;
+  mode = 1;
   heading_desired = 0.0;
   bearing = 0.0;
   bearing_correction = 0.0;
@@ -157,7 +161,7 @@ void AutoPilot::setFix(bool fix) {
   this->lock();
   this->fix = fix;
   if (!fix && mode == 2) {
-    setMode(0);
+    setNavigationEnabled(false);
   }
   this->unlock();
 }
@@ -190,11 +194,11 @@ int AutoPilot::getMode() {
   return value;
 }
 
-int AutoPilot::setMode(int mode) {
+int AutoPilot::setMode(int new_mode) {
   this->lock();
   int retval = -1;
-  if ((mode <= 1) || (mode == 2 && this->waypoint_set)) {
-    this->mode = mode;
+  if ((new_mode == 1) || (new_mode == 2 && this->waypoint_set)) {
+    this->mode = new_mode;
     if (this->mode == 1) {
       this->heading_desired = this->heading;
       this->bearing = this->heading_desired;
@@ -245,7 +249,7 @@ void AutoPilot::adjustHeadingDesired(float change) {
       this->modeChanged = true;
     }
     this->mode = 1;
-    this->heading_desired += change;
+    this->heading_desired = normalizeDegrees(this->heading_desired + change);
     this->bearing = this->heading_desired;
     this->destinationChanged = true;
   }
@@ -277,6 +281,7 @@ void AutoPilot::setHeading(float heading) {
   this->lock();
   if (isnanf(heading) || isnan(heading)) {
     serial->println("received nan Heading!");
+    this->unlock();
     return;
   }
   this->heading = heading;
@@ -405,6 +410,12 @@ float AutoPilot::getSpeed() {
 
 void AutoPilot::setSpeed(float speed) {
   this->lock();
+  // Backstop the GPS static-nav threshold: zero out residual speed noise that
+  // slips through (or the whole noise floor, if the GPS ignored/lost PMTK386).
+  // Speed is display/telemetry only, so this never affects steering.
+  if (speed < GPS_SPEED_DEADBAND_KNOTS) {
+    speed = 0.0;
+  }
   this->speed = speed;
   this->unlock();
 }
@@ -526,14 +537,17 @@ float AutoPilot::getBearing(float lat1, float lon1, float lat2, float lon2) {
   float x = cos(toRadians(lat1)) * sin(toRadians(lat2)) - sin(toRadians(lat1)) * cos(toRadians(lat2)) * cos(toRadians(lon2 - lon1));
   float bearing = toDegrees(atan2(y, x));
 
-  if (bearing < 0) {
-    bearing += 360.0;
-  }
+  return normalizeDegrees(bearing);
+}
 
-  if (roundf(bearing * 100) >= 36000) {
-    bearing = 0.00;
+float AutoPilot::normalizeDegrees(float degrees) {
+  // Map any angle (positive or negative, any magnitude) to a compass bearing in
+  // the range [0, 360).  e.g. -90 -> 270, 450 -> 90, -450 -> 270, 360 -> 0.
+  degrees = fmodf(degrees, 360.0f);
+  if (degrees < 0.0f) {
+    degrees += 360.0f;
   }
-  return bearing;
+  return degrees;
 }
 
 void AutoPilot::lock() {
