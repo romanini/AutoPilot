@@ -1,17 +1,9 @@
 #include <sys/_intsup.h>
-//#include "api/HardwareSerial.h"
 #ifndef AUTOPILOT_H
 #define AUTOPILOT_H
 
-#if defined(ARDUINO_ARCH_SAMD)  // For Arduino Nano 33 IoT
-  #include <Arduino.h>
-  typedef HardwareSerial SerialType;  // Define SerialType for SAMD
-#elif defined(ARDUINO_ARCH_ESP32)  // For Arduino Nano ESP32
-  #include <USB.h>
-  typedef USBCDC SerialType;  // Define SerialType for ESP32
-#else
-  #error "Unsupported board type. Please use Arduino Nano 33 IoT or Arduino Nano ESP32."
-#endif
+#include <USB.h>
+typedef USBCDC SerialType;  // USB CDC serial on the Arduino Nano ESP32
 
 #include <TimeLib.h> // Include the Time library if needed
 

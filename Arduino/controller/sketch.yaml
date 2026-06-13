@@ -1,0 +1,35 @@
+# Arduino sketch project file (https://arduino.github.io/arduino-cli/latest/sketch-project-file/)
+#
+# Defines a reproducible build "profile" for the controller sketch: the board,
+# the core platform, and every library that must be installed. Build with:
+#
+#     arduino-cli compile --profile nano        # run from this folder
+#     arduino-cli upload  --profile nano -p /dev/cu.usbmodemXXXX
+#
+# The first compile auto-installs the core + libraries listed below into a
+# sandbox owned by the profile, so nothing has to live in Arduino/libraries.
+#
+# NOTE: profile library lists are NOT dependency-resolved. Every transitive
+# dependency must be listed explicitly (that is why Adafruit BusIO and the
+# Adafruit Unified Sensor appear here even though we never #include them).
+# Version pins below are reasonable recent releases; bump them as desired with
+# `arduino-cli lib search "<name>"`.
+
+profiles:
+  nano:
+    notes: Arduino Nano ESP32 - heading/GPS/Garmin autopilot controller
+    fqbn: arduino:esp32:nano_nora
+    platforms:
+      - platform: arduino:esp32 (2.0.18)
+    libraries:
+      - Adafruit BNO08x (1.2.5)        # IMU / fusion compass (Adafruit_BNO08x.h)
+      - Adafruit GPS Library (1.7.5)   # GPS NMEA parser (Adafruit_GPS.h)
+      - ESPTelnet (2.2.1)              # telnet debug console (ESPTelnet.h)
+      - PID (1.2.1)                    # steering loop, Brett Beauregard (PID_v1.h)
+      - Time (1.6.1)                   # time_t helpers (TimeLib.h)
+      - Timezone (1.2.4)              # local-time conversion (Timezone.h)
+      - Adafruit BusIO (1.16.1)       # dependency of Adafruit BNO08x
+      - Adafruit Unified Sensor (1.1.14)  # dependency of Adafruit BNO08x
+
+# Set a default so you can omit "--profile nano" once you're used to it:
+default_profile: nano

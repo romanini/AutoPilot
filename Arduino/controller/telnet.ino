@@ -34,7 +34,7 @@ void setup_telnet() {
   telnet_server.onDisconnect(onTelnetDisconnect);
   telnet_server.onInputReceived(onTelnetInput);
   telnet_server.begin(TELNET_PORT);
-  Serial.println("Telnet all setup");
+  DEBUG_PRINTLN("Telnet all setup");
 }
 
 void process_adjust_bearing(CustomClientType& client, char buffer[]) {
@@ -84,7 +84,7 @@ void process_mode(CustomClientType& client, char buffer[]) {
 }
 
 void process_quit(CustomClientType& client) {
-  Serial.println("Closing connection");
+  DEBUG_PRINTLN("Closing connection");
   client.println("> disconnecting you");
   client.disconnectClient();
 }
@@ -158,10 +158,14 @@ void process_print(CustomClientType& client) {
 }
 
 void process_waypoint(CustomClientType& client, char buffer[]) {
-  char* coordinates = strtok(buffer, ",");
+  // strtok_r (not strtok): the UDP 'w' handler runs in the AsyncUDP task while
+  // this runs in command_task. A shared static strtok pointer would corrupt if
+  // both parsed a waypoint at once; a local saveptr is reentrant.
+  char* saveptr = NULL;
+  char* coordinates = strtok_r(buffer, ",", &saveptr);
   if (coordinates != NULL) {
     float waypoint_lat = atof(coordinates + 1);
-    coordinates = strtok(NULL, ",");
+    coordinates = strtok_r(NULL, ",", &saveptr);
     if (coordinates != NULL) {
       float waypoint_lon = atof(coordinates);
       autoPilot.setWaypoint(waypoint_lat, waypoint_lon);
@@ -235,32 +239,36 @@ void process_telnet(CustomClientType& client, char buffer[]) {
 }
 
 
-// (optional) callback functions for telnet events
+// (optional) callback functions for telnet events. These run in command_task
+// (via telnet.loop()). The DEBUG_* macros self-guard with if(Serial), so a
+// telnet connect/disconnect while USB is unplugged can't stall the task on the
+// CDC detach deadlock. telnet_server.println() writes go to the TCP client (not
+// USB), so they're fine.
 void onTelnetConnect(String ip) {
-  Serial.print("- Telnet: ");
-  Serial.print(ip);
-  Serial.println(" connected");
+  DEBUG_PRINT("- Telnet: ");
+  DEBUG_PRINT(ip);
+  DEBUG_PRINTLN(" connected");
 
   telnet_server.println("\nWelcome " + telnet_server.getIP());
   telnet_server.println("(Use ^] + q  to disconnect.)");
 }
 
 void onTelnetDisconnect(String ip) {
-  Serial.print("- Telnet: ");
-  Serial.print(ip);
-  Serial.println(" disconnected");
+  DEBUG_PRINT("- Telnet: ");
+  DEBUG_PRINT(ip);
+  DEBUG_PRINTLN(" disconnected");
 }
 
 void onTelnetReconnect(String ip) {
-  Serial.print("- Telnet: ");
-  Serial.print(ip);
-  Serial.println(" reconnected");
+  DEBUG_PRINT("- Telnet: ");
+  DEBUG_PRINT(ip);
+  DEBUG_PRINTLN(" reconnected");
 }
 
 void onTelnetConnectionAttempt(String ip) {
-  Serial.print("- Telnet: ");
-  Serial.print(ip);
-  Serial.println(" tried to connected");
+  DEBUG_PRINT("- Telnet: ");
+  DEBUG_PRINT(ip);
+  DEBUG_PRINTLN(" tried to connected");
 }
 
 void onTelnetInput(String str) {

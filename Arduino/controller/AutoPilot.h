@@ -30,6 +30,7 @@ private:
 
   bool navigation_enabled;     // indicates navigation is enabled.  Used for when navigating and we want to disable navigation temporeraly and then return to the previous navigation.
   int mode;                  // 0 = off; 1 = compass, 2 = navigate
+  bool compass_fallback;     // true when a GPS fix loss auto-dropped us from waypoint mode to compass-hold; lets us resume waypoint nav when the fix returns
   float heading_desired;     // desired heading if navigating by comapss
   float bearing;             // desired direction of travel use in both modes
   float bearing_correction;  // correction needed to return to proper bearing

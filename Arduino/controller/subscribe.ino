@@ -20,12 +20,12 @@ void dispatch_command(char buffer[]);
 void setup_subscribe() {
   if (udpCommandServer.listen(UDP_COMMAND_PORT)) {
     udpCommandServer.onPacket(process_udp_command);
-    Serial.print("UDP command server listening on port ");
-    Serial.println(UDP_COMMAND_PORT);
+    DEBUG_PRINT("UDP command server listening on port ");
+    DEBUG_PRINTLN(UDP_COMMAND_PORT);
   } else {
-    Serial.println("Failed to start UDP command server");
+    DEBUG_PRINTLN("Failed to start UDP command server");
   }
-  Serial.println("Subscribe all setup");
+  DEBUG_PRINTLN("Subscribe all setup");
 }
 
 // Handle a command datagram of the form "~APCMD,<command>$".
@@ -50,9 +50,9 @@ void process_udp_command(AsyncUDPPacket packet) {
   }
   *end = '\0';                   // trim the trailing '$'
 
-  Serial.print("Got UDP command: '");
-  Serial.print(cmd);
-  Serial.println("'");
+  DEBUG_PRINT("Got UDP command: '");
+  DEBUG_PRINT(cmd);
+  DEBUG_PRINTLN("'");
   dispatch_command(cmd);
 }
 
@@ -81,10 +81,14 @@ void dispatch_command(char buffer[]) {
       break;
     }
     case 'w': {
-      char* coordinates = strtok(&buffer[1], ",");
+      // strtok_r (not strtok): this runs in the AsyncUDP task and the telnet
+      // 'w' handler runs in command_task. A shared static strtok pointer would
+      // corrupt if both parsed a waypoint at once; a local saveptr is reentrant.
+      char* saveptr = NULL;
+      char* coordinates = strtok_r(&buffer[1], ",", &saveptr);
       if (coordinates != NULL) {
         float lat = atof(coordinates);
-        coordinates = strtok(NULL, ",");
+        coordinates = strtok_r(NULL, ",", &saveptr);
         if (coordinates != NULL) {
           autoPilot.setWaypoint(lat, atof(coordinates));
         }

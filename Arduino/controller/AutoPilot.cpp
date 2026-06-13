@@ -45,6 +45,7 @@ AutoPilot::AutoPilot(SerialType* ser) {
 
   navigation_enabled = false;
   mode = 1;
+  compass_fallback = false;
   heading_desired = 0.0;
   bearing = 0.0;
   bearing_correction = 0.0;
@@ -160,8 +161,32 @@ bool AutoPilot::hasFix() {
 void AutoPilot::setFix(bool fix) {
   this->lock();
   this->fix = fix;
-  if (!fix && mode == 2) {
-    setNavigationEnabled(false);
+  if (!fix) {
+    // Lost the GPS fix. If we were steering to a waypoint, don't disengage -
+    // a momentary fix dropout would otherwise silently stop the autopilot.
+    // Instead hold the current heading (compass mode) with navigation still
+    // engaged, and remember that we did this so we can resume waypoint nav once
+    // the fix returns. Guarded by mode == 2 so repeated no-fix cycles are no-ops.
+    if (this->mode == 2) {
+      this->compass_fallback = true;
+      this->mode = 1;
+      this->heading_desired = this->heading;
+      this->bearing = this->heading_desired;
+      this->bearing_correction = getCourseCorrection(this->bearing, this->heading);
+      this->modeChanged = true;
+      this->destinationChanged = true;
+    }
+  } else if (this->compass_fallback) {
+    // Fix restored after an automatic compass-hold fallback. Resume waypoint
+    // navigation only if the operator hasn't taken manual control in the
+    // meantime (which clears compass_fallback) and we still have a waypoint and
+    // navigation is on.
+    if (this->waypoint_set && this->navigation_enabled) {
+      this->mode = 2;
+      this->modeChanged = true;
+      this->destinationChanged = true;
+    }
+    this->compass_fallback = false;
   }
   this->unlock();
 }
@@ -198,6 +223,9 @@ int AutoPilot::setMode(int new_mode) {
   this->lock();
   int retval = -1;
   if ((new_mode == 1) || (new_mode == 2 && this->waypoint_set)) {
+    // Operator chose a mode explicitly - cancel any pending auto-resume to
+    // waypoint nav from a GPS fix-loss fallback.
+    this->compass_fallback = false;
     this->mode = new_mode;
     if (this->mode == 1) {
       this->heading_desired = this->heading;
@@ -220,6 +248,9 @@ bool AutoPilot::isNavigationEndabled() {
 
 void AutoPilot::setNavigationEnabled(bool enable) {
   this->lock();
+  // Operator toggled navigation explicitly - cancel any pending auto-resume to
+  // waypoint nav from a GPS fix-loss fallback.
+  this->compass_fallback = false;
   if (this->navigation_enabled == false && enable == true) {
     // if we are re-enabling and current mode is compass we should stat to navigate to current heading to previous one.
     if (this->mode == 1) {
@@ -242,6 +273,9 @@ float AutoPilot::getHeadingDesired() {
 
 void AutoPilot::adjustHeadingDesired(float change) {
   this->lock();
+  // Operator is steering by hand - cancel any pending auto-resume to waypoint
+  // nav from a GPS fix-loss fallback.
+  this->compass_fallback = false;
   if (this->mode > 0) {
     if (this->mode == 2) {
       this->heading_desired = this->heading;

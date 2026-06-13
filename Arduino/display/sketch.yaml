@@ -1,0 +1,28 @@
+# Arduino sketch project file (https://arduino.github.io/arduino-cli/latest/sketch-project-file/)
+#
+# Defines a reproducible build "profile" for the display sketch. Build with:
+#
+#     arduino-cli compile --profile nano        # run from this folder
+#     arduino-cli upload  --profile nano -p /dev/cu.usbmodemXXXX
+#
+# The first compile auto-installs the core + libraries listed below, so nothing
+# has to live in Arduino/libraries.
+#
+# NOTE: profile library lists are NOT dependency-resolved - every transitive
+# dependency must be listed explicitly (that is why Adafruit BusIO is here even
+# though we never #include it directly; the GFX/HX8357 drivers need it).
+# Version pins are reasonable recent releases; bump with `arduino-cli lib search`.
+
+profiles:
+  nano:
+    notes: Arduino Nano ESP32 - HX8357 LCD display + button input head unit
+    fqbn: arduino:esp32:nano_nora
+    platforms:
+      - platform: arduino:esp32 (2.0.18)
+    libraries:
+      - Adafruit GFX Library (1.11.11)   # graphics + Fonts/* (Adafruit_GFX.h)
+      - Adafruit HX8357 Library (1.1.20) # TFT LCD driver (Adafruit_HX8357.h)
+      - Time (1.6.1)                     # time_t helpers (TimeLib.h)
+      - Adafruit BusIO (1.16.1)          # dependency of the Adafruit drivers
+
+default_profile: nano

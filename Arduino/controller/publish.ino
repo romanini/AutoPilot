@@ -6,7 +6,13 @@
 #define DATA_SIZE 300
 #define BROADCAST_PORT 8888
 
-//IPAddress broadcastIp(10,20,1,255);
+// Subnet-directed broadcast for the soft-AP's own network. We send here instead
+// of AsyncUDP::broadcastTo() (which targets the limited broadcast 255.255.255.255):
+// in AP-only mode there is no default route, so 255.255.255.255 has no interface
+// to egress and the datagram is silently dropped. 10.20.1.255 matches the soft-AP
+// netif's subnet, so lwip routes it out the AP interface as an L2 broadcast that
+// every associated station (display, OpenCPN, ...) receives.
+IPAddress broadcastIp(10, 20, 1, 255);
 
 AsyncUDP udpClient;
 
@@ -14,7 +20,7 @@ uint32_t last_publish_time_mills = millis();
 char serialzied_data[DATA_SIZE];
 
 void setup_publish() {
-  Serial.println("Publishing all setup");
+  DEBUG_PRINTLN("Publishing all setup");
 }
 
 void publish_APDAT() {
@@ -56,13 +62,12 @@ void publish_APDAT() {
 
     //DEBUG_PRINTLN(serialzied_data);
 
-    udpClient.broadcastTo(serialzied_data, BROADCAST_PORT);
-    flash_led();
+    udpClient.writeTo((const uint8_t *)serialzied_data, strlen(serialzied_data), broadcastIp, BROADCAST_PORT);
   }
 }
 
 void publish_RESET() {
   sprintf(serialzied_data, "~RESET,1$");
   DEBUG_PRINTLN(serialzied_data);
-  udpClient.broadcastTo(serialzied_data, BROADCAST_PORT);
+  udpClient.writeTo((const uint8_t *)serialzied_data, strlen(serialzied_data), broadcastIp, BROADCAST_PORT);
 }

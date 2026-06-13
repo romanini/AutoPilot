@@ -25,7 +25,7 @@ void setup_garmin() {
   // and the Garmin RX to connect to a TX pin.  The  being() function parsm are in order of RX then TX
   Serial2Port.begin(4800, SERIAL_8N1, GARMIN_TX_B, GARMIN_RX_B);
 
-  Serial.println("Garmin A and B setup");
+  DEBUG_PRINTLN("Garmin A and B setup");
 }
 
 void check_garmin() {
@@ -40,8 +40,8 @@ void check_garmin() {
   }
 #if DEBUG_GARMIN
   if (line.length() > 0) {
-    Serial.print("Garmin A:");
-    Serial.println(line);
+    DEBUG_PRINT("Garmin A:");
+    DEBUG_PRINTLN(line);
   }
 #endif
 
@@ -56,9 +56,9 @@ void check_garmin() {
   }
 #if DEBUG_GARMIN
   if (line.length() > 0) {
-    Serial.print("Garmin B: '");
-    Serial.print(line);
-    Serial.println("'");
+    DEBUG_PRINT("Garmin B: '");
+    DEBUG_PRINT(line);
+    DEBUG_PRINTLN("'");
   }
 #endif
 }

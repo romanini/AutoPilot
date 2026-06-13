@@ -1,5 +1,10 @@
 #include <Wire.h>
 
+// Clamp on the integral term so it can't wind up without bound while fighting a
+// current or a mechanical stop. Tunable: this caps the integral's steering
+// authority relative to the proportional term (P = Kp * e, |e| <= 180).
+#define PID_INTEGRAL_MAX 10.0
+
 float Pi;
 float e_prev;
 float Kp, Ki, Kd;
@@ -11,7 +16,14 @@ void setup_pid() {
   Kp = 1.0;
   Ki = 0.05;
   Kd = 0.0;
-  Serial.println("PID all setup.");
+  DEBUG_PRINTLN("PID all setup.");
+}
+
+// Clear the integral accumulator and error history. Called when navigation is
+// (re-)engaged so steering starts fresh instead of acting on stale windup.
+void reset_pid() {
+  Pi = 0.0;
+  e_prev = 0.0;
 }
 
 float pid_loop(float target, float current, float time) {
@@ -28,7 +40,16 @@ float pid_loop(float target, float current, float time) {
     l_kd = 0.0;
   }
   Pi = Pi + l_ki * e * time;
-  float D = (l_kd * e - e_prev) / time;
+  if (Pi > PID_INTEGRAL_MAX) {
+    Pi = PID_INTEGRAL_MAX;
+  } else if (Pi < -PID_INTEGRAL_MAX) {
+    Pi = -PID_INTEGRAL_MAX;
+  }
+  // Discrete derivative term: Kd * d(error)/dt. Previously this was
+  // (l_kd * e - e_prev) / time, which mixed a gain-scaled current error with an
+  // unscaled previous error - mathematically wrong. Guard against time == 0 (two
+  // loop iterations within the same millisecond) so enabling D can't divide by 0.
+  float D = (time > 0.0f) ? (l_kd * (e - e_prev) / time) : 0.0f;
   //float change_angle = P + Pi + D;
   float change_angle = P+Pi;
   e_prev = e;

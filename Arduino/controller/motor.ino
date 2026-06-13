@@ -14,10 +14,17 @@
 #define MIN_MOTOR_OFF_TIME 1000
 #define MILLIS_PER_DEGREE_CORRECTION 1000
 
-int last_mills;
+// Usable rudder travel, expressed in steer-angle degrees, and the same limit in
+// the integrator's "millis" units. Tune MAX_RUDDER_STEER_ANGLE to the actuator:
+// it both caps how far an out-of-range command can drive the motor and bounds
+// the virtual position so it can't wind up past the mechanical stop.
+#define MAX_RUDDER_STEER_ANGLE 45.0
+#define MAX_RUDDER_TRAVEL_MILLIS ((int)(MAX_RUDDER_STEER_ANGLE * MILLIS_PER_DEGREE_RATE_CHANGE))
+
+unsigned long last_mills;  // millis() timestamp of the previous motor_control_loop call
 int motor_mills;
 int direction;
-int current_mills;
+int current_mills;         // virtual rudder position accumulator (signed, clamped); not a timestamp
 float current_steer;
 float new_curr;
 int callCount = 0;
@@ -25,7 +32,7 @@ int callCount = 0;
 void setup_motor() {
   pinMode(MOTOR_PLUS_PIN, OUTPUT);
   pinMode(MOTOR_NEG_PIN, OUTPUT);
-  analogWrite(MOTOR_PLUS_PIN, HIGH);
+  analogWrite(MOTOR_PLUS_PIN, 0);
   analogWrite(MOTOR_NEG_PIN, 0);
   current_steer = 0.0;
   last_mills = 0;
@@ -33,7 +40,7 @@ void setup_motor() {
   motor_mills = 0;
   current_mills = 0;
 
-  Serial.println("Motor all setup.");
+  DEBUG_PRINTLN("Motor all setup.");
 }
 
 void move_motor(int direct) {
@@ -67,16 +74,34 @@ void stop_motor() {
 }
 
 void motor_control_loop(float new_steer_angle) {
-  unsigned int cur_mills = millis();
+  unsigned long cur_mills = millis();
   if (last_mills == 0) {
     last_mills = cur_mills;
     return;
   }
 
   int new_mills = new_steer_angle * MILLIS_PER_DEGREE_RATE_CHANGE;
-  int diff_m = cur_mills - last_mills;
+  // Bound the commanded position to the rudder's physical travel so an
+  // out-of-range steer command doesn't drive the motor against a stop forever.
+  if (new_mills > MAX_RUDDER_TRAVEL_MILLIS) {
+    new_mills = MAX_RUDDER_TRAVEL_MILLIS;
+  } else if (new_mills < -MAX_RUDDER_TRAVEL_MILLIS) {
+    new_mills = -MAX_RUDDER_TRAVEL_MILLIS;
+  }
+  // Unsigned subtraction is rollover-safe across the millis() wrap; the per-loop
+  // elapsed time is small, so casting the result to int for the direction multiply
+  // is safe.
+  int diff_m = (int)(cur_mills - last_mills);
   last_mills = cur_mills;
   current_mills += diff_m * direction;
+  // Clamp the virtual rudder position to the same travel limit. Without this it
+  // integrates past the mechanical stop and then lags on reversal while it
+  // "unwinds" phantom travel that the rudder never actually had.
+  if (current_mills > MAX_RUDDER_TRAVEL_MILLIS) {
+    current_mills = MAX_RUDDER_TRAVEL_MILLIS;
+  } else if (current_mills < -MAX_RUDDER_TRAVEL_MILLIS) {
+    current_mills = -MAX_RUDDER_TRAVEL_MILLIS;
+  }
   if (callCount >= 100) {
     callCount = 0;
     // char buffer[100];

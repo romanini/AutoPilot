@@ -19,12 +19,7 @@
 
 static constexpr uint32_t TFT_SPI_HZ = 24000000; // try 40 MHz; drop to 24 MHz if unstable
 
-#if defined(ARDUINO_ARCH_ESP32)  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
 Adafruit_HX8357 tft = Adafruit_HX8357(&SPI, TFT_CS, TFT_DC, TFT_RST);
-#else
-Adafruit_HX8357 tft = Adafruit_HX8357(TFT_CS, TFT_DC, TFT_RST);
-
-#endif
 
 int autoPilotMode = 0;
 bool isEnabled = false;
@@ -98,39 +93,36 @@ void initialize_displayed_values() {
 }
 
 void setup_screen() {
-  Serial.println("Starting Setup Display");
+  DEBUG_PRINTLN("Starting Setup Display");
 
-// Use hardware SPI (on Uno, #13, #12, #11) and the above for CS/DC
-#if defined(ARDUINO_ARCH_ESP32)  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
-  // Control lines defaults
+  // Control lines defaults, then start hardware SPI (SCK, MISO, MOSI, SS)
   pinMode(TFT_CS, OUTPUT);
   digitalWrite(TFT_CS, HIGH);
   pinMode(TFT_DC, OUTPUT);
 
-  SPI.begin(SPI_SCLK, SPI_MISO, SPI_MOSI, TFT_CS);  // SCK, MISO, MOSI, SS
-#endif
+  SPI.begin(SPI_SCLK, SPI_MISO, SPI_MOSI, TFT_CS);
 
-  Serial.println("Setting up Display");
+  DEBUG_PRINTLN("Setting up Display");
   tft.begin(TFT_SPI_HZ);
   delay(20);
-  Serial.println("started");
+  DEBUG_PRINTLN("started");
 
   // read diagnostics (optional but can help debug problems)
   uint8_t x = tft.readcommand8(HX8357_RDPOWMODE);
-  Serial.print("Display Power Mode: 0x");
-  Serial.println(x, HEX);
+  DEBUG_PRINT("Display Power Mode: 0x");
+  DEBUG_PRINTLN2(x, HEX);
   x = tft.readcommand8(HX8357_RDMADCTL);
-  Serial.print("MADCTL Mode: 0x");
-  Serial.println(x, HEX);
+  DEBUG_PRINT("MADCTL Mode: 0x");
+  DEBUG_PRINTLN2(x, HEX);
   x = tft.readcommand8(HX8357_RDCOLMOD);
-  Serial.print("Pixel Format: 0x");
-  Serial.println(x, HEX);
+  DEBUG_PRINT("Pixel Format: 0x");
+  DEBUG_PRINTLN2(x, HEX);
   x = tft.readcommand8(HX8357_RDDIM);
-  Serial.print("Image Format: 0x");
-  Serial.println(x, HEX);
+  DEBUG_PRINT("Image Format: 0x");
+  DEBUG_PRINTLN2(x, HEX);
   x = tft.readcommand8(HX8357_RDDSDR);
-  Serial.print("Self Diagnostic: 0x");
-  Serial.println(x, HEX);
+  DEBUG_PRINT("Self Diagnostic: 0x");
+  DEBUG_PRINTLN2(x, HEX);
 
   tft.setRotation(1);
   tft.fillScreen(HX8357_BLACK);
@@ -562,7 +554,7 @@ void display_fix() {
 }
 
 void initialize_display() {
-  Serial.println("Initializing display");
+  DEBUG_PRINTLN("Initializing display");
   initialize_speed();
   initialize_compass();
   initialize_pitch();

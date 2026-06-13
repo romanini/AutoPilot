@@ -48,7 +48,7 @@ void setup_button() {
   pinMode(BEEP_PIN, OUTPUT);
   digitalWrite(BEEP_PIN, LOW);
 
-  Serial.println("Button setup!");
+  DEBUG_PRINTLN("Button setup!");
 }
 
 void set_beep(unsigned long duration) {
@@ -158,7 +158,7 @@ void button_release(int pin) {
       if (autoPilot.getMode() > 0) {
         if (autoPilot.getMode() == 2) {
           set_mode(1);
-          delay(1000);
+          // delay(1000);
         }
         adjustment *= -1.0;
         adjust_heading(adjustment);
@@ -174,7 +174,7 @@ void button_release(int pin) {
       if (autoPilot.getMode() > 0) {
         if (autoPilot.getMode() == 2) {
           set_mode(1);
-          delay(1000);
+          // delay(1000);
         }
         adjust_heading(adjustment);
         DEBUG_PRINT("Starbord Adjust ");
@@ -212,7 +212,7 @@ void button_release(int pin) {
       }
       DEBUG_PRINTLN("Mode Button Pressed");
       break;
-    case TACK_BUTTON_PIN:
+    case TACK_BUTTON_PIN: {
       unsigned long tr = autoPilot.getTackRequested();
       bool itr = autoPilot.isTackRequested();
       DEBUG_PRINT("Tack Request time ");
@@ -226,7 +226,7 @@ void button_release(int pin) {
         // so that we can adjust the heading by 90 degrees
         if (autoPilot.getMode() == 2) {
           set_mode(1);
-          delay(1000);
+          //delay(1000);
         }
         unsigned long t = millis();
         autoPilot.setTackRequested(t);
@@ -235,6 +235,7 @@ void button_release(int pin) {
       }
       DEBUG_PRINTLN("Tack Button Pressed");
       break;
+    }
   }
 }
 

@@ -47,9 +47,9 @@ void setup_gps() {
   delay(1000);
 
   // Ask for firmware version
-  Serial.println("GPS Firmware");
+  DEBUG_PRINTLN("GPS Firmware");
   gps.println(PMTK_Q_RELEASE);
-  Serial.println("GPS all setup");
+  DEBUG_PRINTLN("GPS all setup");
 }
 
 void check_gps() {

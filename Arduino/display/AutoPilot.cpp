@@ -1,10 +1,4 @@
-#if defined(ARDUINO_ARCH_SAMD)
-#include <avr/pgmspace.h>
-#elif defined(ARDUINO_ARCH_ESP32)
 #include <pgmspace.h>
-#else
-#error "Unsupported board type. Please use an AVR, SAMD, or ESP32 based board."
-#endif
 #include <Arduino.h>
 #include <cstdlib>
 #include <cstring>
@@ -38,6 +32,10 @@ AutoPilot::~AutoPilot() {
 
 
 void AutoPilot::init() {
+  // Lockable so the receive-timeout path (display task) can reset state safely
+  // while the AsyncUDP task may be in parse(). Safe to call from the constructor
+  // too: the mutex is created before init() is first invoked.
+  this->lock();
   year = 0;
   month = 0;
   day = 0;
@@ -68,6 +66,7 @@ void AutoPilot::init() {
   connected = false;
   tackRequested = 0;
   localCommandTime = 0;
+  this->unlock();
 }
 
 int AutoPilot::getYear() {
@@ -144,6 +143,8 @@ void AutoPilot::setMode(int new_mode) {
     }
     this->modeChanged = true;
     this->destinationChanged = true;
+    this->bearing_correction = this->getCourseCorrection(this->bearing, this->heading);
+
   }
   this->unlock();
 }
@@ -168,6 +169,7 @@ void AutoPilot::setNavigationEnabled(bool enable) {
   }
   this->modeChanged = true;
   this->destinationChanged = true;
+
   this->navigation_enabled = enable;
   this->unlock();  
 }

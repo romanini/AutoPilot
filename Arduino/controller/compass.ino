@@ -13,10 +13,10 @@ sh2_SensorValue_t sensorValue;
 
 void setReports(void) {
   if (!bno08x.enableReport(SH2_ROTATION_VECTOR, 2000)) {
-    Serial.println("Could not enable Gyro Integrated Rotation Vevtor");
+    DEBUG_PRINTLN("Could not enable Gyro Integrated Rotation Vevtor");
   }
   if (!bno08x.enableReport(SH2_STABILITY_CLASSIFIER)) {
-    Serial.println("Could not enable stability classifier");
+    DEBUG_PRINTLN("Could not enable stability classifier");
   }
 }
 
@@ -36,12 +36,12 @@ void setup_compass(void) {
     // without it. Rather than hang here forever - which would also prevent the
     // display link, GPS, telnet and the FreeRTOS tasks from ever starting -
     // reboot and try again. A transient I2C glitch will clear on the retry.
-    Serial.println("Failed to find BNO08x chip - rebooting to retry");
-    Serial.flush();
+    DEBUG_PRINTLN("Failed to find BNO08x chip - rebooting to retry");
+    if (Serial) Serial.flush();
     delay(1000);  // let the message flush and avoid a tight reboot loop
     ESP.restart();
   } else {
-    Serial.println("BNO08x Found!");
+    DEBUG_PRINTLN("BNO08x Found!");
   }
   setReports();
 
@@ -50,7 +50,7 @@ void setup_compass(void) {
   // we start in compass mode
   autoPilot.setMode(1);
 
-  Serial.println("Compass all setup");
+  DEBUG_PRINTLN("Compass all setup");
   delay(100);
 }
 
@@ -91,10 +91,11 @@ void check_compass() {
         // DEBUG_PRINT("Yaw: ");
         // DEBUG_PRINTLN(autoPilot.getHeading());
         break;
-      case SH2_STABILITY_CLASSIFIER:
+      case SH2_STABILITY_CLASSIFIER: {
         sh2_StabilityClassifier_t stability = sensorValue.un.stabilityClassifier;
         autoPilot.setStabilityClassification((int)stability.classification);
         break;
+      }
     }
   }
 }
