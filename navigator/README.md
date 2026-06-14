@@ -24,3 +24,73 @@ The steps are identical to how to use the image except for the copy is the rever
 sudo dd if=/dev/disk2 of=orangepi-2024-03-28.img
 ```
 
+## Networking
+
+The OrangePi has two Wi-Fi interfaces, both managed by NetworkManager
+(`/etc/netplan/orangepi-default.yaml` just sets `renderer: NetworkManager` and
+delegates everything to it):
+
+- `wlan0` (onboard) joins **SoberPilot**, the controller's AP, on `10.20.1.x`.
+  Route metric `600`.
+- A USB Wi-Fi adapter (`wlx...`) joins the home/internet network
+  (`milosmeadow-fast`) on `172.16.0.x`. Route metric `100`.
+
+Lower metric wins, so the USB adapter's default route takes priority for
+general internet traffic, while `10.20.1.0/24` traffic (talking to the
+controller) still goes out `wlan0`. Set with:
+
+```
+nmcli connection modify "milosmeadow-fast 1" ipv4.route-metric 100
+nmcli connection modify "SoberPilot" ipv4.route-metric 600
+```
+
+### Keeping `wlan0` awake for UDP telemetry
+
+The controller broadcasts `~APDAT` telemetry over UDP on port 8888
+(see the main `AutoPilot` skill for the protocol). Left alone, `wlan0` would
+go into power-save and stop reliably receiving these broadcasts. Two things
+fix this:
+
+- `/etc/udev/rules.d/10-wifi-disable-powermanagement.rules` — runs
+  `iwconfig wlan0 power off` whenever the `wlan0` interface is added.
+- `/etc/systemd/system/wifi-keepalive.service` — continuously pings the
+  controller's AP gateway (`ping -i 0.3 10.20.1.1`, `Restart=always`) to keep
+  the link active. Enabled with `systemctl enable --now wifi-keepalive.service`.
+
+## OpenCPN
+
+OpenCPN is installed as a **Flatpak** from Flathub (`org.opencpn.OpenCPN`,
+user install):
+
+```
+flatpak install --user flathub org.opencpn.OpenCPN
+```
+
+### Plugins
+
+- **o-charts_pi** (v2.0.0.66) — encrypted vector charts from o-charts.org.
+  Installed via OpenCPN's in-app plugin manager.
+
+### Serial NMEA inputs
+
+OpenCPN reads two serial devices, configured as Data Connections in
+OpenCPN's connection settings:
+
+- `/dev/ttyUSB0` @ 4800 baud — a
+  [GlobalSat BU-353-N5](https://www.amazon.com/GlobalSat-BU-353N5-GNSS-Receiver-Black/dp/B0B1W1YBZC)
+  USB GPS receiver (NMEA-0183).
+- `/dev/ttyACM0` @ 38400 baud — a
+  [dAISy AIS receiver](https://shop.wegmatt.com/products/daisy-ais-receiver)
+  (NMEA-0183 AIS).
+
+Because OpenCPN runs sandboxed under Flatpak, it needs broad device access to
+open these serial ports:
+
+```
+flatpak override --user org.opencpn.OpenCPN --device=all
+```
+
+`/etc/udev/rules.d/70-serial-opencpn.rules` also sets `MODE="0666"` on
+`ttyUSB*`, `ttyACM*`, and `ttyS*` so the ports are world-readable/writable
+regardless of group membership.
+
