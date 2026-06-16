@@ -8,23 +8,18 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # ---------------------------------------------------------------------------
 # OpenCPN plugin header
 #
-# In a Flatpak build this is supplied by the runtime extension; point
-# OCPN_INCLUDE_DIR at the installed header.  For a native development
-# build, point it at the checked-out OpenCPN source.
-#
-# Default: looks for ocpn_plugin.h in the directory above this repo root
-# (i.e. alongside the OpenCPN source tree if you have both checked out).
-# Override on the cmake command line with -DOCPN_INCLUDE_DIR=<path>.
+# ocpn_plugin.h (Release_5.14.0) is bundled in include/ so no external
+# clone is needed for either native or Flatpak builds.
+# Override with -DOCPN_INCLUDE_DIR=<path> if you want a different version.
 # ---------------------------------------------------------------------------
 if(NOT DEFINED OCPN_INCLUDE_DIR)
-    set(OCPN_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../include"
+    set(OCPN_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include"
         CACHE PATH "Path to the directory containing ocpn_plugin.h")
 endif()
 
 if(NOT EXISTS "${OCPN_INCLUDE_DIR}/ocpn_plugin.h")
     message(FATAL_ERROR
-        "ocpn_plugin.h not found in OCPN_INCLUDE_DIR='${OCPN_INCLUDE_DIR}'. "
-        "Pass -DOCPN_INCLUDE_DIR=<path-to-OpenCPN-include> to cmake.")
+        "ocpn_plugin.h not found in OCPN_INCLUDE_DIR='${OCPN_INCLUDE_DIR}'.")
 endif()
 
 # ---------------------------------------------------------------------------
