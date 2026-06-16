@@ -1,0 +1,46 @@
+app-id: org.opencpn.OpenCPN.Plugin.autopilot
+branch: stable
+
+# Builds autopilot_pi as a Flatpak extension of the installed OpenCPN Flatpak.
+# See Phase 5 of ~/.claude/docs/AutoPilot-pi/Plan.md for full instructions.
+#
+# Pre-requisites on the OrangePi (run once):
+#   flatpak install flathub org.freedesktop.Sdk//24.08
+#   flatpak install flathub org.freedesktop.Platform//24.08
+#   sudo apt install flatpak-builder cmake  # or: flatpak install flathub org.flatpak.Builder
+#
+# Build and install:
+#   cd opencpn_plugin/autopilot_pi
+#   flatpak-builder --user --install --force-clean build-dir flatpak/org.opencpn.OpenCPN.Plugin.autopilot.yaml
+#
+# Verify:
+#   flatpak info org.opencpn.OpenCPN.Plugin.autopilot
+#   # Then launch OpenCPN → Plugin Manager → should show "AutoPilot"
+
+runtime: org.opencpn.OpenCPN
+runtime-version: stable
+sdk: org.freedesktop.Sdk//24.08
+
+build-extension: true
+
+# Plugin .so is installed under the extension mount point.
+# OpenCPN (Flatpak) looks for plugins in /app/extensions/*/lib/opencpn/*.so
+# The extension manifest mounts this at runtime.
+
+build-options:
+  cflags: -O2 -DFLATPAK
+  cxxflags: -O2 -DFLATPAK
+  prefix: /app/extensions/autopilot
+  libdir: /app/extensions/autopilot/lib
+
+modules:
+  - name: autopilot_pi
+    buildsystem: cmake-ninja
+    builddir: true
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      # ocpn_plugin.h is provided by the OpenCPN runtime extension at this path.
+      - -DOCPN_INCLUDE_DIR=/app/include
+    sources:
+      - type: dir
+        path: ..
