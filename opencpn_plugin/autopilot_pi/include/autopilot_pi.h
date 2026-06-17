@@ -22,8 +22,8 @@ public:
 
     int     GetAPIVersionMajor() override;
     int     GetAPIVersionMinor() override;
-    int     GetPluginVersionMajor() override;
-    int     GetPluginVersionMinor() override;
+    int     GetPlugInVersionMajor() override;
+    int     GetPlugInVersionMinor() override;
     wxString GetShortDescription() override;
     wxString GetLongDescription() override;
     wxString GetCommonName() override;

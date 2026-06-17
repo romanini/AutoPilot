@@ -92,8 +92,8 @@ bool AutoPilotPlugin::DeInit() {
 
 int     AutoPilotPlugin::GetAPIVersionMajor()    { return MY_API_VERSION_MAJOR; }
 int     AutoPilotPlugin::GetAPIVersionMinor()    { return MY_API_VERSION_MINOR; }
-int     AutoPilotPlugin::GetPluginVersionMajor() { return PLUGIN_VERSION_MAJOR; }
-int     AutoPilotPlugin::GetPluginVersionMinor() { return PLUGIN_VERSION_MINOR; }
+int     AutoPilotPlugin::GetPlugInVersionMajor() { return PLUGIN_VERSION_MAJOR; }
+int     AutoPilotPlugin::GetPlugInVersionMinor() { return PLUGIN_VERSION_MINOR; }
 
 wxString AutoPilotPlugin::GetShortDescription() {
     return "AutoPilot panel — live controller status and commands via UDP";
