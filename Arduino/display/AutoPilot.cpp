@@ -140,11 +140,17 @@ void AutoPilot::setMode(int new_mode) {
     if (this->mode == 1) {
       this->heading_desired = this->heading;
       this->bearing = this->heading_desired;
+      this->bearing_correction = this->getCourseCorrection(this->bearing, this->heading);
+    } else if (this->mode == 2) {
+      // Switching to waypoint nav: recompute the bearing-to-waypoint and course
+      // correction locally the same way the controller does (see setLoation),
+      // so the display matches the next APDAT immediately instead of lagging a
+      // frame on the stale compass bearing.
+      this->bearing = this->getBearing(this->location_lat, this->location_lon, this->waypoint_lat, this->waypoint_lon);
+      this->bearing_correction = this->getCourseCorrection(this->bearing, this->course);
     }
     this->modeChanged = true;
     this->destinationChanged = true;
-    this->bearing_correction = this->getCourseCorrection(this->bearing, this->heading);
-
   }
   this->unlock();
 }
@@ -770,6 +776,25 @@ float AutoPilot::getCourseCorrection(float bearing, float course) {
     correction += 360.0;
   }
   return correction;
+}
+
+float AutoPilot::toRadians(float degrees) {
+  return degrees * PI / 180.0;
+}
+
+float AutoPilot::toDegrees(float radians) {
+  return radians * 180.0 / PI;
+}
+
+// Calculates the initial bearing from point 1 to point 2. Mirrors the
+// controller's getBearing so the display can compute the waypoint bearing
+// locally (e.g. when switching into mode 2) and stay in sync with telemetry.
+float AutoPilot::getBearing(float lat1, float lon1, float lat2, float lon2) {
+  float y = sin(toRadians(lon2 - lon1)) * cos(toRadians(lat2));
+  float x = cos(toRadians(lat1)) * sin(toRadians(lat2)) - sin(toRadians(lat1)) * cos(toRadians(lat2)) * cos(toRadians(lon2 - lon1));
+  float bearing = toDegrees(atan2(y, x));
+
+  return normalizeDegrees(bearing);
 }
 
 float AutoPilot::normalizeDegrees(float degrees) {

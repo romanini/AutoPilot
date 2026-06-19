@@ -21,14 +21,15 @@ static constexpr uint32_t TFT_SPI_HZ = 24000000; // try 40 MHz; drop to 24 MHz i
 
 Adafruit_HX8357 tft = Adafruit_HX8357(&SPI, TFT_CS, TFT_DC, TFT_RST);
 
-int autoPilotMode = 0;
-bool isEnabled = false;
 uint16_t backgroundColor = HX8357_BLACK;
 
 // Tracks the last value painted for each display item.
 // Initialized to sentinels in initialize_displayed_values() so everything
 // paints on the first call to display().
 struct {
+  bool bearing_nav_enabled;
+  bool bearing_correction_nav_enabled;
+
   float speed;
   bool  speed_hasFix;
 
@@ -75,6 +76,7 @@ struct {
 } disp;
 
 void initialize_displayed_values() {
+  disp.bearing_nav_enabled = false;   disp.bearing_correction_nav_enabled = false;
   disp.speed = -999.0f;          disp.speed_hasFix = false;
   disp.heading = -999.0f;        disp.heading_connected = false;
   disp.pitch = -999.0f;          disp.pitch_connected = false;
@@ -137,8 +139,6 @@ void setup_screen() {
 void display() {
   // mode/destination use one-shot consuming flags in AutoPilot, so keep them event-driven.
   if (autoPilot.hasModeChanged()) {
-    autoPilotMode = autoPilot.getMode();
-    isEnabled = autoPilot.isNavigationEnabled();
     DEBUG_PRINTLN("display Mode ");
     display_mode();
     DEBUG_PRINTLN("done display Mode");
@@ -340,17 +340,16 @@ void display_destination() {
 }
 
 void display_bearing() {
+  bool cur_nav = autoPilot.isNavigationEnabled();
   float cur_bearing = autoPilot.getBearing();
-  int   cur_mode    = autoPilot.getMode();
-  if (cur_bearing == disp.bearing && cur_mode == disp.bearing_mode) return;
+  if (cur_bearing == disp.bearing && cur_nav == disp.bearing_nav_enabled) return;
   disp.bearing      = cur_bearing;
-  disp.bearing_mode = cur_mode;
+  disp.bearing_nav_enabled = cur_nav;
 
   GFXcanvas1 bearing_value_canvas(115, 42);
   uint16_t foregroundColor = 0xFC09;
   bearing_value_canvas.fillScreen(0);  // Background index
-
-  if (cur_mode > 0) {
+  if (autoPilot.isConnected() && autoPilot.isNavigationEnabled()) {
     bearing_value_canvas.setFont(&FreeSansBold18pt7b);
     bearing_value_canvas.setTextColor(1);  // Foreground index
     bearing_value_canvas.setCursor(0, 29);
@@ -361,11 +360,11 @@ void display_bearing() {
 }
 
 void display_bearing_correction() {
+  bool cur_nav = autoPilot.isNavigationEnabled();
   float cur_bc   = autoPilot.getBearingCorrection();
-  int   cur_mode = autoPilot.getMode();
-  if (cur_bc == disp.bearingCorrection && cur_mode == disp.bearingCorrection_mode) return;
+  if (cur_bc == disp.bearingCorrection && cur_nav == disp.bearing_correction_nav_enabled) return;
   disp.bearingCorrection      = cur_bc;
-  disp.bearingCorrection_mode = cur_mode;
+  disp.bearing_correction_nav_enabled = cur_nav;
 
   // Canvas is 140 wide (was 115) and drawn 10px further left so a 3-digit
   // correction like "180.0 L" has room for the L/R suffix without clipping.
@@ -373,7 +372,7 @@ void display_bearing_correction() {
   uint16_t foregroundColor = 0xFC09;
   bearing_correction_value_canvas.fillScreen(0);  // Background index
 
-  if (cur_mode > 0) {
+  if (autoPilot.isConnected() && autoPilot.isNavigationEnabled()) {
     bearing_correction_value_canvas.setTextColor(1);  // Foreground index
     bearing_correction_value_canvas.setFont(&FreeSansBold18pt7b);
     bearing_correction_value_canvas.setCursor(0, 29);

@@ -71,6 +71,9 @@ private:
 
   bool isEmpty(char *ptart);
   float getCourseCorrection(float bearing, float course);
+  float toRadians(float degrees);
+  float toDegrees(float radians);
+  float getBearing(float lat1, float lon1, float lat2, float lon2);
   SerialType *serial;
   void parseAPDAT(char *buffer);
   void parseRESET(char *buffer);
