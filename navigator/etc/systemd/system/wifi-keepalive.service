@@ -1,0 +1,12 @@
+[Unit]
+Description=Keep wlan0 awake so UDP broadcast telemetry is received
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/bin/ping -i 0.3 10.20.1.1
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
