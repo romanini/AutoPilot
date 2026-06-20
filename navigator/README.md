@@ -2,27 +2,45 @@
 The navigation computer is not a raspberryPI with OpenNavigator, rather it is an Orange Pi Zero 2W.  The reason for this is simply one of power consumption.  The Orange Pi has just as much CPU as the Raspberry PI 4 Plus and just as much RAM, but consumes 25% the power.
 
 
-## How to use this image
-You will want to copy this image to the SD card for the OrangePi follow these steps:
-1. Insert the SD card into a card reader and attach to the computer
-2. Find the device identifier for the SD card. On a mac you can do this with:
-```
-diskutil list
-```
-3. Unmount the device
-```
-diskutil unmountDisk /dev/disk2
-```
-4. Copy the image to the device
-```
-sudo dd of=/dev/disk2 if=orangepi-2024-03-28.img
-```
+## SD card backup and restore
 
-## How to create this image (ie how to backup the Pi)
-The steps are identical to how to use the image except for the copy is the reverse:
-```
-sudo dd if=/dev/disk2 of=orangepi-2024-03-28.img
-```
+The OrangePi setup is not distributed as a disk image — it is too large for Git.
+To set up a fresh card, follow the rest of this README. Use the commands below
+to back up an existing working card or restore from a backup.
+
+**Two things make `dd` fast on macOS:**
+- Use `/dev/rdisk2` not `/dev/disk2` — the `r` prefix (raw device) bypasses the buffer cache and is ~10× faster.
+- Use `bs=4m` for large block transfers instead of the default 512-byte blocks.
+
+Pipe through `gzip` to compress the output; this cuts file size roughly in half
+and is usually faster overall because writing less to disk beats the CPU cost of
+compression. Hit **Ctrl+T** at any time to print progress.
+
+### Backup: SD card → compressed file
+
+1. Find your SD card device:
+   ```bash
+   diskutil list
+   ```
+2. Unmount it (replace `disk2` with your actual device):
+   ```bash
+   diskutil unmountDisk /dev/disk2
+   ```
+3. Copy and compress:
+   ```bash
+   sudo dd if=/dev/rdisk2 bs=4m | gzip > orangepi-$(date +%Y-%m-%d).img.gz
+   ```
+
+### Restore: compressed file → SD card
+
+1. Unmount the card:
+   ```bash
+   diskutil unmountDisk /dev/disk2
+   ```
+2. Decompress and write:
+   ```bash
+   gunzip -c orangepi-YYYY-MM-DD.img.gz | sudo dd of=/dev/rdisk2 bs=4m
+   ```
 
 ## Networking
 
