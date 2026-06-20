@@ -8,6 +8,7 @@
 
 #include <cstring>
 #include <cstdlib>
+#include <cmath>
 
 wxBEGIN_EVENT_TABLE(AutoPilotLink, wxEvtHandler)
     EVT_TIMER(wxID_ANY, AutoPilotLink::OnTimer)
@@ -20,6 +21,7 @@ AutoPilotLink::AutoPilotLink(AutoPilotPanel* panel)
     , m_timer(this)
     , m_state{}
     , m_last_receive_ms(0)
+    , m_suppress_until_ms(0)
 {
     m_controller_addr.Hostname("10.20.1.1");
     m_controller_addr.Service(8889);
@@ -73,14 +75,46 @@ bool AutoPilotLink::IsConnected() const {
 }
 
 void AutoPilotLink::SendMode(int mode) {
+    if (mode == 1 || (mode == 2 && m_state.waypoint_set)) {
+        m_state.mode = mode;
+        if (mode == 1) {
+            m_state.heading_desired = m_state.heading;
+            m_state.bearing = m_state.heading_desired;
+            m_state.bearing_correction = CourseCorrection(m_state.bearing, m_state.heading);
+        } else if (mode == 2) {
+            m_state.bearing = GeodesicBearing(m_state.location_lat, m_state.location_lon,
+                                              m_state.wp_lat, m_state.wp_lon);
+            m_state.bearing_correction = CourseCorrection(m_state.bearing, m_state.course);
+        }
+        m_suppress_until_ms = wxGetLocalTimeMillis() + LOCAL_SUPPRESS_MS;
+        if (m_panel) m_panel->UpdateFromState(m_state, IsConnected());
+    }
     SendCommand(wxString::Format("m%d", mode));
 }
 
 void AutoPilotLink::SendNavEnable(bool enable) {
+    if (!m_state.nav_enabled && enable && m_state.mode == 1) {
+        m_state.heading_desired = m_state.heading;
+        m_state.bearing = m_state.heading_desired;
+        m_state.bearing_correction = 0.0;
+    }
+    m_state.nav_enabled = enable;
+    m_suppress_until_ms = wxGetLocalTimeMillis() + LOCAL_SUPPRESS_MS;
+    if (m_panel) m_panel->UpdateFromState(m_state, IsConnected());
     SendCommand(wxString::Format("n%d", enable ? 1 : 0));
 }
 
 void AutoPilotLink::SendAdjust(float degrees) {
+    if (m_state.mode == 2) {
+        m_state.mode = 1;
+        m_state.heading_desired = m_state.heading;
+        m_state.bearing = m_state.heading_desired;
+    }
+    m_state.heading_desired = NormalizeDegrees(m_state.heading_desired + degrees);
+    m_state.bearing = m_state.heading_desired;
+    m_state.bearing_correction = CourseCorrection(m_state.bearing, m_state.heading);
+    m_suppress_until_ms = wxGetLocalTimeMillis() + LOCAL_SUPPRESS_MS;
+    if (m_panel) m_panel->UpdateFromState(m_state, IsConnected());
     SendCommand(wxString::Format("a%.2f", degrees));
 }
 
@@ -148,12 +182,43 @@ void AutoPilotLink::ParsePacket(char* data) {
     s.location_lat    = nextDouble();
     s.location_lon    = nextDouble();
 
-    m_state = s;
+    // Preserve locally-commanded fields for LOCAL_SUPPRESS_MS after a button press,
+    // matching the display unit's localCommandTime suppression in AutoPilot.cpp.
+    if (wxGetLocalTimeMillis() < m_suppress_until_ms) {
+        s.nav_enabled        = m_state.nav_enabled;
+        s.mode               = m_state.mode;
+        s.heading_desired    = m_state.heading_desired;
+        s.bearing            = m_state.bearing;
+        s.bearing_correction = m_state.bearing_correction;
+    }
     m_last_receive_ms = wxGetLocalTimeMillis();
+    m_state = s;
 
     if (m_panel) {
         m_panel->UpdateFromState(m_state, true);
     }
+}
+
+double AutoPilotLink::NormalizeDegrees(double d) {
+    d = fmod(d, 360.0);
+    if (d < 0.0) d += 360.0;
+    return d;
+}
+
+double AutoPilotLink::CourseCorrection(double bearing, double heading) {
+    double c = bearing - heading;
+    if (c > 180.0) c -= 360.0;
+    else if (c < -180.0) c += 360.0;
+    return c;
+}
+
+double AutoPilotLink::GeodesicBearing(double lat1, double lon1, double lat2, double lon2) {
+    const double D2R = M_PI / 180.0;
+    const double R2D = 180.0 / M_PI;
+    double y = sin((lon2 - lon1) * D2R) * cos(lat2 * D2R);
+    double x = cos(lat1 * D2R) * sin(lat2 * D2R)
+             - sin(lat1 * D2R) * cos(lat2 * D2R) * cos((lon2 - lon1) * D2R);
+    return NormalizeDegrees(atan2(y, x) * R2D);
 }
 
 void AutoPilotLink::DrainSocket() {

@@ -49,7 +49,10 @@ private:
     void ParsePacket(char* data);
     void SendCommand(const wxString& cmd);
 
-    static char* AdvanceField(char* p);
+    static char*  AdvanceField(char* p);
+    static double NormalizeDegrees(double d);
+    static double CourseCorrection(double bearing, double heading);
+    static double GeodesicBearing(double lat1, double lon1, double lat2, double lon2);
 
     AutoPilotPanel*    m_panel;
     wxDatagramSocket*  m_recv_sock;
@@ -57,11 +60,13 @@ private:
     wxTimer            m_timer;
     AutoPilotState     m_state;
     wxLongLong         m_last_receive_ms;
+    wxLongLong         m_suppress_until_ms;  // keep local changes alive past next telemetry
     wxIPV4address      m_controller_addr;
 
-    static const int TIMEOUT_MS      = 10000;
-    static const int POLL_INTERVAL_MS = 250;
-    static const int RECV_BUF_SIZE   = 512;
+    static const int TIMEOUT_MS        = 10000;
+    static const int POLL_INTERVAL_MS  = 250;
+    static const int RECV_BUF_SIZE     = 512;
+    static const int LOCAL_SUPPRESS_MS = 2000;
 
     wxDECLARE_EVENT_TABLE();
 };

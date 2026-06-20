@@ -44,4 +44,5 @@ private:
     wxAuiManager*   m_aui_mgr;
     int             m_toolbar_id;
     bool            m_panel_shown;
+    wxSize          m_content_size;  // panel virtual size measured once at Init()
 };
