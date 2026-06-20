@@ -3,6 +3,7 @@
 #include <wx/wx.h>
 #include <wx/scrolwin.h>
 #include <wx/timer.h>
+#include <wx/checkbox.h>
 #include "AutoPilotLink.h"
 
 class AutoPilotPanel : public wxScrolledWindow {
@@ -52,14 +53,15 @@ private:
     wxStaticText* m_datetime_val;
     wxStaticText* m_gpsfix_val;
 
-    // Controls — single row: mode + adjust + nav toggle; Send WP embedded in data area
-    wxButton* m_btn_port_long;
-    wxButton* m_btn_port_short;
-    wxButton* m_btn_stbd_short;
-    wxButton* m_btn_stbd_long;
-    wxButton* m_btn_mode;
-    wxButton* m_btn_nav_toggle;
-    wxButton* m_btn_send_wp;
+    // Controls — single row: mode + adjust + nav toggle; Send WP + Follow embedded in data area
+    wxButton*   m_btn_port_long;
+    wxButton*   m_btn_port_short;
+    wxButton*   m_btn_stbd_short;
+    wxButton*   m_btn_stbd_long;
+    wxButton*   m_btn_mode;
+    wxButton*   m_btn_nav_toggle;
+    wxButton*   m_btn_send_wp;
+    wxCheckBox* m_chk_follow;
 
     bool   m_navigate_available;
     double m_navigate_lat;

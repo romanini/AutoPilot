@@ -275,28 +275,37 @@ void AutoPilotPanel::BuildUI()
     mid_right->Add(right, 0, wxEXPAND);
     right_block->Add(mid_right, 0, 0);
 
-    // ── Bottom of right_block: narrower Date bar + Send WP button ─────────
-    // Date bar: mid col (160px) + 1/3 of right col (53px) = 213px
-    // Send WP:  remaining 2/3 of right col = 107px
-    const int kDateW  = kColW + kColW / 3;       // 213
-    const int kWpBtnW = kColW * 2 - kDateW;      // 107
+    // ── Bottom of right_block: Time bar + Set WP button + Follow checkbox ──
+    // Time bar: 160px (same as mid column)
+    // 15px gap, then Set WP button + Follow checkbox filling the remaining 145px
+    const int kTimeW  = kColW;   // 160
+    const int kWpBtnW = 75;
 
     auto* bottom_row = new wxBoxSizer(wxHORIZONTAL);
 
-    MakeBox(this, "Date / Time", kWhite, outer, inner, kDateW, kH_Bar);
+    MakeBox(this, "Time", kWhite, outer, inner, kTimeW, kH_Bar);
     {   auto* s = new wxBoxSizer(wxHORIZONTAL);
         inner->SetSizer(s);
         m_datetime_val = MakeVal(inner, kWhite, 11);
         m_gpsfix_val   = MakeVal(inner, kWhite, 10);
-        s->Add(m_datetime_val, 1, wxEXPAND | wxALL, 1);
-        s->Add(m_gpsfix_val,   0, wxALL, 1); }
+        s->AddStretchSpacer(1);
+        s->Add(m_datetime_val, 0, wxALL | wxALIGN_CENTER_VERTICAL, 1);
+        s->Add(m_gpsfix_val,   0, wxALL | wxALIGN_CENTER_VERTICAL, 1);
+        s->AddStretchSpacer(1); }
     bottom_row->Add(outer, 0, wxEXPAND);
+
+    bottom_row->AddSpacer(5);
 
     m_btn_send_wp = new wxButton(this, ID_BTN_SEND_WP, "Set WP");
     const int kBtnPad = 4;
     m_btn_send_wp->SetMinSize(wxSize(kWpBtnW - 2 * kBtnPad, kH_Bar - 2 * kBtnPad));
     m_btn_send_wp->Enable(false);
     bottom_row->Add(m_btn_send_wp, 0, wxTOP | wxLEFT | wxRIGHT, kBtnPad);
+
+    m_chk_follow = new wxCheckBox(this, wxID_ANY, "Follow");
+    m_chk_follow->SetForegroundColour(kWhite);
+    m_chk_follow->SetBackgroundColour(kBlack);
+    bottom_row->Add(m_chk_follow, 1, wxALIGN_CENTER_VERTICAL | wxLEFT | wxRIGHT, kBtnPad);
 
     right_block->Add(bottom_row, 0, 0);
 
@@ -435,8 +444,7 @@ void AutoPilotPanel::UpdateFromState(const AutoPilotState& s, bool connected)
 
     // Bottom bar
     if (s.fix) {
-        m_datetime_val->SetLabel(wxString::Format("%d/%d/%02d  %d:%02d",
-            s.month, s.day, s.year % 100, s.hour, s.minute));
+        m_datetime_val->SetLabel(wxString::Format("%d:%02d", s.hour, s.minute));
         wxString fix_type;
         switch (s.fixquality) {
             case 1: fix_type = "GPS";  break;
@@ -470,6 +478,9 @@ void AutoPilotPanel::SetNavigateTarget(bool available, double lat, double lon)
     m_navigate_lat = lat;
     m_navigate_lon = lon;
     m_btn_send_wp->Enable(m_link->IsConnected() && available);
+
+    if (available && m_chk_follow->IsChecked() && m_link->IsConnected())
+        m_link->SendWaypoint(lat, lon);
 }
 
 // ---------------------------------------------------------------------------
