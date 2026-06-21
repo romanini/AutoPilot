@@ -103,7 +103,7 @@ Insert the SD card, connect monitor + keyboard + mouse, power on.
 | Platform | Default login |
 |----------|--------------|
 | OrangePi | `orangepi` / `orangepi` |
-| RPi 4 | whatever you set in Imager (default `ubuntu` / `ubuntu` if left unchanged) |
+| RPi 4 | `navigator` / <password> |
 
 ```bash
 # OrangePi only — RPi hostname was already set in Imager
