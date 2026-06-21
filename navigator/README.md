@@ -188,12 +188,20 @@ Two Wi-Fi adapters are required:
 - **`wlan0`** (onboard) → joins **SoberPilot** (the controller's AP) on `10.20.1.x`
 - **USB Wi-Fi adapter** (`wlx...`) → joins your home/internet network
 
+**Important — USB adapter is 2.4 GHz only.** The USB adapter tested with this setup
+does not support 5 GHz. Any internet network you connect it to (home router, hotspot,
+marina Wi-Fi) must broadcast on 2.4 GHz. On an iPhone hotspot, enable
+**Settings → Personal Hotspot → Maximize Compatibility** to force 2.4 GHz.
+
 Route metrics control which adapter handles which traffic. Lower metric wins:
 
 ```bash
 # Connect to each network (nmcli will pick the right adapter automatically)
 nmcli device wifi connect SoberPilot password <password>
-nmcli device wifi connect <home-ssid> password <password>
+nmcli device wifi connect <home-ssid> password <password> ifname wlx0013efc00bc4
+
+# Lock SoberPilot to wlan0 so nothing can accidentally pull it off that interface
+nmcli connection modify SoberPilot connection.interface-name wlan0
 
 # Set metrics — SoberPilot stays on wlan0 (metric 600), internet goes out USB (metric 100)
 nmcli connection modify SoberPilot ipv4.route-metric 600
@@ -201,6 +209,16 @@ nmcli connection modify "<home-network-connection-name>" ipv4.route-metric 100
 ```
 
 To find the connection name nmcli assigned to the home network: `nmcli connection show`.
+
+**Switching internet networks** (e.g. home → hotspot → marina): always specify the
+USB adapter explicitly so `wlan0`/SoberPilot is never touched:
+
+```bash
+nmcli device wifi connect <new-ssid> password <password> ifname wlx0013efc00bc4
+```
+
+NetworkManager saves the password, so it will reconnect automatically next time
+you're in range of that network.
 
 ---
 
