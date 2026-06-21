@@ -7,14 +7,14 @@ each other over Wi-Fi using UDP.
 
 ```
    sensors                     Wi-Fi (SoftAP "SoberPilot", 10.20.1.x)
-  ┌─────────┐                 ┌──────────────────────────────────────┐
+  ┌─────────┐                 ┌───────────────────────────────────────┐
   │ compass │                 │  UDP 8888  telemetry  ~APDAT,...$  ─▶ │
   │  (IMU)  │                 │            (controller broadcasts)    │
   │  GPS    │   ┌──────────┐  │                                       │   ┌──────────┐
   │  Garmin │──▶│CONTROLLER│──┤                                       ├──▶│ DISPLAY  │
   │  NMEA   │   │  (AP)    │  │  UDP 8889  commands   ~APCMD,...$  ◀─ │   │  (STA)   │
   └─────────┘   └────┬─────┘  │            (display sends)            │   └────┬─────┘
-                     │        └──────────────────────────────────────┘        │
+                     │        └───────────────────────────────────────┘        │
                 steering motor                                         HX8357 LCD + buttons
 ```
 
