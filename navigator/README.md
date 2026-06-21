@@ -6,7 +6,7 @@ Two hardware options have been evaluated:
 | Hardware | Power @ 12 V | OpenGL | Notes |
 |----------|-------------|--------|-------|
 | OrangePi Zero 2W | ~2.4 W (0.2 A) | Off — GPU driver unreliable | Development unit |
-| Raspberry Pi 4 (8 GB) | TBD — measure before committing | On — VideoCore VI (vc4-kms-v3d) works | Better chart rendering |
+| Raspberry Pi 4 Model B (8 GB) | TBD — measure before committing | On — VideoCore VI (vc4-kms-v3d) works | Better chart rendering |
 
 OpenGL makes chart panning and zooming significantly faster. The RPi 4 supports it; the
 OrangePi does not. Measure actual power draw with a meter before choosing which to install
@@ -38,9 +38,12 @@ compression. Hit **Ctrl+T** at any time to print progress.
    ```bash
    diskutil unmountDisk /dev/disk2
    ```
-3. Copy and compress:
+3. Copy and compress (use the filename for your hardware):
    ```bash
-   sudo dd if=/dev/rdisk2 bs=4m | gzip > orangepi-$(date +%Y-%m-%d).img.gz
+   # OrangePi Zero 2W
+   sudo dd if=/dev/rdisk2 bs=4m | gzip > navigator-OrangePiZero2W-$(date +%Y-%m-%d).img.gz
+   # Raspberry Pi 4 Model B
+   sudo dd if=/dev/rdisk2 bs=4m | gzip > navigator-RaspberryPi4ModelB-$(date +%Y-%m-%d).img.gz
    ```
 
 ### Restore: compressed file → SD card
@@ -51,7 +54,10 @@ compression. Hit **Ctrl+T** at any time to print progress.
    ```
 2. Decompress and write:
    ```bash
-   gunzip -c orangepi-YYYY-MM-DD.img.gz | sudo dd of=/dev/rdisk2 bs=4m
+   # OrangePi Zero 2W
+   gunzip -c navigator-OrangePiZero2W-YYYY-MM-DD.img.gz | sudo dd of=/dev/rdisk2 bs=4m
+   # Raspberry Pi 4 Model B
+   gunzip -c navigator-RaspberryPi4ModelB-YYYY-MM-DD.img.gz | sudo dd of=/dev/rdisk2 bs=4m
    ```
 
 ---
@@ -74,14 +80,14 @@ compression. Hit **Ctrl+T** at any time to print progress.
    sudo dd if=Orangepi*.img of=/dev/rdisk2 bs=4m
    ```
 
-#### Raspberry Pi 4
+#### Raspberry Pi 4 Model B
 
 1. Install [Raspberry Pi Imager](https://www.raspberrypi.com/software/) on your Mac.
 2. Open Imager → **Choose OS** → **Other general-purpose OS** → **Ubuntu** →
    **Ubuntu Server 22.04 LTS (64-bit)**.
 3. Click the ⚙ settings icon and configure:
    - **Hostname:** `navigator`
-   - **Username:** `orangepi` (keeps scripts consistent across both platforms)
+   - **Username:** `navigator`
    - **Password:** your choice
    - **Enable SSH:** yes
 4. **Choose Storage** → select your SD card → **Write**.
@@ -142,7 +148,7 @@ claude
 Tell Claude Code:
 
 > "Set up this machine as the navigator computer. Follow `navigator/README.md` exactly.
-> My hardware is [OrangePi Zero 2W / Raspberry Pi 4]."
+> My hardware is [OrangePi Zero 2W / Raspberry Pi 4 Model B]."
 
 Claude Code will work through the System Configuration sections below — NetworkManager,
 udev rules, systemd service, OpenCPN, and the autopilot_pi plugin.
