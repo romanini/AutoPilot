@@ -116,7 +116,59 @@ sudo reboot
 
 ---
 
-### Part 3 — Bootstrap: git and Claude Code
+### Part 3 — Networking (do this manually, before Claude)
+
+> **Do this by hand — do not let Claude do it.** Claude Code needs a live internet
+> connection to the model. If Claude reconfigures the Wi-Fi adapters, it drops its own
+> connection mid-command and stops. Bring networking up yourself now so Claude starts from
+> an already-connected machine.
+
+Connect both Wi-Fi networks and set route metrics so internet goes out your home network,
+not SoberPilot. **Lower metric wins**, so give home the lower number. (Full rationale and
+the power-save / keepalive details are in [Dual Wi-Fi networking](#dual-wi-fi-networking)
+below.)
+
+```bash
+# Connect to each network (nmcli picks the right adapter automatically)
+nmcli device wifi connect SoberPilot password <password>
+nmcli device wifi connect <home-ssid> password <password>
+
+# SoberPilot = high metric (600), home internet = low metric (100)
+nmcli connection modify SoberPilot ipv4.route-metric 600
+nmcli connection modify "<home-network-connection-name>" ipv4.route-metric 100
+nmcli connection up "<home-network-connection-name>"
+nmcli connection up SoberPilot
+```
+
+To find the connection name nmcli assigned to the home network: `nmcli connection show`.
+
+**Verify the default route goes out your home network:**
+
+```bash
+ip route list
+```
+
+The top `default` line must be via your **home** gateway. If SoberPilot's gateway has the
+lower metric, internet traffic (and Claude) tries to route through the controller's AP,
+which has no internet. Fix it:
+
+```bash
+# Immediate override — drop SoberPilot's default route.
+# This keeps its subnet route, so telemetry to the controller still works.
+sudo ip route del default via <soberpilot-gateway>
+
+# Confirm
+ip route list          # top default line should now be via your home gateway
+ping -c2 1.1.1.1       # confirm internet
+```
+
+The `nmcli ... ipv4.route-metric` commands above make the correct ordering permanent; the
+`ip route del` is just an immediate override until the next reconnect. If `ip route list`
+already showed home on top, you can skip the `ip route del` step.
+
+---
+
+### Part 4 — Bootstrap: git and Claude Code
 
 After reboot, log back in and run:
 
@@ -138,7 +190,7 @@ git clone https://github.com/romanini/AutoPilot.git ~/dev/AutoPilot
 
 ---
 
-### Part 4 — Let Claude Code complete the setup
+### Part 5 — Let Claude Code complete the setup
 
 ```bash
 cd ~/dev/AutoPilot
@@ -148,10 +200,13 @@ claude
 Tell Claude Code:
 
 > "Set up this machine as the navigator computer. Follow `navigator/README.md` exactly.
-> My hardware is [OrangePi Zero 2W / Raspberry Pi 4 Model B]."
+> My hardware is [OrangePi Zero 2W / Raspberry Pi 4 Model B]. Networking is already configured —
+> do not touch the Wi-Fi adapters, connections, or routes."
 
-Claude Code will work through the System Configuration sections below — NetworkManager,
-udev rules, systemd service, OpenCPN, and the autopilot_pi plugin.
+Claude Code will work through the remaining System Configuration sections below — udev
+rules, systemd service, OpenCPN, and the autopilot_pi plugin. **Networking is already
+done in Part 3** and Claude must leave it alone, otherwise it will lose its connection to
+the model.
 
 ---
 
@@ -188,6 +243,10 @@ sudo netplan apply
 ---
 
 ### Dual Wi-Fi networking
+
+> Done manually in [Part 3](#part-3--networking-do-this-manually-before-claude), **not** by
+> Claude — reconfiguring the adapters would drop Claude's connection to the model. This
+> section is the full reference for those steps.
 
 Two Wi-Fi adapters are required:
 
