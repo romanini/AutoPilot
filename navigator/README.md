@@ -322,12 +322,27 @@ sudo udevadm control --reload-rules && sudo udevadm trigger
 
 ---
 
+### Desktop environment (RPi 4 only)
+
+RPi Ubuntu Server ships without a GUI. OpenCPN needs a windowed desktop, so install
+XFCE (lightweight, low overhead for a nav computer):
+
+```bash
+sudo apt install -y xubuntu-desktop
+sudo reboot
+```
+
+After reboot the LightDM greeter appears and you can log in graphically. The OrangePi
+image ships with a desktop already — skip this step there.
+
+---
+
 ### OpenCPN
 
 ```bash
 # Install Flatpak if not already present
 sudo apt install -y flatpak
-flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 
 # Install OpenCPN
 flatpak install --user flathub org.opencpn.OpenCPN
@@ -335,19 +350,6 @@ flatpak install --user flathub org.opencpn.OpenCPN
 # Grant the Flatpak sandbox access to serial ports
 flatpak override --user org.opencpn.OpenCPN --device=all
 ```
-
-**RPi 4 only — enable OpenGL:**
-Launch OpenCPN → Toolbox → Settings → Display → tick **Enable OpenGL rendering** →
-restart OpenCPN. This makes chart panning and zooming much faster.
-*(Leave OpenGL off on OrangePi — the GPU driver is not reliable enough.)*
-
-**Configure serial data connections** inside OpenCPN:
-Toolbox → Settings → Connections → Add Connection for each device:
-
-| Port | Baud rate | Device |
-|------|-----------|--------|
-| `/dev/ttyUSB0` | 4800 | GlobalSat BU-353-N5 USB GPS (NMEA-0183) |
-| `/dev/ttyACM0` | 38400 | dAISy AIS receiver (NMEA-0183) |
 
 **System updates:** The GUI Software Updater silently fails on this system (no PolicyKit
 auth agent). Use the terminal instead:
@@ -367,9 +369,13 @@ sudo apt update && sudo apt full-upgrade
 ### autopilot_pi plugin
 
 Full details and build prerequisites are in `opencpn_plugin/autopilot_pi/README.md`.
-Short version:
 
 ```bash
+# Build prerequisites (run once)
+sudo apt install -y flatpak-builder
+flatpak install --user flathub org.freedesktop.Sdk//25.08
+
+# Build and install the plugin
 cd ~/dev/AutoPilot/opencpn_plugin/autopilot_pi
 flatpak-builder --user --install --force-clean \
     build-dir flatpak/org.opencpn.OpenCPN.Plugin.autopilot.yaml
@@ -380,3 +386,30 @@ If OpenCPN refuses to load the plugin after a crash, remove the load stamp:
 ```bash
 rm ~/.var/app/org.opencpn.OpenCPN/config/opencpn/load_stamps/libautopilot_pi
 ```
+
+---
+
+## Post-setup — manual GUI configuration
+
+These steps require the graphical desktop and cannot be automated by Claude Code.
+
+### OpenCPN — enable OpenGL (RPi 4 only)
+
+Launch OpenCPN → Toolbox → Settings → Display → tick **Enable OpenGL rendering** →
+restart OpenCPN. This makes chart panning and zooming much faster.
+*(Leave OpenGL off on OrangePi — the GPU driver is not reliable enough.)*
+
+### OpenCPN — serial data connections
+
+Toolbox → Settings → Connections → Add Connection for each device:
+
+| Port | Baud rate | Device |
+|------|-----------|--------|
+| `/dev/ttyUSB0` | 4800 | GlobalSat BU-353-N5 USB GPS (NMEA-0183) |
+| `/dev/ttyACM0` | 38400 | dAISy AIS receiver (NMEA-0183) |
+
+### OpenCPN — enable plugins
+
+- **AutoPilot** — Toolbox → Plugin Manager → find "AutoPilot" → **Enable**.
+- **o-charts_pi** — Plugin Manager → search "o-charts" → install and configure
+  for encrypted vector charts.
