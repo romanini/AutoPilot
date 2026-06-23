@@ -335,6 +335,67 @@ sudo reboot
 After reboot the LightDM greeter appears and you can log in graphically. The OrangePi
 image ships with a desktop already — skip this step there.
 
+#### Auto-login
+
+```bash
+sudo tee /etc/lightdm/lightdm.conf.d/50-autologin.conf > /dev/null <<'EOF'
+[Seat:*]
+autologin-user=navigator
+autologin-user-timeout=0
+EOF
+```
+
+#### Disable screen lock and configure blank screensaver
+
+Disable `light-locker` (the Xubuntu session locker) and `xfce4-screensaver` lock so the
+screen never requires a password. The screen still blanks after inactivity.
+
+```bash
+# Kill and disable light-locker
+killall light-locker 2>/dev/null
+mkdir -p ~/.config/autostart
+printf '[Desktop Entry]\nHidden=true\n' > ~/.config/autostart/light-locker.desktop
+
+# Disable xfce4-screensaver lock
+xfconf-query -c xfce4-screensaver -p /lock-enabled -s false -n -t bool
+xfconf-query -c xfce4-screensaver -p /saver-enabled -s false -n -t bool
+xfconf-query -c xfce4-screensaver -p /idle-activation/enabled -s false -n -t bool
+
+# Power manager: blank screen after 5 min, no standby/off, no lock on suspend
+xfconf-query -c xfce4-power-manager -p /lock-screen-suspend-hibernate -s false -n -t bool
+xfconf-query -c xfce4-power-manager -p /dpms-enabled -s true -n -t bool
+xfconf-query -c xfce4-power-manager -p /blank-on-ac -s 5 -n -t int
+xfconf-query -c xfce4-power-manager -p /dpms-on-ac-sleep -s 0 -n -t int
+xfconf-query -c xfce4-power-manager -p /dpms-on-ac-off -s 0 -n -t int
+```
+
+#### Desktop appearance — match OrangePi layout
+
+Black background, no desktop icons, standard "Applications" menu (not Xubuntu Whisker
+Menu):
+
+```bash
+# Black background, no wallpaper
+xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/image-show -s false -n -t bool
+xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/image-style -s 0 -n -t int
+xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/color-style -s 0 -n -t int
+xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/rgba1 \
+    -s 0 -s 0 -s 0 -s 1 -n -t double -t double -t double -t double
+xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitorHDMI-1/workspace0/image-style -s 0 -n -t int
+xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitorHDMI-1/workspace0/color-style -s 0 -n -t int
+xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitorHDMI-1/workspace0/rgba1 \
+    -s 0 -s 0 -s 0 -s 1 -n -t double -t double -t double -t double
+
+# No desktop icons
+xfconf-query -c xfce4-desktop -p /desktop-icons/style -s 0
+xfconf-query -c xfce4-desktop -p /desktop-icons/file-icons/show-home -s false
+xfconf-query -c xfce4-desktop -p /desktop-icons/file-icons/show-trash -s false
+
+# Standard "Applications" menu instead of Whisker Menu
+xfconf-query -c xfce4-panel -p /plugins/plugin-1 -s applicationsmenu
+xfce4-panel --restart
+```
+
 ---
 
 ### OpenCPN
