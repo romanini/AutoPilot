@@ -367,6 +367,13 @@ xfconf-query -c xfce4-power-manager -p /dpms-enabled -s true -n -t bool
 xfconf-query -c xfce4-power-manager -p /blank-on-ac -s 5 -n -t int
 xfconf-query -c xfce4-power-manager -p /dpms-on-ac-sleep -s 0 -n -t int
 xfconf-query -c xfce4-power-manager -p /dpms-on-ac-off -s 0 -n -t int
+
+# GNOME gsettings — xfce4-screensaver reads these as fallback
+gsettings set org.gnome.desktop.screensaver lock-enabled false
+gsettings set org.gnome.desktop.screensaver idle-activation-enabled false
+gsettings set org.gnome.desktop.screensaver ubuntu-lock-on-suspend false
+gsettings set org.gnome.desktop.lockdown disable-lock-screen true
+gsettings set org.gnome.desktop.session idle-delay 0
 ```
 
 #### Desktop appearance — match OrangePi layout
