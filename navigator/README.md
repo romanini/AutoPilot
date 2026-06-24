@@ -347,19 +347,25 @@ EOF
 
 #### Disable screen lock and configure blank screensaver
 
-Disable `light-locker` (the Xubuntu session locker) and `xfce4-screensaver` lock so the
-screen never requires a password. The screen still blanks after inactivity.
+Kill and prevent all screen locker daemons from starting. The screen still blanks after
+inactivity via DPMS (power manager), but waking requires no password.
 
 ```bash
-# Kill and disable light-locker
-killall light-locker 2>/dev/null
+# Kill and disable all screen locker daemons
+killall light-locker xfce4-screensaver 2>/dev/null
 mkdir -p ~/.config/autostart
 printf '[Desktop Entry]\nHidden=true\n' > ~/.config/autostart/light-locker.desktop
+printf '[Desktop Entry]\nHidden=true\n' > ~/.config/autostart/xfce4-screensaver.desktop
+printf '[Desktop Entry]\nHidden=true\n' > ~/.config/autostart/xscreensaver.desktop
 
-# Disable xfce4-screensaver lock
+# Clear the session lock command so nothing can trigger a lock
+xfconf-query -c xfce4-session -p /general/LockCommand -s ""
+
+# Disable xfce4-screensaver lock settings (belt and suspenders)
 xfconf-query -c xfce4-screensaver -p /lock-enabled -s false -n -t bool
 xfconf-query -c xfce4-screensaver -p /saver-enabled -s false -n -t bool
 xfconf-query -c xfce4-screensaver -p /idle-activation/enabled -s false -n -t bool
+xfconf-query -c xfce4-screensaver -p /lock/sleep-activation -s false -n -t bool
 
 # Power manager: blank screen after 5 min, no standby/off, no lock on suspend
 xfconf-query -c xfce4-power-manager -p /lock-screen-suspend-hibernate -s false -n -t bool
@@ -374,6 +380,37 @@ gsettings set org.gnome.desktop.screensaver idle-activation-enabled false
 gsettings set org.gnome.desktop.screensaver ubuntu-lock-on-suspend false
 gsettings set org.gnome.desktop.lockdown disable-lock-screen true
 gsettings set org.gnome.desktop.session idle-delay 0
+
+# Prevent logind from locking or suspending
+sudo mkdir -p /etc/systemd/logind.conf.d
+sudo tee /etc/systemd/logind.conf.d/no-lock.conf > /dev/null <<'LOGIND'
+[Login]
+HandleSuspendKey=ignore
+HandleLidSwitch=ignore
+IdleAction=ignore
+IdleActionSec=0
+LOGIND
+sudo systemctl restart systemd-logind
+
+# Suppress the "Display Settings" dialog on DPMS wake
+xfconf-query -c displays -p /Notify -s false -n -t bool
+
+# Disable DPMS (RPi 4 vc4 driver doesn't forward DPMS signals to hardware)
+xset s off
+xset dpms 0 0 0
+
+# Install the xrandr-based screen blanking script and autostart entry.
+# The script monitors xprintidle and turns HDMI-1 off/on via xrandr.
+sudo cp ~/dev/AutoPilot/navigator/usr/local/bin/screen-blank.sh /usr/local/bin/
+sudo chmod +x /usr/local/bin/screen-blank.sh
+cat > ~/.config/autostart/screen-blank.desktop <<'AUTOSTART'
+[Desktop Entry]
+Type=Application
+Name=Screen Blank
+Exec=/usr/local/bin/screen-blank.sh
+NoDisplay=true
+X-XFCE-Autostart-Phase=Applications
+AUTOSTART
 ```
 
 #### Desktop appearance — match OrangePi layout
