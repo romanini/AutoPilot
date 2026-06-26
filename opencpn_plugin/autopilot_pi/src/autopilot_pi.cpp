@@ -129,6 +129,7 @@ int AutoPilotPlugin::Init() {
         .FloatingSize(wxSize(content.x + 4, content.y + 30))
         .MinSize  (wxSize(200, 150))
         .CloseButton(true)
+        .PinButton(true)   // renders on Windows/macOS; silently ignored on Linux/GTK
         .Hide();
     m_aui_mgr->AddPane(m_panel, pane);
     m_aui_mgr->Update();
