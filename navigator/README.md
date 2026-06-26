@@ -5,8 +5,8 @@ Two hardware options have been evaluated:
 
 | Hardware | Power @ 12 V | OpenGL | Notes |
 |----------|-------------|--------|-------|
-| OrangePi Zero 2W | ~2.4 W (0.2 A) | Off — GPU driver unreliable | Development unit |
-| Raspberry Pi 4 Model B (8 GB) | TBD — measure before committing | On — VideoCore VI (vc4-kms-v3d) works | Better chart rendering |
+| OrangePi Zero 2W | ~2.4-3.3 W (0.2-0.28 A) | Off — GPU driver unreliable | Development unit |
+| Raspberry Pi 4 Model B (8 GB) | ~3.0-6.0W (0.25-0.5 A) | On — VideoCore VI (vc4-kms-v3d) works | Better chart rendering |
 
 OpenGL makes chart panning and zooming significantly faster. The RPi 4 supports it; the
 OrangePi does not. Measure actual power draw with a meter before choosing which to install
