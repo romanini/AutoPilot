@@ -9,6 +9,7 @@
 #include <wx/aui/aui.h>
 #include <cmath>
 
+
 // ---------------------------------------------------------------------------
 // Plugin factory — required entry points for OpenCPN to load/unload
 // ---------------------------------------------------------------------------
@@ -109,10 +110,17 @@ int AutoPilotPlugin::Init() {
     m_panel = new AutoPilotPanel(canvas, m_link);
     m_link->SetPanel(m_panel);
 
-    // Capture the content size once, right after BuildUI() runs FitInside().
-    // We use this stored value for resizing — never re-call FitInside() later,
-    // as re-measuring after AUI has resized the panel can return a different value.
+    // Capture the floating-layout content size once (after BuildUI_Float).
+    // Used to resize the floating frame whenever the panel is floating.
     m_content_size = m_panel->GetVirtualSize();
+
+    // Undock callback: float the pane and let UpdateAuiStatus rebuild the layout.
+    m_panel->SetUndockCallback([this]() {
+        if (!m_aui_mgr) return;
+        wxAuiPaneInfo& pane = m_aui_mgr->GetPane("AutoPilot");
+        pane.Float().FloatingSize(m_content_size.x + 4, m_content_size.y + 30);
+        m_aui_mgr->Update();
+    });
     wxSize content = m_content_size;
     wxAuiPaneInfo pane;
     pane.Name("AutoPilot")
@@ -133,6 +141,11 @@ int AutoPilotPlugin::Init() {
         "Toggle AutoPilot status panel",
         nullptr, -1, 0, this);
 
+    // wxEVT_AUI_RENDER fires after every AUI layout change, including
+    // drag-to-dock and drag-to-float.  OpenCPN's UpdateAuiStatus() is only
+    // called on specific events (pane close) and misses live dock operations.
+    m_aui_mgr->Bind(wxEVT_AUI_RENDER, &AutoPilotPlugin::OnAuiRender, this);
+
     m_link->Start();
 
     return WANTS_TOOLBAR_CALLBACK
@@ -143,6 +156,9 @@ int AutoPilotPlugin::Init() {
 }
 
 bool AutoPilotPlugin::DeInit() {
+    if (m_aui_mgr)
+        m_aui_mgr->Unbind(wxEVT_AUI_RENDER, &AutoPilotPlugin::OnAuiRender, this);
+
     if (m_link) {
         m_link->Stop();
         delete m_link;
@@ -188,35 +204,75 @@ int AutoPilotPlugin::GetToolbarToolCount() { return 1; }
 // Toolbar
 // ---------------------------------------------------------------------------
 
-void AutoPilotPlugin::OnToolbarToolCallback(int id) {
-    if (id != m_toolbar_id || !m_aui_mgr) return;
-    m_panel_shown = !m_panel_shown;
+// Detect current dock position and rebuild the panel layout if it changed.
+// Resizes the floating frame when switching back to float mode.
+// Safe to call any time; SetDockMode() is a no-op if mode hasn't changed.
+void AutoPilotPlugin::ApplyDockLayout() {
+    if (!m_aui_mgr || !m_panel) return;
     wxAuiPaneInfo& pane = m_aui_mgr->GetPane("AutoPilot");
 
-    if (!pane.IsFloating())
-        pane.Float();
-    pane.Show(m_panel_shown);
-    m_aui_mgr->Update();
+    DockMode mode;
+    if (pane.IsFloating()) {
+        mode = DockMode::FLOAT;
+    } else if (pane.dock_direction == wxAUI_DOCK_LEFT ||
+               pane.dock_direction == wxAUI_DOCK_RIGHT) {
+        mode = DockMode::RIGHT;
+    } else {
+        mode = DockMode::TOP_BOTTOM;
+    }
 
-    if (m_panel_shown) {
-        // FloatingSize() and MaxSize() on a pane that is already floating only
-        // set hints; they don't resize the actual wxAuiFloatingFrame that AUI
-        // already created (or restored from the saved perspective).  Walk up to
-        // the real top-level frame and set its client size directly so the
-        // content fits exactly, with no blank space and no scroll bars.
+    bool rebuilt = m_panel->SetDockMode(mode);
+    if (!rebuilt) return;
+
+    if (mode == DockMode::FLOAT) {
         wxWindow* frame = m_panel->GetParent();
         while (frame && !frame->IsTopLevel())
             frame = frame->GetParent();
         if (frame)
             frame->SetClientSize(m_content_size);
+    } else if (mode == DockMode::RIGHT) {
+        // Push the narrow width onto the pane so AUI actually resizes the dock.
+        // Only done when layout was just rebuilt (rebuilt==true) to avoid looping.
+        const int w = AutoPilotPanel::kRightDockW;
+        pane.BestSize(w, -1).MinSize(w, -1);
+        m_aui_mgr->Update();
+    } else if (mode == DockMode::TOP_BOTTOM) {
+        // Use the virtual size measured by FitInside() — exact content height.
+        const int h = m_panel->GetVirtualSize().y;
+        pane.BestSize(-1, h).MinSize(-1, h);
+        m_aui_mgr->Update();
     }
 }
 
-// Called by OpenCPN when the AUI layout changes (e.g. panel dragged/closed).
+void AutoPilotPlugin::OnToolbarToolCallback(int id) {
+    if (id != m_toolbar_id || !m_aui_mgr) return;
+    m_panel_shown = !m_panel_shown;
+    wxAuiPaneInfo& pane = m_aui_mgr->GetPane("AutoPilot");
+
+    pane.Show(m_panel_shown);
+    m_aui_mgr->Update();
+
+    // Always sync layout when the panel becomes visible.  UpdateAuiStatus is
+    // not guaranteed to fire at startup after the perspective is restored, so
+    // we check here as well.
+    if (m_panel_shown)
+        ApplyDockLayout();
+}
+
+// Fires after every wxAuiManager layout update (including drag-to-dock).
+// Defer the rebuild with CallAfter so we don't destroy children during a paint.
+void AutoPilotPlugin::OnAuiRender(wxAuiManagerEvent& evt) {
+    evt.Skip();
+    if (m_panel && m_panel_shown)
+        m_panel->CallAfter([this]() { ApplyDockLayout(); });
+}
+
+// Called by OpenCPN when the AUI layout changes (panel docked/undocked/closed).
 void AutoPilotPlugin::UpdateAuiStatus() {
-    if (m_aui_mgr) {
-        m_panel_shown = m_aui_mgr->GetPane("AutoPilot").IsShown();
-    }
+    if (!m_aui_mgr || !m_panel) return;
+    m_panel_shown = m_aui_mgr->GetPane("AutoPilot").IsShown();
+    if (m_panel_shown)
+        ApplyDockLayout();
 }
 
 // ---------------------------------------------------------------------------

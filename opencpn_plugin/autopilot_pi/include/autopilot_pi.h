@@ -39,6 +39,8 @@ public:
     void SetPluginMessage(wxString& message_id, wxString& message_body) override;
 
 private:
+    void ApplyDockLayout();
+    void OnAuiRender(wxAuiManagerEvent& evt);
     AutoPilotLink*  m_link;
     AutoPilotPanel* m_panel;
     wxAuiManager*   m_aui_mgr;
