@@ -9,6 +9,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <cmath>
+#include <algorithm>
 
 wxBEGIN_EVENT_TABLE(AutoPilotLink, wxEvtHandler)
     EVT_TIMER(wxID_ANY, AutoPilotLink::OnTimer)
@@ -22,6 +23,8 @@ AutoPilotLink::AutoPilotLink(AutoPilotPanel* panel)
     , m_state{}
     , m_last_receive_ms(0)
     , m_suppress_until_ms(0)
+    , m_rte_total(0)
+    , m_rte_count(0)
 {
     m_controller_addr.Hostname("10.20.1.1");
     m_controller_addr.Service(8889);
@@ -122,6 +125,246 @@ void AutoPilotLink::SendWaypoint(double lat, double lon) {
     SendCommand(wxString::Format("w%.6f,%.6f", lat, lon));
 }
 
+// ---------------------------------------------------------------------------
+// §1c — NMEA send path
+// ---------------------------------------------------------------------------
+
+void AutoPilotLink::SendNmea(const wxString& nmea_line) {
+    if (!m_send_sock || !m_send_sock->IsOk()) return;
+    wxString frame = wxString::Format("~APTX,%s$", nmea_line);
+    wxCharBuffer buf = frame.ToAscii();
+    m_send_sock->SendTo(m_controller_addr, buf.data(), buf.length());
+}
+
+void AutoPilotLink::SendRoute(const PlugIn_Route* route, const wxString& short_id) {
+    if (!route || !route->pWaypointList) return;
+
+    // Build short names and send WPL for each waypoint first.
+    wxArrayString names;
+    Plugin_WaypointList::Node* node = route->pWaypointList->GetFirst();
+    int idx = 0;
+    while (node) {
+        PlugIn_Waypoint* wp = node->GetData();
+        if (wp) {
+            wxString sname = MakeShortId(wp->m_MarkName, idx);
+            names.Add(sname);
+            SendNmea(FormatWPL(sname, wp->m_lat, wp->m_lon));
+        }
+        node = node->GetNext();
+        idx++;
+    }
+
+    // Then send RTE sentence(s) — split into chunks to keep each line ≤80 chars.
+    for (const wxString& rte : FormatRTE(short_id, names))
+        SendNmea(rte);
+}
+
+// ---------------------------------------------------------------------------
+// §1c — NMEA serialization helpers
+// ---------------------------------------------------------------------------
+
+// XOR checksum of the sentence body (the chars between '$' and '*').
+unsigned char AutoPilotLink::NmeaXorChecksum(const wxString& body) {
+    unsigned char cs = 0;
+    for (size_t i = 0; i < body.length(); i++)
+        cs ^= (unsigned char)body[i];
+    return cs;
+}
+
+// Build a $GPWPL sentence.  Name is already truncated to a short ID.
+wxString AutoPilotLink::FormatWPL(const wxString& name, double lat, double lon) {
+    char ns = lat >= 0 ? 'N' : 'S';
+    char ew = lon >= 0 ? 'E' : 'W';
+    double alat = fabs(lat), alon = fabs(lon);
+    int dlat = (int)alat, dlon = (int)alon;
+    double mlat = (alat - dlat) * 60.0;
+    double mlon = (alon - dlon) * 60.0;
+    // Keep minutes from rounding up to 60.0
+    if (mlat >= 60.0) { mlat -= 60.0; dlat++; }
+    if (mlon >= 60.0) { mlon -= 60.0; dlon++; }
+
+    // DDMM.MMMM / DDDMM.MMMM — %07.4f gives exactly MM.MMMM (7 chars, zero-padded)
+    wxString body = wxString::Format("GPWPL,%02d%07.4f,%c,%03d%07.4f,%c,%s",
+                                     dlat, mlat, ns, dlon, mlon, ew, name);
+    return wxString::Format("$%s*%02X", body, (unsigned)NmeaXorChecksum(body));
+}
+
+// Build all $GPRTE sentences for a route, splitting at 8 waypoints per message
+// to stay well under the 80-char NMEA line limit.
+wxArrayString AutoPilotLink::FormatRTE(const wxString& id, const wxArrayString& names) {
+    wxArrayString out;
+    const int CHUNK = 8;
+    int total = ((int)names.size() + CHUNK - 1) / CHUNK;
+    if (total == 0) total = 1;
+
+    for (int msg = 0; msg < total; msg++) {
+        wxString body = wxString::Format("GPRTE,%d,%d,C,%s", total, msg + 1, id);
+        int end = std::min((int)names.size(), (msg + 1) * CHUNK);
+        for (int i = msg * CHUNK; i < end; i++)
+            body += "," + names[i];
+        out.Add(wxString::Format("$%s*%02X", body, (unsigned)NmeaXorChecksum(body)));
+    }
+    return out;
+}
+
+// Return a ≤6-char uppercase alphanumeric ID derived from the waypoint name.
+// Falls back to WPnnn when the name has no usable characters.
+wxString AutoPilotLink::MakeShortId(const wxString& name, int index) {
+    wxString s;
+    for (size_t i = 0; i < name.length() && (int)s.length() < 6; i++) {
+        wxChar c = wxToupper(name[i]);
+        if (wxIsalnum(c)) s += c;
+    }
+    if (s.IsEmpty())
+        s = wxString::Format("WP%03d", index);
+    return s;
+}
+
+// ---------------------------------------------------------------------------
+// §1c — NMEA parse path (inbound ~APRX frames)
+// ---------------------------------------------------------------------------
+
+// Verify the *XX checksum at the end of a standard NMEA sentence.
+bool AutoPilotLink::VerifyNmeaChecksum(const char* sentence) {
+    const char* dollar = strchr(sentence, '$');
+    if (!dollar) return false;
+    const char* star = strchr(dollar, '*');
+    if (!star || strlen(star) < 3) return false;
+
+    unsigned char cs = 0;
+    for (const char* p = dollar + 1; p < star; p++)
+        cs ^= (unsigned char)*p;
+
+    char expected[3];
+    snprintf(expected, sizeof(expected), "%02X", cs);
+    return strncasecmp(star + 1, expected, 2) == 0;
+}
+
+// Split "$GPXXX,f1,f2,...,fN*CC" into ["GPXXX","f1","f2",...,"fN"].
+// Stops at '*' so the checksum is not included.
+void AutoPilotLink::SplitNmeaFields(const char* sentence,
+                                     std::vector<wxString>& out) {
+    const char* p = sentence;
+    if (*p == '$') p++;
+    while (*p && *p != '*') {
+        const char* start = p;
+        while (*p && *p != ',' && *p != '*') p++;
+        out.push_back(wxString(start, p - start));
+        if (*p == ',') p++;
+    }
+}
+
+// Dispatch an inbound ~APRX payload (the raw NMEA line after "APRX,").
+void AutoPilotLink::ParseAprx(const char* nmea_line) {
+    if (!VerifyNmeaChecksum(nmea_line)) {
+        wxLogWarning("AutoPilot: ~APRX checksum fail: %s", nmea_line);
+        return;
+    }
+
+    // Identify sentence type: skip '$' + 2-char talker ID, read 3-char type.
+    const char* p = nmea_line;
+    while (*p && *p != '$') p++;
+    if (!*p || strlen(p) < 6) return;
+    const char* type = p + 3;  // p+1 skips '$', p+3 skips talker (GP/II/etc.)
+
+    if (strncmp(type, "WPL", 3) == 0)
+        ParseWplLine(nmea_line);
+    else if (strncmp(type, "RTE", 3) == 0)
+        ParseRteLine(nmea_line);
+    else if (strncmp(type, "RMB", 3) == 0)
+        ParseRmbLine(nmea_line);
+}
+
+// Parse $GPWPL,DDMM.MMMM,N,DDDMM.MMMM,E,NAME*XX → add to m_wpl_buffer.
+bool AutoPilotLink::ParseWplLine(const char* sentence) {
+    std::vector<wxString> f;
+    SplitNmeaFields(sentence, f);
+    // f: [0]=GPWPL [1]=lat [2]=N/S [3]=lon [4]=E/W [5]=name
+    if (f.size() < 6) return false;
+
+    double lat_raw = wxAtof(f[1]);
+    int    lat_deg = (int)(lat_raw / 100);
+    double lat     = lat_deg + (lat_raw - lat_deg * 100.0) / 60.0;
+    if (f[2] == "S") lat = -lat;
+
+    double lon_raw = wxAtof(f[3]);
+    int    lon_deg = (int)(lon_raw / 100);
+    double lon     = lon_deg + (lon_raw - lon_deg * 100.0) / 60.0;
+    if (f[4] == "W") lon = -lon;
+
+    wxString name = f[5];
+    m_wpl_buffer[name] = {name, lat, lon};
+    return true;
+}
+
+// Parse $GPRTE,<total>,<n>,C,<id>,<wp1>,<wp2>,...*XX → accumulate, flush when done.
+bool AutoPilotLink::ParseRteLine(const char* sentence) {
+    std::vector<wxString> f;
+    SplitNmeaFields(sentence, f);
+    // f: [0]=GPRTE [1]=total [2]=msg_n [3]=C/W [4]=route_id [5..]=wp names
+    if (f.size() < 5) return false;
+
+    long total = 1, msgn = 1;
+    f[1].ToLong(&total);
+    f[2].ToLong(&msgn);
+
+    if (msgn == 1) {
+        // First (or only) message: start fresh
+        m_rte_order.clear();
+        m_rte_id    = f[4];
+        m_rte_total = (int)total;
+        m_rte_count = 0;
+    }
+
+    for (size_t i = 5; i < f.size(); i++)
+        m_rte_order.push_back(f[i]);
+
+    m_rte_count++;
+
+    if (m_rte_count >= m_rte_total)
+        FlushInboundRoute();
+
+    return true;
+}
+
+// Parse $GPRMB,A,...,<dest_name>,...*XX → track active dest for de-dup (step 5).
+// Status V (not navigating) clears the dest.
+void AutoPilotLink::ParseRmbLine(const char* sentence) {
+    std::vector<wxString> f;
+    SplitNmeaFields(sentence, f);
+    // f: [0]=GPRMB [1]=A/V [2]=xte [3]=L/R [4]=orig [5]=dest ...
+    if (f.size() < 6) return;
+
+    if (f[1] == "A")
+        m_rmb_dest = f[5];
+    else
+        m_rmb_dest.Clear();
+}
+
+// Called when all RTE messages for one route have arrived.
+// Step 5 (de-dup + AddPlugInRoute / ActivateRoutePI) will go here.
+// §3.3 spike: to activate an existing route by GUID use:
+//   auto api = dynamic_cast<HostApi121*>(GetHostApi().get());
+//   if (api) api->ActivateRoutePI(guid, true);
+void AutoPilotLink::FlushInboundRoute() {
+    wxLogMessage("AutoPilot: ~APRX route assembled: id=%s, %d waypoints",
+                 m_rte_id, (int)m_rte_order.size());
+    for (const wxString& name : m_rte_order) {
+        auto it = m_wpl_buffer.find(name);
+        if (it != m_wpl_buffer.end())
+            wxLogMessage("  WP %s  %.6f, %.6f", name, it->second.lat, it->second.lon);
+        else
+            wxLogMessage("  WP %s  (no WPL received)", name);
+    }
+    // TODO step 5: de-dup check, then AddPlugInRoute / ActivateRoutePI
+    m_wpl_buffer.clear();
+    m_rte_order.clear();
+}
+
+// ---------------------------------------------------------------------------
+// Command / socket internals
+// ---------------------------------------------------------------------------
+
 void AutoPilotLink::SendCommand(const wxString& cmd) {
     if (!m_send_sock || !m_send_sock->IsOk()) return;
     wxString frame = wxString::Format("~APCMD,%s$", cmd);
@@ -137,11 +380,19 @@ char* AutoPilotLink::AdvanceField(char* p) {
     return comma ? comma + 1 : nullptr;
 }
 
+// ---------------------------------------------------------------------------
+// Packet dispatch — handles both ~APDAT and ~APRX frames
+// ---------------------------------------------------------------------------
+
 void AutoPilotLink::ParsePacket(char* data) {
     // data has been stripped of the leading '~' and trailing '$'.
-    // Expected prefix: "APDAT,..."
-    if (strncmp(data, "APDAT,", 6) != 0) return;
+    if (strncmp(data, "APDAT,", 6) == 0)
+        ParseApdat(data);
+    else if (strncmp(data, "APRX,", 5) == 0)
+        ParseAprx(data + 5);
+}
 
+void AutoPilotLink::ParseApdat(char* data) {
     char* p = data;  // starts at 'A' of "APDAT"
 
     // Helper lambda: read int field, advance p, return value (0 on empty/null).
