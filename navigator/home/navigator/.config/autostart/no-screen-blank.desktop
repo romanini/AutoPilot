@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Disable Screen Blanking
+Exec=xset s off -dpms
+NoDisplay=true
+X-XFCE-Autostart-Phase=Applications
