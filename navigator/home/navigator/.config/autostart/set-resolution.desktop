@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Set Display Resolution
+Exec=xrandr --output HDMI-1 --mode 1280x720 --rate 60
+NoDisplay=true
+X-XFCE-Autostart-Phase=Applications
