@@ -50,21 +50,30 @@ APDAT change and one new command.
 | `~APTX,<nmea sentence, no CRLF>$` | plugin → controller (8889) | unicast | "write this NMEA line to the Garmin UART." Controller strips the frame, appends `\r\n`, writes to `Serial1Port`. |
 | `~APRX,<raw nmea line>$` | controller → all (8888) | broadcast | "I received this line from the Garmin." Controller relays **only** `WPL,RTE,RMB,XTE,BOD` (drop high-rate `RMC/GGA/GLL/VTG` so UDP isn't flooded). |
 
-### 1.2 OpenCPN as a *steering source* needs a heartbeat (new command)
+### 1.2 OpenCPN as a *steering source* needs a heartbeat (reuse `w`, add `X`)
 
-Today the plugin's `SendWaypoint()` emits `~APCMD,w<lat>,<lon>$` — a **one-shot**
-"Set WP" (manual). Arbitration (§7.3 of research) needs OpenCPN to be a *live*
-source the controller can time out. So distinguish:
+Arbitration (§7.3 of research) needs OpenCPN to be a *live* source the controller
+can time out. The plugin **already** provides the heartbeat: while **Follow** is
+checked, `SetNavigateTarget` → `SendWaypoint` emits `~APCMD,w<lat>,<lon>$` several
+times a second (`AutoPilotPanel.cpp`). So `w` *is* the liveness signal — no
+separate capital-`W` command is needed (decision 2026-06-27). Only a stop signal
+is added:
 
 | Command | Meaning | Cadence |
 |---|---|---|
-| `~APCMD,w<lat>,<lon>$` | **manual** Set-WP, one-shot (unchanged) | on button press |
-| `~APCMD,W<lat>,<lon>$` | **OpenCPN active-nav leg** heartbeat (new; capital W) | repeated ~1–2 s while OpenCPN is Following |
+| `~APCMD,w<lat>,<lon>$` | set waypoint **and** refresh OpenCPN liveness; serves both the manual "Set WP" button and the Follow heartbeat | on button press, *and* repeated several times/s while Following |
 | `~APCMD,X$` | **OpenCPN nav stopped** (new) | once when Following ends |
 
-Capital `W` updates the waypoint *and* refreshes the OpenCPN-source liveness
-clock. `X` marks the OpenCPN source inactive immediately (don't wait for the
-timeout). Keeping `w` as-is preserves the existing manual behavior.
+`w` updates the waypoint *and* refreshes the OpenCPN-source liveness clock. `X`
+marks the OpenCPN source inactive immediately (don't wait for the timeout).
+
+**Accepted consequence** of folding the manual button into the heartbeat: a
+one-shot "Set WP" also refreshes OpenCPN liveness for one timeout window (~6 s).
+Harmless while GARMIN is the default primary; when OpenCPN is the armed/primary
+source a stray manual click can redirect steering for up to the timeout, and a
+manual WP differing from a live Garmin dest can raise a transient
+agreement-mismatch flag (§2.4). Engaging nav still follows the arming guard / the
+operator pressing Enable, so mode is not changed by a bare `w`.
 
 ### 1.3 APDAT gains a nav-source field (additive, but ALL parsers change together)
 
@@ -170,7 +179,7 @@ Implement the §7.3 state machine in the controller. Suggested new unit
 
 - **Two sources, each with {active, last_update_ms}:**
   - GARMIN: active when RMB status=`A`; updated each RMB; dest = RMB lat/lon.
-  - OPENCPN: active on `W` heartbeat; cleared on `X`; updated each `W`.
+  - OPENCPN: active on `w` heartbeat; cleared on `X`; updated each `w`.
 - **Liveness** = active AND fresh (≈6 s timeout each).
 - **Selector** ∈ {NONE, GARMIN, OPENCPN}; **primary** is operator-selectable,
   **default GARMIN** (research §7.3 reasons). One live → follow it. Both live →
@@ -275,11 +284,15 @@ routes OpenCPN doesn't already have":
 
 ### 3.4 OpenCPN as a steering source (ask #2)
 
-- The plugin already learns the active leg in `SetActiveLegInfo`
-  (`GetActiveWaypointGUID` + `GetSingleWaypoint`). Add a wxTimer that, while a leg
-  is active, sends the `W` heartbeat (§1.2) every ~1–2 s, and sends `X` when the
-  active leg clears. (Confirms the research §7.3 open question about cadence — the
-  plugin controls its own timer, so ~1 s is achievable.)
+- The plugin **already** emits the `w` heartbeat: `SetActiveLegInfo`
+  (`GetActiveWaypointGUID` + `GetSingleWaypoint`) → `SetNavigateTarget` →
+  `SendWaypoint` fires several times a second while **Follow** is checked
+  (`AutoPilotPanel.cpp:807`). So the heartbeat (§1.2) exists today; this answers
+  the research §7.3 cadence question empirically. What remains for this step:
+  (a) send `~APCMD,X$` when Follow is unchecked or the active leg clears, so the
+  controller drops the OPENCPN source immediately rather than waiting out the
+  timeout; (b) optionally add a wxTimer only as a cadence floor if
+  `SetActiveLegInfo`'s native rate ever proves too slow/bursty.
 - Also **push the route to the Garmin for display** when Following starts
   (research Scenario B), even though plain NMEA can't make the Garmin's own screen
   read "Navigating" (research §7.1 — accepted limitation, not a blocker).
@@ -368,7 +381,7 @@ dependencies. Items at the same number can proceed in parallel.
 | 3  | OpenCPN→Garmin push: `SendRoute` + "Send Route" button | **Nav** | 1c | emulator read-back (scenario 3) once 2 lands |
 | 4  | Follow-Garmin Option 1: RMB parse + armed engage | **Mac** | 1a | emulator scenario 2 |
 | 5  | De-dup: RMB-activates-existing, ingest only unknown | **Nav** | 1c, 4, **§3.3 spike** | emulator scenario 3 |
-| 6  | OpenCPN source `W`/`X` heartbeat + arbitration/failover state machine | both | 1c (plugin side), 4 (controller side) | emulator scenario 4 + `opencpn_stub.py` |
+| 6  | OpenCPN source `w` heartbeat (exists) + `X` stop + arbitration/failover state machine | both | 1c (plugin side), 4 (controller side) | emulator scenario 4 + `opencpn_stub.py` |
 | 7  | APDAT `nav_source` bump + panel/TFT display | both | 6 | `monitor` + panel |
 | 8  | Option 3 cross-track steering (XTE/BOD in `pid.ino`) | **Mac** | 4 | emulator scenario 2 with XTE; `pid/` tuning |
 | 9  | (optional) APB; (Phase 2) GARMIN host mode / remote-activate | later | — | — |
@@ -404,6 +417,6 @@ during 1c so it doesn't block later.
 | Nav-source arbitration / liveness / failover / agreement | `controller/navsource.ino` + `AutoPilot.{h,cpp}` | Mac |
 | Cross-track steering (Option 3) | `controller/pid.ino`, `control_task` | Mac |
 | Route serialize/parse, push button, ingest + de-dup | `autopilot_pi` (`AutoPilotLink`, `AutoPilotPanel`, `autopilot_pi.cpp`) | Nav |
-| OpenCPN active-leg `W`/`X` heartbeat | `autopilot_pi` (`SetActiveLegInfo` + wxTimer) | Nav |
+| OpenCPN active-leg `w` heartbeat + `X` stop | `autopilot_pi` (`SetActiveLegInfo`) | Nav |
 | `nav_source` telemetry | `publish.ino` + plugin `ParsePacket` + display `parseAPDAT` | both + display |
 | Garmin emulator + test scenarios + OpenCPN source stub | `emulator/` | Mac |
