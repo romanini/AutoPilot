@@ -117,6 +117,52 @@ controller.ino, telnet.ino, AutoPilot.h, AutoPilot.cpp}`.
   frame — handle it in `process_udp_command` alongside the `~APCMD,` prefix
   check, or give it its own small handler.)
 
+#### Step 1a bench tests (covers §2.1–§2.3: relay + line buffer + FIFO + `~APTX`)
+
+Run these after flashing the §2.1–§2.3 work, *before* moving on. The `~APRX`
+relay itself (test C) needs a source on COM1 (real 276c, the emulator §4, or the
+telnet `g` inject §2.7), so until 1b/§4 land, only **A** and **B** are exercisable
+with zero extra hardware. Note: the `monitor/` tool the skill mentions is not
+currently in the repo — use the inline UDP listener shown in test C.
+
+**A. Regression — confirm the running pilot still works (highest priority).**
+The only existing path touched is the `~APCMD` intake in `subscribe.ino`.
+1. USB serial after boot shows the setup prints, including `Garmin A and B setup`.
+2. SoberPilot AP comes up, display(s) connect, `~APDAT` still broadcasting.
+3. From a display, change **mode / nav-enable / heading-adjust / set-WP** and
+   confirm the controller reacts (motor + telemetry). In particular a normal
+   `~APCMD,m2$` must still change mode — the new `~APTX` branch must not swallow
+   non-`APTX` frames.
+
+**B. `~APTX` write path — testable now without a Garmin.**
+Join the Mac to SoberPilot, then send a framed NMEA line to the command port:
+```bash
+printf '~APTX,$GPWPL,3723.460,N,12158.940,W,WPT01*5E$' | nc -u -w1 10.20.1.1 8889
+```
+Watch the controller serial/telnet console for:
+```
+Garmin TX: $GPWPL,3723.460,N,12158.940,W,WPT01*5E
+```
+That proves the whole intake chain: `~APTX` matched *before* `~APCMD`, the outer
+`$` stripped at the last byte (inner NMEA `$…*5E` preserved), enqueued to the
+FIFO, drained to `Serial1Port`. The TX path does **not** checksum-verify (it
+forwards verbatim), so the `*5E` value is irrelevant here — any string forwards.
+With a scope or a second 3.3 V serial adapter on the A1 TX pin you'd see the
+bytes + `\r\n` leave the UART. Negative check: a normal `~APCMD,m2$` still
+changes mode (confirms B didn't break A).
+
+**C. `~APRX` relay — deferred until a COM1 source exists (1b `g` inject / §4 / real 276c).**
+With a source on COM1 (run the §2.7 `g` inject below, or the real Garmin on A0/A1
+navigating a route), sniff UDP 8888 on the Mac:
+```bash
+python3 -c 'import socket; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1); s.bind(("",8888))
+while True:
+    d,_=s.recvfrom(1024); m=d.decode(errors="replace")
+    if m.startswith("~APRX"): print(m)'
+```
+Expect `~APRX` for `WPL/RTE/RMB/XTE/BOD` and **none** for `RMC/GGA/GLL/VTG` (the
+relay filter), while the serial console shows `Garmin A:` for *every* line.
+
 ### 2.4 Nav-source arbitration (new module, the heart of ask #2)
 
 Implement the §7.3 state machine in the controller. Suggested new unit
@@ -160,52 +206,27 @@ Implement the §7.3 state machine in the controller. Suggested new unit
   parse + arbitration with zero extra hardware (research §9 Tier 1). Cheap and
   high-value — add it early; it's the controller's own unit-test surface.
 
-### 2.8 Step 1a bench tests (after flashing the relay/FIFO/`~APTX` work)
+#### Step 1b bench test (covers §2.7: the telnet `g` inject hook)
 
-These verify the §1a controller change (`~APRX` relay + line buffer + Garmin
-write FIFO + `~APTX` intake). Run them after flashing, *before* moving on. The
-`~APRX` relay itself (test C below) needs a source on COM1 (real 276c, the
-emulator §4, or the telnet `g` inject §2.7), so until 1b/§4 land, only **A** and
-**B** are exercisable with zero extra hardware. Note: the `monitor/` tool the
-skill mentions is not currently in the repo — use the inline UDP listener shown
-in test C.
+This is the zero-hardware way to exercise the §2.1–§2.3 relay path: `g<nmea>`
+runs the injected line through the exact complete-line dispatch (`check_garmin()`
+→ checksum → relay filter → `~APRX`). Telnet to the controller
+(`telnet 10.20.1.1 23`) and run the lines below while the test-C UDP sniffer (see
+§1a tests) watches port 8888. The handler prints the outcome per line:
 
-**A. Regression — confirm the running pilot still works (highest priority).**
-The only existing path touched is the `~APCMD` intake in `subscribe.ino`.
-1. USB serial after boot shows the setup prints, including `Garmin A and B setup`.
-2. SoberPilot AP comes up, display(s) connect, `~APDAT` still broadcasting.
-3. From a display, change **mode / nav-enable / heading-adjust / set-WP** and
-   confirm the controller reacts (motor + telemetry). In particular a normal
-   `~APCMD,m2$` must still change mode — the new `~APTX` branch must not swallow
-   non-`APTX` frames.
+```
+g$GPWPL,3723.460,N,12158.940,W,WPT01*0E                                  → ok - relayed as ~APRX
+g$GPRMB,A,0.66,L,WPT01,WPT02,3729.000,N,12200.000,W,5.2,231.5,1.1,V*2B   → relayed
+g$GPBOD,231.5,T,217.2,M,WPT02,WPT01*47                                   → relayed
+g$GPRMC,123519,A,4807.038,N,01131.000,E,022.4,084.4,230394,003.1,W*6A    → filtered (status 2)
+g$GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47       → filtered (status 2)
+g$GPWPL,3723.460,N,12158.940,W,WPT01*00                                  → dropped - bad checksum
+```
 
-**B. `~APTX` write path — testable now without a Garmin.**
-Join the Mac to SoberPilot, then send a framed NMEA line to the command port:
-```bash
-printf '~APTX,$GPWPL,3723.460,N,12158.940,W,WPT01*5E$' | nc -u -w1 10.20.1.1 8889
-```
-Watch the controller serial/telnet console for:
-```
-Garmin TX: $GPWPL,3723.460,N,12158.940,W,WPT01*5E
-```
-That proves the whole intake chain: `~APTX` matched *before* `~APCMD`, the outer
-`$` stripped at the last byte (inner NMEA `$…*5E` preserved), enqueued to the
-FIFO, drained to `Serial1Port`. The TX path does **not** checksum-verify (it
-forwards verbatim), so the `*5E` value is irrelevant here — any string forwards.
-With a scope or a second 3.3 V serial adapter on the A1 TX pin you'd see the
-bytes + `\r\n` leave the UART. Negative check: a normal `~APCMD,m2$` still
-changes mode (confirms B didn't break A).
-
-**C. `~APRX` relay — deferred until a COM1 source exists (1b / §4 / real 276c).**
-With the Garmin on A0/A1 navigating a route, sniff UDP 8888 on the Mac:
-```bash
-python3 -c 'import socket; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1); s.bind(("",8888))
-while True:
-    d,_=s.recvfrom(1024); m=d.decode(errors="replace")
-    if m.startswith("~APRX"): print(m)'
-```
-Expect `~APRX` for `WPL/RTE/RMB/XTE/BOD` and **none** for `RMC/GGA/GLL/VTG` (the
-relay filter), while the serial console shows `Garmin A:` for *every* line.
+The three "relayed" lines must appear as `~APRX,...$` in the 8888 sniffer; the
+`RMC`/`GGA` and bad-checksum lines must **not** — proving the relay filter and
+checksum gate end-to-end with no Garmin attached. (Checksums above are correct;
+regenerate with an XOR of the chars between `$` and `*` if you edit a line.)
 
 ---
 
