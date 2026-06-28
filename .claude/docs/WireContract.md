@@ -18,7 +18,7 @@ Status legend: ✅ unchanged · 🆕 new · ➕ additive change.
 | Message | Dir | Port | Cast | Status |
 |---|---|---|---|---|
 | `~APDAT,…$` | controller → displays/plugin | 8888 | broadcast (10.20.1.255) | ➕ one field appended |
-| `~APCMD,<cmd>$` | display/plugin → controller | 8889 | unicast (10.20.1.1) | ➕ two new sub-commands |
+| `~APCMD,<cmd>$` | display/plugin → controller | 8889 | unicast (10.20.1.1) | ➕ new `X` sub-cmd; `w` now drives liveness |
 | `~RESET,1$` | controller → all | 8888 | broadcast | ✅ |
 | `~APTX,<nmea>$` | plugin → controller | 8889 | unicast | 🆕 |
 | `~APRX,<nmea>$` | controller → all | 8888 | broadcast | 🆕 |
@@ -115,24 +115,32 @@ anything not starting with `~APCMD,`.
 ## 5. ➕ APCMD: two new sub-commands for OpenCPN-as-steering-source
 
 Existing `~APCMD,<cmd>$` dispatch is by `buffer[0]`. Today: `a` adjust, `m` mode,
-`n` nav-enable, `w` set-waypoint (one-shot). Add two, and note the **case
-distinction on W**:
+`n` nav-enable, `w` set-waypoint. Add **one** new command (`X`); `w` is reused as
+the OpenCPN active-nav heartbeat:
 
 | Frame | Char | Meaning | Cadence | Status |
 |---|---|---|---|---|
-| `~APCMD,w<lat>,<lon>$` | `w` | manual Set-WP, one-shot (sets waypoint, no liveness) | on button press | ✅ unchanged |
-| `~APCMD,W<lat>,<lon>$` | `W` | OpenCPN active-nav leg heartbeat: set waypoint **and** refresh OPENCPN-source liveness clock | repeated ~1–2 s while Following | 🆕 |
+| `~APCMD,w<lat>,<lon>$` | `w` | set waypoint **and** refresh OPENCPN-source liveness. Serves both the manual "Set WP" button and the Follow heartbeat — they are intentionally indistinguishable on the wire. | on button press, *and* repeated several times/s while Following | ➕ now drives liveness |
 | `~APCMD,X$` | `X` | OpenCPN nav stopped: mark OPENCPN source inactive immediately | once when Following ends | 🆕 |
 
-- `w` (lowercase) keeps its exact current behavior — `setWaypoint(lat,lon)` only,
-  no effect on arbitration liveness. Preserves the manual-WP safety pattern.
-- `W` (uppercase) parses lat/lon identically to `w`, additionally stamps the
-  OPENCPN source `{active=true, last_update_ms=now}` (plan §2.4 liveness).
+> **Why no capital `W`** (decided 2026-06-27): the plugin already sends lowercase
+> `w` repeatedly while **Follow** is checked (`SetNavigateTarget` →
+> `SendWaypoint`, several times/s), so `w` *is* the heartbeat. A separate `W` to
+> distinguish the manual one-shot from the active stream was judged redundant.
+> Accepted consequence: a one-shot manual "Set WP" click also refreshes OPENCPN
+> liveness for one timeout window (~6 s). Harmless while GARMIN is the default
+> primary; when OPENCPN is the armed/primary source a stray manual click can
+> redirect steering for up to the timeout, and a manual WP differing from a live
+> Garmin dest can raise a transient agreement-mismatch flag. Both are acceptable.
+
+- `w` parses lat/lon as today (reentrant `strtok_r`), calls `setWaypoint(lat,lon)`,
+  **and** stamps the OPENCPN source `{active=true, last_update_ms=now}` (plan §2.4
+  liveness). Mode is unchanged — engaging nav still follows the arming guard / the
+  operator pressing Enable (§2.4), so the manual-WP safety pattern is preserved.
 - `X` carries no payload; it clears the OPENCPN source (`active=false`) without
   waiting for the ~6 s liveness timeout.
-- `dispatch_command` is a `switch(buffer[0])` — `'w'`, `'W'`, `'X'` are three
-  distinct cases. Coordinates for `W` use the same reentrant `strtok_r` parse as
-  `w`.
+- `dispatch_command` is a `switch(buffer[0])` — `'w'` and `'X'` are the two cases
+  touched here.
 
 ---
 
