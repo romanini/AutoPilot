@@ -16,6 +16,7 @@ public:
 
     void UpdateFromState(const AutoPilotState& state, bool connected);
     void SetNavigateTarget(bool available, double lat = 0.0, double lon = 0.0);
+    void SetActiveRoute(const wxString& guid);
 
     // Returns true if the layout was actually rebuilt.
     bool SetDockMode(DockMode mode);
@@ -34,6 +35,7 @@ private:
     void OnMode(wxCommandEvent& event);
     void OnNavToggle(wxCommandEvent& event);
     void OnSendWP(wxCommandEvent& event);
+    void OnSendRoute(wxCommandEvent& event);
     void OnPortShort(wxCommandEvent& event);
     void OnPortLong(wxCommandEvent& event);
     void OnStbdShort(wxCommandEvent& event);
@@ -73,12 +75,14 @@ private:
     wxButton*   m_btn_mode;
     wxButton*   m_btn_nav_toggle;
     wxButton*   m_btn_send_wp;
+    wxButton*   m_btn_send_route;
     wxButton*   m_btn_undock;   // null in FLOAT mode
     wxCheckBox* m_chk_follow;
 
-    bool   m_navigate_available;
-    double m_navigate_lat;
-    double m_navigate_lon;
+    bool     m_navigate_available;
+    double   m_navigate_lat;
+    double   m_navigate_lon;
+    wxString m_route_guid;      // active OpenCPN route GUID; empty when none
 
     static const float ADJUSTMENT_SHORT;
     static const float ADJUSTMENT_LONG;

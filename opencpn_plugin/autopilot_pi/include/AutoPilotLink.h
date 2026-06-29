@@ -51,11 +51,16 @@ public:
 
     // §1c — serialize route → WPL+RTE → SendNmea each line.
     // short_id is the route identifier embedded in the RTE sentence (≤6 chars).
-    // §3.3 route-activation spike result: use HostApi121::ActivateRoutePI(guid,true)
-    // obtained from GetHostApi(); it is the supported call for activating a route
-    // by GUID from inside a plugin.  De-dup logic (step 5) will live around
-    // FlushInboundRoute() and will call this API after matching the received route
-    // to an existing one.
+    //
+    // §3.3 route-activation spike result (confirmed in ocpn_plugin.h):
+    //   HostApi121::ActivateRoutePI(wxString guid, bool activate) is the supported
+    //   call.  GetHostApi() returns unique_ptr<HostApi>, so use dynamic_cast (NOT
+    //   dynamic_pointer_cast which is for shared_ptr):
+    //     auto api = dynamic_cast<HostApi121*>(GetHostApi().get());
+    //     if (api) api->ActivateRoutePI(guid, true);
+    //   Also available: api->IsRouteActive(guid) to guard against re-activation.
+    //   De-dup logic (step 5) calls this from FlushInboundRoute() after matching
+    //   the received route to an existing one.
     void SendRoute(const PlugIn_Route* route, const wxString& short_id = "OCPN01");
 
 private:

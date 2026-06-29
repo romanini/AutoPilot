@@ -290,7 +290,12 @@ void AutoPilotPlugin::SetActiveLegInfo(Plugin_Active_Leg_Info& leg_info) {
                  leg_info.wp_name, leg_info.Btw, leg_info.Dtw);
     if (!m_panel) return;
 
-    // Try 1: direct active-waypoint GUID (works for standalone marks)
+    // Keep the "Send Rte" button in sync with the currently active route.
+    wxString routeGUID = GetActiveRouteGUID();
+    m_panel->SetActiveRoute(routeGUID);
+    wxLogMessage("AutoPilot: GetActiveRouteGUID='%s'", routeGUID);
+
+    // Try 1: direct active-waypoint GUID (standalone mark not on a route)
     wxString guid = GetActiveWaypointGUID();
     wxLogMessage("AutoPilot: GetActiveWaypointGUID='%s'", guid);
     if (!guid.IsEmpty()) {
@@ -303,8 +308,6 @@ void AutoPilotPlugin::SetActiveLegInfo(Plugin_Active_Leg_Info& leg_info) {
     }
 
     // Try 2: active route GUID → scan waypoints for the one matching wp_name.
-    wxString routeGUID = GetActiveRouteGUID();
-    wxLogMessage("AutoPilot: GetActiveRouteGUID='%s'", routeGUID);
     if (!routeGUID.IsEmpty()) {
         auto route = GetRoute_Plugin(routeGUID);
         if (route && route->pWaypointList) {

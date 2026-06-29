@@ -15,6 +15,7 @@ enum {
     ID_BTN_STBD_SHORT,
     ID_BTN_STBD_LONG,
     ID_BTN_SEND_WP,
+    ID_BTN_SEND_ROUTE,
     ID_BTN_UNDOCK,
 };
 
@@ -29,6 +30,7 @@ wxBEGIN_EVENT_TABLE(AutoPilotPanel, wxScrolledWindow)
     EVT_BUTTON(ID_BTN_STBD_SHORT, AutoPilotPanel::OnStbdShort)
     EVT_BUTTON(ID_BTN_STBD_LONG,  AutoPilotPanel::OnStbdLong)
     EVT_BUTTON(ID_BTN_SEND_WP,    AutoPilotPanel::OnSendWP)
+    EVT_BUTTON(ID_BTN_SEND_ROUTE, AutoPilotPanel::OnSendRoute)
     EVT_BUTTON(ID_BTN_UNDOCK,     AutoPilotPanel::OnUndock)
 wxEND_EVENT_TABLE()
 
@@ -293,9 +295,9 @@ void AutoPilotPanel::BuildUI_Float()
     mid_right->Add(right, 0, wxEXPAND);
     right_block->Add(mid_right, 0, 0);
 
-    // ── Bottom of right_block: Time bar + Set WP + Follow ──────────────────
+    // ── Bottom of right_block: Time bar + Set WP + Send Rte ───────────────
+    // Follow moved to the controls row so the two buttons share the full space.
     const int kTimeW  = kColW;
-    const int kWpBtnW = 75;
     const int kBtnPad = 4;
 
     auto* bottom_row = new wxBoxSizer(wxHORIZONTAL);
@@ -314,14 +316,14 @@ void AutoPilotPanel::BuildUI_Float()
     bottom_row->AddSpacer(5);
 
     m_btn_send_wp = new wxButton(this, ID_BTN_SEND_WP, "Set WP");
-    m_btn_send_wp->SetMinSize(wxSize(kWpBtnW - 2 * kBtnPad, kH_Bar - 2 * kBtnPad));
+    m_btn_send_wp->SetMinSize(wxSize(-1, kH_Bar - 2 * kBtnPad));
     m_btn_send_wp->Enable(false);
-    bottom_row->Add(m_btn_send_wp, 0, wxTOP | wxLEFT | wxRIGHT, kBtnPad);
+    bottom_row->Add(m_btn_send_wp, 1, wxALL, kBtnPad);
 
-    m_chk_follow = new wxCheckBox(this, wxID_ANY, "Follow");
-    m_chk_follow->SetForegroundColour(kWhite);
-    m_chk_follow->SetBackgroundColour(kBlack);
-    bottom_row->Add(m_chk_follow, 1, wxALIGN_CENTER_VERTICAL | wxLEFT | wxRIGHT, kBtnPad);
+    m_btn_send_route = new wxButton(this, ID_BTN_SEND_ROUTE, "Send Rte");
+    m_btn_send_route->SetMinSize(wxSize(-1, kH_Bar - 2 * kBtnPad));
+    m_btn_send_route->Enable(false);
+    bottom_row->Add(m_btn_send_route, 1, wxALL, kBtnPad);
 
     right_block->Add(bottom_row, 0, 0);
     cols->Add(right_block, 0, wxEXPAND);
@@ -347,7 +349,15 @@ void AutoPilotPanel::BuildUI_Float()
     m_btn_stbd_long->SetMinSize(kBtnSz);
     m_btn_nav_toggle->SetMinSize(kBtnSz);
 
+    // Follow lives in the controls row (not in bottom_row) so the two WP/Rte
+    // buttons in bottom_row have full width.
+    m_chk_follow = new wxCheckBox(this, wxID_ANY, "Follow");
+    m_chk_follow->SetForegroundColour(kWhite);
+    m_chk_follow->SetBackgroundColour(kBlack);
+
     auto* btn_row = new wxBoxSizer(wxHORIZONTAL);
+    btn_row->AddStretchSpacer(1);
+    btn_row->Add(m_chk_follow,     0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
     btn_row->AddStretchSpacer(1);
     btn_row->Add(m_btn_mode,       0, wxRIGHT, 4);
     btn_row->AddStretchSpacer(1);
@@ -507,18 +517,23 @@ void AutoPilotPanel::BuildUI_Right()
 
     root->AddSpacer(3);
 
-    // ── WP + Follow ────────────────────────────────────────────────────────
+    // ── WP + Rte row ───────────────────────────────────────────────────────
     m_btn_send_wp = new wxButton(this, ID_BTN_SEND_WP, "WP");
     m_btn_send_wp->SetMinSize(wxSize(1, kBtnH_Right));
     m_btn_send_wp->Enable(false);
+    m_btn_send_route = new wxButton(this, ID_BTN_SEND_ROUTE, "Rte");
+    m_btn_send_route->SetMinSize(wxSize(1, kBtnH_Right));
+    m_btn_send_route->Enable(false);
+    {   auto* r = new wxBoxSizer(wxHORIZONTAL);
+        r->Add(m_btn_send_wp,    1, wxEXPAND | wxRIGHT, 2);
+        r->Add(m_btn_send_route, 1, wxEXPAND);
+        root->Add(r, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, kPad); }
+
+    // ── Follow ─────────────────────────────────────────────────────────────
     m_chk_follow = new wxCheckBox(this, wxID_ANY, "Follow");
     m_chk_follow->SetForegroundColour(kWhite);
     m_chk_follow->SetBackgroundColour(kBlack);
-    m_chk_follow->SetMinSize(wxSize(1, -1));
-    {   auto* r = new wxBoxSizer(wxHORIZONTAL);
-        r->Add(m_btn_send_wp, 1, wxEXPAND | wxRIGHT, 2);
-        r->Add(m_chk_follow,  1, wxALIGN_CENTER_VERTICAL | wxLEFT, 2);
-        root->Add(r, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, kPad); }
+    root->Add(m_chk_follow, 0, wxALIGN_CENTER_HORIZONTAL | wxBOTTOM, kPad);
 
     // ── <  |  > ────────────────────────────────────────────────────────────
     m_btn_port_short = new wxButton(this, ID_BTN_PORT_SHORT, "<");
@@ -655,6 +670,10 @@ void AutoPilotPanel::BuildUI_TopBottom()
     m_btn_send_wp = new wxButton(this, ID_BTN_SEND_WP, "Set WP");
     m_btn_send_wp->Enable(false);
     ctrl->Add(m_btn_send_wp, 0, wxALL | wxALIGN_CENTER_VERTICAL, kBtnPad);
+
+    m_btn_send_route = new wxButton(this, ID_BTN_SEND_ROUTE, "Send Rte");
+    m_btn_send_route->Enable(false);
+    ctrl->Add(m_btn_send_route, 0, wxALL | wxALIGN_CENTER_VERTICAL, kBtnPad);
 
     m_chk_follow = new wxCheckBox(this, wxID_ANY, "Follow");
     m_chk_follow->SetForegroundColour(kWhite);
@@ -793,6 +812,7 @@ void AutoPilotPanel::UpdateFromState(const AutoPilotState& s, bool connected)
     m_btn_stbd_short->Enable(nav_on);
     m_btn_stbd_long->Enable(nav_on);
     m_btn_send_wp->Enable(connected && m_navigate_available);
+    m_btn_send_route->Enable(connected && !m_route_guid.IsEmpty());
 
     Layout();
 }
@@ -855,6 +875,20 @@ void AutoPilotPanel::OnSendWP(wxCommandEvent&)
 {
     if (!m_link || !m_link->IsConnected() || !m_navigate_available) return;
     m_link->SendWaypoint(m_navigate_lat, m_navigate_lon);
+}
+
+void AutoPilotPanel::SetActiveRoute(const wxString& guid)
+{
+    m_route_guid = guid;
+    m_btn_send_route->Enable(m_link->IsConnected() && !guid.IsEmpty());
+}
+
+void AutoPilotPanel::OnSendRoute(wxCommandEvent&)
+{
+    if (!m_link || !m_link->IsConnected() || m_route_guid.IsEmpty()) return;
+    auto route = GetRoute_Plugin(m_route_guid);
+    if (!route || !route->pWaypointList || route->pWaypointList->IsEmpty()) return;
+    m_link->SendRoute(route.get(), "OCPN01");
 }
 
 void AutoPilotPanel::OnUndock(wxCommandEvent&)

@@ -19,8 +19,17 @@ There are two Claude working environments, and the split is deliberate:
 
 | Machine | Owns | Toolchain present | Builds / tests |
 |---|---|---|---|
-| **Mac** (this repo checkout) | `Arduino/controller/*` firmware **and** the new Python Garmin emulator + test harness | `arduino-cli`, USB-serial to the ESP32, Python, `monitor/` | compile + flash controller; run emulator over an FTDI/USB-serial tap; Tier-1 telnet injection |
-| **Navigator** (OrangePi, OpenCPN box) | `opencpn_plugin/autopilot_pi/*` | `flatpak-builder`, a real OpenCPN with the route API + chart picture | build + load the plugin; exercise route create/activate; live `~APRX`/`~APDAT` on the SoberPilot Wi-Fi |
+| **Mac** (this repo checkout) | `Arduino/controller/*` firmware **and** the new Python Garmin emulator + test harness | `arduino-cli`, USB-serial to the ESP32, Python | compile + flash controller; **serial** debug over the ESP32 USB-CDC; run emulator over a USB-serial tap at the **Garmin connector (5 V side)** — see §4 |
+| **Navigator** (OrangePi, OpenCPN box) | `opencpn_plugin/autopilot_pi/*` | `flatpak-builder`, a real OpenCPN with the route API + chart picture | build + load the plugin; exercise route create/activate; **all telnet + UDP testing** (`~APTX`/`~APRX`/`~APDAT`, telnet `g` inject) — it is the SoberPilot Wi-Fi client |
+
+> ⚠️ **Network topology (easy to get wrong):** the **Mac is NOT on the SoberPilot
+> Wi-Fi.** Its only links to the controller are (a) the ESP32 **USB-CDC serial**
+> (flash + `DEBUG_PRINT` console) and (b) the **FTDI serial tap at the Garmin
+> connector** (the 5 V side, in front of the on-board level-shifting buffers — §4). So any
+> test that needs UDP (`~APDAT` sniff, sending `~APCMD`/`~APTX`) **or** telnet
+> (the `g` inject hook) must be run **from the Navigator**, which is the Wi-Fi
+> client. The Mac verifies controller behavior over **serial** (USB debug console
+> + the FTDI read-back), never over the network.
 
 **Why this matters for the plan:** the controller and the plugin talk only
 through the UDP protocol, and the emulator/plugin/controller all independently
@@ -144,11 +153,13 @@ The only existing path touched is the `~APCMD` intake in `subscribe.ino`.
    non-`APTX` frames.
 
 **B. `~APTX` write path — testable now without a Garmin.**
-Join the Mac to SoberPilot, then send a framed NMEA line to the command port:
+From the **Navigator** (the SoberPilot Wi-Fi client — the Mac can't reach the
+controller over UDP), send a framed NMEA line to the command port:
 ```bash
 printf '~APTX,$GPWPL,3723.460,N,12158.940,W,WPT01*5E$' | nc -u -w1 10.20.1.1 8889
 ```
-Watch the controller serial/telnet console for:
+Watch the controller console for the line below — on the **Mac's USB-CDC serial**
+(`DEBUG_PRINT`) or a Navigator telnet session:
 ```
 Garmin TX: $GPWPL,3723.460,N,12158.940,W,WPT01*5E
 ```
@@ -156,13 +167,14 @@ That proves the whole intake chain: `~APTX` matched *before* `~APCMD`, the outer
 `$` stripped at the last byte (inner NMEA `$…*5E` preserved), enqueued to the
 FIFO, drained to `Serial1Port`. The TX path does **not** checksum-verify (it
 forwards verbatim), so the `*5E` value is irrelevant here — any string forwards.
-With a scope or a second 3.3 V serial adapter on the A1 TX pin you'd see the
-bytes + `\r\n` leave the UART. Negative check: a normal `~APCMD,m2$` still
-changes mode (confirms B didn't break A).
+With a scope or a 3.3 V serial adapter on the **A0** TX pin you'd see the bytes +
+`\r\n` leave the UART (A0 = controller TX, A1 = controller RX). Negative check: a
+normal `~APCMD,m2$` still changes mode (confirms B didn't break A).
 
 **C. `~APRX` relay — deferred until a COM1 source exists (1b `g` inject / §4 / real 276c).**
-With a source on COM1 (run the §2.7 `g` inject below, or the real Garmin on A0/A1
-navigating a route), sniff UDP 8888 on the Mac:
+With a source on COM1 (run the §2.7 `g` inject — from a **Navigator** telnet —
+or the real Garmin / FTDI emulator on A0/A1 feeding NMEA), sniff UDP 8888 **on the
+Navigator**:
 ```bash
 python3 -c 'import socket; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1); s.bind(("",8888))
 while True:
@@ -219,9 +231,10 @@ Implement the §7.3 state machine in the controller. Suggested new unit
 
 This is the zero-hardware way to exercise the §2.1–§2.3 relay path: `g<nmea>`
 runs the injected line through the exact complete-line dispatch (`check_garmin()`
-→ checksum → relay filter → `~APRX`). Telnet to the controller
-(`telnet 10.20.1.1 23`) and run the lines below while the test-C UDP sniffer (see
-§1a tests) watches port 8888. The handler prints the outcome per line:
+→ checksum → relay filter → `~APRX`). From the **Navigator**, telnet to the
+controller (`telnet 10.20.1.1 23`) and run the lines below while the test-C UDP
+sniffer (also on the Navigator, see §1a tests) watches port 8888. The handler
+prints the outcome per line:
 
 ```
 g$GPWPL,3723.460,N,12158.940,W,WPT01*0E                                  → ok - relayed as ~APRX
@@ -275,12 +288,26 @@ routes OpenCPN doesn't already have":
   buffered WPL/RTE via `AddPlugInRoute`.
 - Reuse the project's optimistic-suppression idiom for the immediate echo
   (mirrors `m_suppress_until_ms` already in `AutoPilotLink`).
-- **Open spike (resolve early on Navigator):** how does a *plugin* activate an
-  existing route? `ocpn_plugin.h` exposes `GetActiveRouteGUID` and route
-  create/update, but route *activation* appears only as `ActivateRoutePI` (a
-  class method) — confirm the supported call (direct API vs. plugin-messaging
-  `OCPN_RTE_ACTIVATE` vs. comm bridge) before building §3.3. This is the single
-  biggest plugin unknown; spike it before committing to the dedup design.
+
+**§3.3 spike — RESOLVED (2026-06-29, confirmed in `ocpn_plugin.h`):**
+
+The supported call to activate an existing route from a plugin is
+`HostApi121::ActivateRoutePI(wxString route_guid, bool activate)`.
+`HostApi121` is a subclass of `HostApi`; access it via:
+
+```cpp
+auto api = dynamic_cast<HostApi121*>(GetHostApi().get());
+if (api) api->ActivateRoutePI(found_guid, true);
+```
+
+`GetHostApi()` returns `unique_ptr<HostApi>` so use `dynamic_cast<HostApi121*>`,
+**not** `dynamic_pointer_cast` (which is for `shared_ptr` and does not compile).
+`api->IsRouteActive(guid)` is also available to guard against re-activation.
+Plugin-messaging (`OCPN_RTE_ACTIVATE`) and comm-bridge approaches are not needed.
+
+The spike result is recorded as a comment on `AutoPilotLink::SendRoute()` in
+`include/AutoPilotLink.h` and as a comment in `FlushInboundRoute()` in
+`src/AutoPilotLink.cpp`.
 
 ### 3.4 OpenCPN as a steering source (ask #2)
 
@@ -307,10 +334,31 @@ routes OpenCPN doesn't already have":
 
 ## 4. Python Garmin emulator + test harness (Mac) — ask #3
 
-New top-level dir, e.g. `emulator/` (sibling to `monitor/`, `pid/`). It stands in
+New top-level dir, e.g. `emulator/` (sibling to `experiments/pid/`). It stands in
 for a **serial NMEA device**, not an IP endpoint (research §9): it talks to the
-controller over the same 4800-8N1 UART the real 276c uses, via a 3.3 V FTDI/CP2102
-tap on A0–A3 (common ground — **3.3 V logic, never 5 V**).
+controller over the same 4800-8N1 UART the real 276c uses, via a USB-serial tap at
+the **Garmin connector — the 5 V side, in front of the controller's on-board
+Receive/Transmit buffer chips**. Those buffers (powered at +5 V, schematic
+`circuit/Controller/Controller/`) level-shift between the 5 V Garmin signaling and
+the ESP32's 3.3 V `A0`–`A3`, so the emulated Garmin must present **5 V logic** at
+this point — a 5 V FTDI is correct here; do **not** tap the bare 3.3 V `A0`/`A1`
+pins (that bypasses the buffers). Common ground required; leave FTDI VCC open.
+
+**Concrete tap — the "Garmin In" JST-8 on the 12-volt board** (per the schematic
+in `circuit/Controller/Controller/`, confirmed by measurement 2026-06-28). Pin 1
+is the one nearest the control-board ribbon:
+
+| JST pin | label | path | ESP32 | controller dir | idle | FTDI wire |
+|---|---|---|---|---|---|---|
+| 1 | `Tx/A` | ribbon 9 → Transmit Buffer (VDD 5/VCC 3.3, 5→3.3) | ADC0 = **A0** | **RX** | floats ~0.45 V | **orange (TXD)** |
+| 2 | `Rx/A` | ribbon 10 → Receive Buffer (5 V) | ADC1 = **A1** | **TX** | steady 5 V | **yellow (RXD)** |
+| 7 | GND | — | — | — | — | **black (GND)** |
+
+> ⚠️ **Firmware pin fix (done):** the mapping is **RX = A0, TX = A1**, but
+> `garmin.ino` originally had A0/A1 (and A2/A3 for channel B) swapped. Corrected to
+> `GARMIN_TX_A=A0, GARMIN_RX_A=A1` (chan B: `A2`/`A3`) so
+> `begin(4800, 8N1, rx=A0, tx=A1)`. Steps 1a/1b passed before the fix only because
+> neither exercised the physical RX pin — step 2 (emulator) is the first to.
 
 ### 4.1 Modules
 
