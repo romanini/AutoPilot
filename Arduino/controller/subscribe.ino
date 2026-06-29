@@ -16,6 +16,7 @@ static AsyncUDP udpCommandServer;
 // auto-prototype pass at the top of the combined sketch).
 void process_udp_command(AsyncUDPPacket packet);
 void dispatch_command(char buffer[]);
+void garmin_write_line(const char* nmea);  // defined in garmin.ino
 
 void setup_subscribe() {
   if (udpCommandServer.listen(UDP_COMMAND_PORT)) {
@@ -39,6 +40,20 @@ void process_udp_command(AsyncUDPPacket packet) {
   char buffer[CMD_BUFFER_SIZE];
   memcpy(buffer, packet.data(), len);
   buffer[len] = '\0';
+
+  // ~APTX: a raw NMEA line to forward to the Garmin UART. Handle this before the
+  // ~APCMD check (which rejects anything else). The inner payload is itself NMEA
+  // and contains a '$', so we can't find the frame end with strchr/strrchr -- the
+  // outer terminator is definitionally the LAST byte of the datagram. Require it
+  // and strip just that one char, leaving the inner "$...*HH" intact.
+  if (strncmp(buffer, "~APTX,", 6) == 0) {
+    if (buffer[len - 1] != '$') {
+      return;                          // not a terminated frame - ignore
+    }
+    buffer[len - 1] = '\0';            // trim the outer '$'
+    garmin_write_line(buffer + 6);     // skip past "~APTX,"
+    return;
+  }
 
   if (strncmp(buffer, "~APCMD,", 7) != 0) {
     return;  // not a command frame - ignore

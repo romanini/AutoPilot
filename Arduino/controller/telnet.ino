@@ -24,8 +24,14 @@ void process_navigation(CustomClientType& client, char buffer[]);
 void process_print(CustomClientType& client);
 void process_quit(CustomClientType& client);
 void process_waypoint(CustomClientType& client, char buffer[]);
+void process_garmin_inject(CustomClientType& client, char buffer[]);
+void process_follow_arm(CustomClientType& client, char buffer[]);
 void process_help(CustomClientType& client);
 void process_telnet(CustomClientType& client, char buffer[]);
+
+int garmin_inject_line(const char* line);  // defined in garmin.ino
+void navsource_set_armed(bool armed);      // defined in navsource.ino
+bool navsource_is_armed();                 // defined in navsource.ino
 
 void setup_telnet() {
   telnet_server.onConnect(onTelnetConnect);
@@ -182,6 +188,34 @@ void process_waypoint(CustomClientType& client, char buffer[]) {
   }
 }
 
+// Tier-1 test hook: inject a raw NMEA line into the Garmin receive path exactly
+// as check_garmin() would after assembling it from COM1 (plan §2.7 / §1b). Lets
+// us exercise the ~APRX relay + checksum filter with no Garmin wired up. The text
+// after 'g' must be a complete sentence including the leading '$' and "*CRC".
+void process_garmin_inject(CustomClientType& client, char buffer[]) {
+  char* line = &buffer[1];  // skip the 'g'
+  if (*line == '\0') {
+    client.println("usage: g<nmea line, incl. $ and *CRC>");
+    return;
+  }
+  int status = garmin_inject_line(line);
+  switch (status) {
+    case 0:  client.println("ok - relayed as ~APRX"); break;
+    case 1:  client.println("dropped - bad/missing checksum"); break;
+    case 2:  client.println("ok - valid but filtered (not WPL/RTE/RMB/XTE/BOD)"); break;
+    default: client.println("?"); break;
+  }
+}
+
+// Arm/disarm Follow-Garmin (plan §2.4). Armed: an RMB status 'A' auto-engages
+// waypoint-navigate toward the Garmin destination. Disarmed (default): the RMB
+// only populates the waypoint and the operator presses Enable.
+void process_follow_arm(CustomClientType& client, char buffer[]) {
+  int v = atoi(&buffer[1]);
+  navsource_set_armed(v != 0);
+  client.println(navsource_is_armed() ? "Follow-Garmin ARMED" : "Follow-Garmin disarmed");
+}
+
 void process_help(CustomClientType& client) {
   client.println("Possible commands:\n");
   client.println("\ta<heading offset> \t- Adjust heading to be <heading offset> from current heading.");
@@ -190,6 +224,8 @@ void process_help(CustomClientType& client) {
   client.println("\tp \t\t\t- Print current auto pilot status.");
   client.println("\tq \t\t\t- Quit the current session.");
   client.println("\tw<lat,long> \t\t- Set the waypoint to <lat,long>.");
+  client.println("\tg<nmea> \t\t- Inject a Garmin NMEA line (test the ~APRX relay).");
+  client.println("\tf<0|1> \t\t- Arm/disarm Follow-Garmin (auto-engage nav on RMB).");
   client.println("\t? \t\t\t- Print this help screen.");
 }
 
@@ -222,6 +258,12 @@ void process_telnet(CustomClientType& client, char buffer[]) {
     case 'w':
       process_waypoint(client, buffer);
       show_state = true;
+      break;
+    case 'g':
+      process_garmin_inject(client, buffer);
+      break;
+    case 'f':
+      process_follow_arm(client, buffer);
       break;
     case '?':
       process_help(client);

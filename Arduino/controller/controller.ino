@@ -125,6 +125,7 @@ void command_task(void *pvParameters) {
     check_telnet();
     check_gps();
     check_garmin();
+    navsource_tick();
     publish_APDAT();
     //print_diagnostics();
     vTaskDelay(100 / portTICK_PERIOD_MS);

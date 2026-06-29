@@ -66,6 +66,15 @@ void publish_APDAT() {
   }
 }
 
+// Relay a line received from the Garmin to every station (displays, plugin,
+// monitor) as "~APRX,<raw nmea>$". The payload is verbatim NMEA (it contains a
+// '$' of its own); receivers must locate the frame terminator as the LAST '$'.
+void publish_APRX(const char* nmea) {
+  int n = snprintf(serialzied_data, DATA_SIZE, "~APRX,%s$", nmea);
+  if (n <= 0 || n >= DATA_SIZE) return;   // too long to frame; drop
+  udpClient.writeTo((const uint8_t *)serialzied_data, strlen(serialzied_data), broadcastIp, BROADCAST_PORT);
+}
+
 void publish_RESET() {
   sprintf(serialzied_data, "~RESET,1$");
   DEBUG_PRINTLN(serialzied_data);
