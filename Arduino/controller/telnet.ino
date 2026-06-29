@@ -219,13 +219,13 @@ void process_follow_arm(CustomClientType& client, char buffer[]) {
 void process_help(CustomClientType& client) {
   client.println("Possible commands:\n");
   client.println("\ta<heading offset> \t- Adjust heading to be <heading offset> from current heading.");
-  client.println("\tm<1|2> \t\t- Set the mode 1 = compass, 2 = waypoint.");
-  client.println("\tn<0|1> \t\t- Navigation 0 = off, 1 = on");
+  client.println("\tf<0|1> \t\t\t- Arm/disarm Follow-Garmin (auto-engage nav on RMB).");
+  client.println("\tg<nmea> \t\t- Inject a Garmin NMEA line (test the ~APRX relay).");
+  client.println("\tm<1|2> \t\t\t- Set the mode 1 = compass, 2 = waypoint.");
+  client.println("\tn<0|1> \t\t\t- Navigation 0 = off, 1 = on");
   client.println("\tp \t\t\t- Print current auto pilot status.");
   client.println("\tq \t\t\t- Quit the current session.");
   client.println("\tw<lat,long> \t\t- Set the waypoint to <lat,long>.");
-  client.println("\tg<nmea> \t\t- Inject a Garmin NMEA line (test the ~APRX relay).");
-  client.println("\tf<0|1> \t\t- Arm/disarm Follow-Garmin (auto-engage nav on RMB).");
   client.println("\t? \t\t\t- Print this help screen.");
 }
 
