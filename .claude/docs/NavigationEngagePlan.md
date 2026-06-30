@@ -103,6 +103,26 @@ OpenCPN displays it.
 over to the survivor. The design degrades gracefully — as long as one source is OK
 we can navigate.
 
+> 🔲 **TODO — end-of-route / arrival behavior (decision deferred 2026-06-29).**
+> The plan does not yet define what happens at the **final waypoint** when the
+> operator does nothing and nav is still enabled. Current *implicit* behavior:
+> - **Garmin:** final-WP arrival → `RMB` status `V` → GARMIN source clears →
+>   selector NONE → `setMode(1)` holds the **current heading** (compass-hold), nav
+>   stays **enabled** → boat sails straight on present heading indefinitely.
+> - **OpenCPN:** depends on OpenCPN's arrival setting. Route auto-deactivates →
+>   heartbeat stops → ~6 s timeout → same compass-hold. Route stays active on the
+>   final WP → heartbeat continues → controller keeps Mode 2 on a waypoint now
+>   **behind** the boat → it turns back and **circles/oscillates** around the mark
+>   (bad; driven by an OpenCPN setting, not our code).
+>
+> Gaps to close when we circle back: (a) make **arrival** an explicit event rather
+> than a side effect of the selector going NONE; (b) handle the OpenCPN
+> keep-active case so we don't circle; (c) decide the arrival action — likely
+> **revert to heading-hold on current heading + raise an arrival alert** (marine
+> convention; never silently circle, never drop steering entirely); (d) decide how
+> arrival is signalled (telemetry flag → panel/TFT, optional buzzer). Options were
+> sketched but not chosen.
+
 ### The Garmin does not auto-navigate on route upload
 
 A standard NMEA route upload (`WPL` + `RTE`) only stores the route in the Garmin's
