@@ -186,6 +186,15 @@ relay filter), while the serial console shows `Garmin A:` for *every* line.
 
 ### 2.4 Nav-source arbitration (new module, the heart of ask #2)
 
+> ⚠️ **Superseded in part (2026-06-29):** the engagement behavior below — the
+> **Arming guard** that auto-engages nav, the capital-`W`/`w` distinction (§1.2),
+> and "primary is operator-selectable" — is replaced by
+> [`NavigationEngagePlan.md`](NavigationEngagePlan.md). New rule: **nav is never
+> auto-enabled from any source**; a live source only auto-sets **Mode 2** and the
+> operator always presses **Enable**. Follow is detected from a **sustained
+> lowercase-`w` heartbeat** (no `W`). Read that doc for the current design; the
+> two-source/liveness/failover skeleton here still applies.
+
 Implement the §7.3 state machine in the controller. Suggested new unit
 `Arduino/controller/navsource.ino` + state on the `AutoPilot` class.
 
