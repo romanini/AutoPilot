@@ -58,6 +58,9 @@ struct {
   float course;
   bool  course_hasFix;
 
+  int  navSource;
+  bool navSource_connected;
+
   float locationLat;
   bool  lat_hasFix;
 
@@ -86,6 +89,7 @@ void initialize_displayed_values() {
   disp.bearingCorrection = -999.0f; disp.bearingCorrection_mode = -1;
   disp.distance = -999.0f;       disp.distance_waypointSet = false; disp.distance_hasFix = false;
   disp.course = -999.0f;         disp.course_hasFix = false;
+  disp.navSource = -1;           disp.navSource_connected = false;
   disp.locationLat = -999.0f;    disp.lat_hasFix = false;
   disp.locationLon = -999.0f;    disp.lon_hasFix = false;
   disp.dtMonth = -1; disp.dtDay = -1; disp.dtYear = -1;
@@ -156,6 +160,7 @@ void display() {
   display_stability();
   display_bearing();
   display_bearing_correction();
+  display_follow();
   display_distance();
   display_course();
   display_location_lat();
@@ -412,17 +417,18 @@ void display_distance() {
   disp.distance_waypointSet = cur_waypointSet;
   disp.distance_hasFix     = cur_hasFix;
 
-  GFXcanvas1 distance_value_canvas(90, 42);
+  // 18pt value (matches Heading), vertically centered in the shortened box.
+  GFXcanvas1 distance_value_canvas(105, 32);
   uint16_t foregroundColor = HX8357_CYAN;
   distance_value_canvas.fillScreen(0);  // Background index
 
   distance_value_canvas.setTextColor(1);  // Foreground index
-  distance_value_canvas.setFont(&FreeSansBold24pt7b);
-  distance_value_canvas.setCursor(0, 37);
+  distance_value_canvas.setFont(&FreeSansBold18pt7b);
+  distance_value_canvas.setCursor(0, 29);
   if (cur_waypointSet && cur_hasFix) {
     distance_value_canvas.print(cur_distance, 2);
   }
-  tft.drawBitmap(341, 23, distance_value_canvas.getBuffer(), 90, 42, foregroundColor, backgroundColor);
+  tft.drawBitmap(341, 80, distance_value_canvas.getBuffer(), 105, 32, foregroundColor, backgroundColor);
 }
 
 void display_course() {
@@ -432,18 +438,44 @@ void display_course() {
   disp.course        = cur_course;
   disp.course_hasFix = cur_hasFix;
 
-  GFXcanvas1 course_value_canvas(115, 42);
+  // 18pt value (matches Heading), vertically centered in the shortened box.
+  GFXcanvas1 course_value_canvas(115, 32);
   uint16_t foregroundColor = 0x7FE8;
   course_value_canvas.fillScreen(0);  // Background index
 
   if (cur_hasFix) {
     course_value_canvas.setTextColor(1);  // Foreground index
-    course_value_canvas.setFont(&FreeSansBold24pt7b);
-    course_value_canvas.setCursor(0, 40);
+    course_value_canvas.setFont(&FreeSansBold18pt7b);
+    course_value_canvas.setCursor(0, 29);
     course_value_canvas.print(cur_course, 1);
   }
   // If no fix, canvas is cleared and drawn as such
-  tft.drawBitmap(341, 113, course_value_canvas.getBuffer(), 115, 42, foregroundColor, backgroundColor);
+  tft.drawBitmap(341, 147, course_value_canvas.getBuffer(), 115, 32, foregroundColor, backgroundColor);
+}
+
+void display_follow() {
+  int  cur_source    = autoPilot.getNavSource();
+  bool cur_connected = autoPilot.isConnected();
+  if (cur_source == disp.navSource && cur_connected == disp.navSource_connected) return;
+  disp.navSource           = cur_source;
+  disp.navSource_connected = cur_connected;
+
+  GFXcanvas1 follow_value_canvas(130, 24);
+  uint16_t foregroundColor = 0xF57F;  // same lavender as Destination
+  follow_value_canvas.fillScreen(0);  // Background index
+
+  follow_value_canvas.setTextColor(1);  // Foreground index
+  follow_value_canvas.setFont(&FreeSansBold12pt7b);
+  follow_value_canvas.setCursor(0, 18);
+  if (cur_connected) {
+    switch (cur_source) {
+      case 1:  follow_value_canvas.print("Garmin");  break;
+      case 2:  follow_value_canvas.print("OpenCPN"); break;
+      default: follow_value_canvas.print("None");    break;
+    }
+  }
+  // If no link, canvas stays cleared (blank)
+  tft.drawBitmap(340, 23, follow_value_canvas.getBuffer(), 130, 24, foregroundColor, backgroundColor);
 }
 
 void display_location_lat() {
@@ -464,7 +496,7 @@ void display_location_lat() {
     location_lat_value_canvas.print(cur_lat, 6);
   }
   // If no fix, canvas is cleared and drawn as such
-  tft.drawBitmap(354, 200, location_lat_value_canvas.getBuffer(), 115, 22, foregroundColor, backgroundColor);
+  tft.drawBitmap(354, 214, location_lat_value_canvas.getBuffer(), 115, 22, foregroundColor, backgroundColor);
 }
 
 void display_location_lon() {
@@ -485,7 +517,7 @@ void display_location_lon() {
     location_lon_value_canvas.print(cur_lon, 6);
   }
   // If no fix, canvas is cleared and drawn as such
-  tft.drawBitmap(331, 230, location_lon_value_canvas.getBuffer(), 139, 22, foregroundColor, backgroundColor);
+  tft.drawBitmap(331, 238, location_lon_value_canvas.getBuffer(), 139, 22, foregroundColor, backgroundColor);
 }
 
 void display_datetime() {
@@ -562,8 +594,10 @@ void initialize_display() {
   initialize_destination();
   initialize_bearing();
   initialize_volts();
+  initialize_follow();
   initialize_distance();
-  initialize_gps();
+  initialize_course();
+  initialize_location();
   initialize_date_time();
 }
 
@@ -668,71 +702,97 @@ void initialize_bearing() {
   int16_t x1, y1;
   uint16_t w, h;
   // // Canvas for Course Correction
-  GFXcanvas1 bearing_canvas(159, 110);
+  GFXcanvas1 bearing_canvas(159, 109);
   bearing_canvas.fillScreen(HX8357_BLACK);
-  bearing_canvas.drawRect(0, 0, 159, 110, HX8357_WHITE);
+  bearing_canvas.drawRect(0, 0, 159, 109, HX8357_WHITE);
   bearing_canvas.setFont(&FreeSans9pt7b);
   bearing_canvas.getTextBounds("Bearing", 0, 12, &x1, &y1, &w, &h);
   bearing_canvas.fillRect(x1, y1, w + 8, h + 3, HX8357_WHITE);
   bearing_canvas.setCursor(0, 14);
   bearing_canvas.setTextColor(HX8357_BLACK);
   bearing_canvas.print("Bearing");
-  tft.drawBitmap(161, 106, bearing_canvas.getBuffer(), 159, 110, 0xFC09, HX8357_BLACK);
+  tft.drawBitmap(161, 106, bearing_canvas.getBuffer(), 159, 109, 0xFC09, HX8357_BLACK);
 }
 
 void initialize_volts() {
   int16_t x1, y1;
   uint16_t w, h;
   // // Canvas for Course Correction
-  GFXcanvas1 volts_canvas(159, 53);
+  GFXcanvas1 volts_canvas(159, 54);
   volts_canvas.fillScreen(HX8357_BLACK);
-  volts_canvas.drawRect(0, 0, 159, 53, HX8357_WHITE);
+  volts_canvas.drawRect(0, 0, 159, 54, HX8357_WHITE);
   volts_canvas.setFont(&FreeSans9pt7b);
   volts_canvas.getTextBounds("Volts", 0, 12, &x1, &y1, &w, &h);
   volts_canvas.fillRect(x1, y1, w + 8, h + 3, HX8357_WHITE);
   volts_canvas.setCursor(0, 14);
   volts_canvas.setTextColor(HX8357_BLACK);
   volts_canvas.print("Volts");
-  tft.drawBitmap(161, 216, volts_canvas.getBuffer(), 159, 53, HX8357_WHITE, HX8357_BLACK);
+  tft.drawBitmap(161, 216, volts_canvas.getBuffer(), 159, 54, HX8357_WHITE, HX8357_BLACK);
 }
 
 void initialize_distance() {
   int16_t x1, y1;
   uint16_t w, h;
-  // Canvas for Distance
-  GFXcanvas1 distance_canvas(159, 80);
+  // Canvas for Distance (shortened, lowered to sit below the Follow box)
+  GFXcanvas1 distance_canvas(159, 66);
   distance_canvas.fillScreen(HX8357_BLACK);
   distance_canvas.setFont(&FreeSans9pt7b);
-  distance_canvas.drawRect(0, 0, 159, 80, HX8357_WHITE);
+  distance_canvas.drawRect(0, 0, 159, 66, HX8357_WHITE);
   distance_canvas.getTextBounds("Distance", 0, 12, &x1, &y1, &w, &h);
   distance_canvas.fillRect(x1, y1, w + 8, h + 3, HX8357_WHITE);
   distance_canvas.setCursor(0, 14);
   distance_canvas.setTextColor(HX8357_BLACK);
   distance_canvas.print("Distance");
-  tft.drawBitmap(321, 0, distance_canvas.getBuffer(), 159, 80, HX8357_CYAN, HX8357_BLACK);
+  tft.drawBitmap(321, 55, distance_canvas.getBuffer(), 159, 66, HX8357_CYAN, HX8357_BLACK);
 }
 
-void initialize_gps() {
+// New "Follow" box at the top of the third column: shows which source is
+// steering (None / OpenCPN / Garmin). Same lavender as the Destination box.
+void initialize_follow() {
   int16_t x1, y1;
   uint16_t w, h;
-  // Canvas for Course and Bearing
-  GFXcanvas1 gps_canvas(159, 190);
-  gps_canvas.fillScreen(HX8357_BLACK);
-  gps_canvas.drawRect(0, 0, 159, 94, HX8357_WHITE);
-  gps_canvas.setFont(&FreeSans9pt7b);
-  gps_canvas.getTextBounds("Course", 0, 12, &x1, &y1, &w, &h);
-  gps_canvas.fillRect(x1, y1, w + 8, h + 3, HX8357_WHITE);
-  gps_canvas.setCursor(0, 14);
-  gps_canvas.setTextColor(HX8357_BLACK);
-  gps_canvas.print("Course");
-  gps_canvas.drawRect(0, 94, 159, 94, HX8357_YELLOW);
-  gps_canvas.setFont(&FreeSans9pt7b);
-  gps_canvas.getTextBounds("Location", 0, 106, &x1, &y1, &w, &h);
-  gps_canvas.fillRect(x1, y1, w + 8, h + 1, HX8357_YELLOW);
-  gps_canvas.setCursor(0, 106);
-  gps_canvas.setTextColor(HX8357_BLACK);
-  gps_canvas.print("Location");
-  tft.drawBitmap(321, 81, gps_canvas.getBuffer(), 159, 190, 0x7FE8, HX8357_BLACK);
+  GFXcanvas1 follow_canvas(159, 54);
+  follow_canvas.fillScreen(HX8357_BLACK);
+  follow_canvas.setFont(&FreeSans9pt7b);
+  follow_canvas.drawRect(0, 0, 159, 54, HX8357_WHITE);
+  follow_canvas.getTextBounds("Follow", 0, 12, &x1, &y1, &w, &h);
+  follow_canvas.fillRect(x1, y1, w + 8, h + 3, HX8357_WHITE);
+  follow_canvas.setCursor(0, 14);
+  follow_canvas.setTextColor(HX8357_BLACK);
+  follow_canvas.print("Follow");
+  tft.drawBitmap(321, 0, follow_canvas.getBuffer(), 159, 54, 0xF57F, HX8357_BLACK);
+}
+
+void initialize_course() {
+  int16_t x1, y1;
+  uint16_t w, h;
+  // Course box (shortened, lowered to sit just above Location)
+  GFXcanvas1 course_canvas(159, 67);
+  course_canvas.fillScreen(HX8357_BLACK);
+  course_canvas.setFont(&FreeSans9pt7b);
+  course_canvas.drawRect(0, 0, 159, 67, HX8357_WHITE);
+  course_canvas.getTextBounds("Course", 0, 12, &x1, &y1, &w, &h);
+  course_canvas.fillRect(x1, y1, w + 8, h + 3, HX8357_WHITE);
+  course_canvas.setCursor(0, 14);
+  course_canvas.setTextColor(HX8357_BLACK);
+  course_canvas.print("Course");
+  tft.drawBitmap(321, 122, course_canvas.getBuffer(), 159, 67, 0x7FE8, HX8357_BLACK);
+}
+
+void initialize_location() {
+  int16_t x1, y1;
+  uint16_t w, h;
+  // Location box (shortened; lat/lon are vertically centered by display_location_*)
+  GFXcanvas1 location_canvas(159, 80);
+  location_canvas.fillScreen(HX8357_BLACK);
+  location_canvas.setFont(&FreeSans9pt7b);
+  location_canvas.drawRect(0, 0, 159, 80, HX8357_YELLOW);
+  location_canvas.getTextBounds("Location", 0, 12, &x1, &y1, &w, &h);
+  location_canvas.fillRect(x1, y1, w + 8, h + 3, HX8357_YELLOW);
+  location_canvas.setCursor(0, 14);
+  location_canvas.setTextColor(HX8357_BLACK);
+  location_canvas.print("Location");
+  tft.drawBitmap(321, 189, location_canvas.getBuffer(), 159, 80, 0x7FE8, HX8357_BLACK);
 }
 
 void initialize_date_time() {
