@@ -8,3 +8,4 @@ deps
 *.mo
 .idea/
 **/.DS_Store
+opencpn_plugin/autopilot_pi/.flatpak-builder/
