@@ -1,7 +1,0 @@
-[Runtime]
-name=org.opencpn.OpenCPN.Plugin.autopilot
-sdk=org.freedesktop.Sdk/aarch64/25.08
-
-[ExtensionOf]
-ref=app/org.opencpn.OpenCPN/aarch64/stable
-runtime=org.freedesktop.Platform/aarch64/25.08

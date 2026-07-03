@@ -145,6 +145,7 @@ void AutoPilotLink::SendRoute(const PlugIn_Route* route, const wxString& short_i
 
     // Build short names and send WPL for each waypoint first.
     wxArrayString names;
+    std::vector<std::pair<double,double>> positions;
     Plugin_WaypointList::Node* node = route->pWaypointList->GetFirst();
     int idx = 0;
     while (node) {
@@ -152,6 +153,7 @@ void AutoPilotLink::SendRoute(const PlugIn_Route* route, const wxString& short_i
         if (wp) {
             wxString sname = MakeShortId(wp->m_MarkName, idx);
             names.Add(sname);
+            positions.push_back({wp->m_lat, wp->m_lon});
             SendNmea(FormatWPL(sname, wp->m_lat, wp->m_lon));
         }
         node = node->GetNext();
@@ -161,6 +163,14 @@ void AutoPilotLink::SendRoute(const PlugIn_Route* route, const wxString& short_i
     // Then send RTE sentence(s) — split into chunks to keep each line ≤80 chars.
     for (const wxString& rte : FormatRTE(short_id, names))
         SendNmea(rte);
+
+    // Record this send so the inbound echo can be recognised and de-duped (Phase C §3.3).
+    // Key 1 match in FlushInboundRoute() uses short_id → guid to avoid creating a duplicate.
+    SentRoute sr;
+    sr.guid      = route->m_GUID;
+    sr.positions = positions;
+    sr.sent_ms   = wxGetLocalTimeMillis();
+    m_sent_routes[short_id] = sr;
 }
 
 // ---------------------------------------------------------------------------
@@ -345,22 +355,132 @@ void AutoPilotLink::ParseRmbLine(const char* sentence) {
         m_rmb_dest.Clear();
 }
 
-// Called when all RTE messages for one route have arrived.
-// Step 5 (de-dup + AddPlugInRoute / ActivateRoutePI) will go here.
-// §3.3 spike: to activate an existing route by GUID use:
-//   auto api = dynamic_cast<HostApi121*>(GetHostApi().get());
-//   if (api) api->ActivateRoutePI(guid, true);
+// Phase C §3.3 — geometry search helper.
+// Iterates all local OpenCPN routes and returns the GUID of the first whose
+// ordered waypoint positions all match pts within ROUTE_MATCH_EPSILON degrees.
+// Returns an empty string when no match is found.
+wxString AutoPilotLink::FindMatchingLocalRoute(
+        const std::vector<std::pair<double,double>>& pts) const
+{
+    if (pts.empty()) return wxString();
+
+    wxArrayString guids = GetRouteGUIDArray();
+    for (size_t i = 0; i < guids.GetCount(); i++) {
+        auto route = GetRoute_Plugin(guids[i]);
+        if (!route || !route->pWaypointList) continue;
+        if ((size_t)route->pWaypointList->GetCount() != pts.size()) continue;
+
+        bool match = true;
+        Plugin_WaypointList::Node* node = route->pWaypointList->GetFirst();
+        for (size_t j = 0; j < pts.size() && node; j++, node = node->GetNext()) {
+            PlugIn_Waypoint* wp = node->GetData();
+            if (!wp || fabs(wp->m_lat - pts[j].first)  > ROUTE_MATCH_EPSILON
+                    || fabs(wp->m_lon - pts[j].second) > ROUTE_MATCH_EPSILON) {
+                match = false;
+                break;
+            }
+        }
+        if (match) return guids[i];
+    }
+    return wxString();
+}
+
+// Called when all RTE messages for one route have arrived (Phase C §3.3).
+//
+// De-dup logic (two keys, used in order):
+//   Key 1 — name-tag:  m_rte_id found in m_sent_routes → we sent this route →
+//            activate the existing local GUID, no creation.
+//   Key 2 — geometry:  compare inbound WP positions against every local route
+//            within ROUTE_MATCH_EPSILON → same result if found.
+//   Neither → genuinely Garmin-originated → AddPlugInRoute + activate.
+//
+// Activation: HostApi121::ActivateRoutePI(guid, true) — spike confirmed (§3.3).
 void AutoPilotLink::FlushInboundRoute() {
-    wxLogMessage("AutoPilot: ~APRX route assembled: id=%s, %d waypoints",
+    wxLogMessage("AutoPilot: ~APRX route assembled: id='%s', %d waypoints",
                  m_rte_id, (int)m_rte_order.size());
+
+    // Build inbound geometry: ordered positions for the waypoints we have.
+    std::vector<std::pair<double,double>> inbound_pts;
     for (const wxString& name : m_rte_order) {
         auto it = m_wpl_buffer.find(name);
-        if (it != m_wpl_buffer.end())
-            wxLogMessage("  WP %s  %.6f, %.6f", name, it->second.lat, it->second.lon);
-        else
-            wxLogMessage("  WP %s  (no WPL received)", name);
+        if (it != m_wpl_buffer.end()) {
+            inbound_pts.push_back({it->second.lat, it->second.lon});
+            wxLogMessage("  WP '%s'  %.6f, %.6f", name, it->second.lat, it->second.lon);
+        } else {
+            wxLogMessage("  WP '%s'  (no WPL received)", name);
+        }
     }
-    // TODO step 5: de-dup check, then AddPlugInRoute / ActivateRoutePI
+
+    // -----------------------------------------------------------------------
+    // Key 1 — name-tag match: did we push a route with this ID to the Garmin?
+    // -----------------------------------------------------------------------
+    wxString found_guid;
+    {
+        auto it = m_sent_routes.find(m_rte_id);
+        if (it != m_sent_routes.end()) {
+            found_guid = it->second.guid;
+            wxLogMessage("AutoPilot: de-dup Key1 match id='%s' → guid %s",
+                         m_rte_id, found_guid);
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Key 2 — geometry match fallback (catches routes sent before this session,
+    // routes whose short_id got truncated/changed by the Garmin, or manual re-sends).
+    // -----------------------------------------------------------------------
+    if (found_guid.IsEmpty() && !inbound_pts.empty()) {
+        found_guid = FindMatchingLocalRoute(inbound_pts);
+        if (!found_guid.IsEmpty())
+            wxLogMessage("AutoPilot: de-dup Key2 geometry match → guid %s", found_guid);
+    }
+
+    // -----------------------------------------------------------------------
+    // Activate existing route, or create a new one and then activate it.
+    // -----------------------------------------------------------------------
+    auto api = dynamic_cast<HostApi121*>(GetHostApi().get());
+
+    if (!found_guid.IsEmpty()) {
+        // Route already in OpenCPN — just activate it (idempotent guard).
+        if (api) {
+            if (!api->IsRouteActive(found_guid)) {
+                api->ActivateRoutePI(found_guid, true);
+                wxLogMessage("AutoPilot: activated existing route %s", found_guid);
+            } else {
+                wxLogMessage("AutoPilot: route %s already active, no-op", found_guid);
+            }
+        }
+    } else if (!inbound_pts.empty()) {
+        // Genuinely Garmin-originated route → build, add, then activate.
+        PlugIn_Route* nr = new PlugIn_Route();
+        // Set a deterministic GUID so we can activate it immediately after AddPlugInRoute.
+        nr->m_GUID = wxString::Format("AP-%s-%lld",
+                                       m_rte_id, wxGetLocalTimeMillis().GetValue());
+        nr->m_NameString = wxString::Format("Garmin: %s", m_rte_id);
+        nr->pWaypointList = new Plugin_WaypointList();
+
+        for (const wxString& name : m_rte_order) {
+            auto it = m_wpl_buffer.find(name);
+            if (it != m_wpl_buffer.end()) {
+                PlugIn_Waypoint* wp = new PlugIn_Waypoint(
+                    it->second.lat, it->second.lon, "circle", name);
+                nr->pWaypointList->Append(wp);
+            }
+        }
+
+        wxString new_guid = nr->m_GUID;
+        bool added = AddPlugInRoute(nr, /*permanent=*/true);
+        delete nr;  // OpenCPN takes a deep copy; we own the shell
+
+        if (added && api) {
+            api->ActivateRoutePI(new_guid, true);
+            wxLogMessage("AutoPilot: created + activated new route '%s' guid=%s",
+                         m_rte_id, new_guid);
+        } else {
+            wxLogMessage("AutoPilot: AddPlugInRoute failed for id='%s' (added=%d api=%p)",
+                         m_rte_id, (int)added, (void*)api);
+        }
+    }
+
     m_wpl_buffer.clear();
     m_rte_order.clear();
 }
@@ -493,11 +613,13 @@ void AutoPilotLink::DrainSocket() {
 
         buf[got] = '\0';
 
-        // Strip frame: find leading '~', trailing '$'
+        // Strip frame: find leading '~', trailing '$'.
+        // Use strrchr (last '$') so that ~APRX packets whose NMEA payload
+        // starts with '$' are not truncated at the inner '$'.
         char* start = strchr(buf, '~');
         if (!start) continue;
         start++;  // skip '~'
-        char* end = strchr(start, '$');
+        char* end = strrchr(start, '$');
         if (!end) continue;
         *end = '\0';
 

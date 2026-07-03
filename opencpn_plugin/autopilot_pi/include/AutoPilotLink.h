@@ -5,6 +5,7 @@
 #include <wx/timer.h>
 #include "ocpn_plugin.h"
 #include <map>
+#include <utility>
 #include <vector>
 
 // Mirrors the ~APDAT field layout from controller/publish.ino.
@@ -115,10 +116,24 @@ private:
     int                              m_rte_count;   // RTE messages received so far
     wxString                         m_rmb_dest;    // active dest name from last RMB A sentence
 
+    // Phase C de-dup: sent-route registry (§3.3)
+    struct SentRoute {
+        wxString                              guid;
+        std::vector<std::pair<double,double>> positions;  // lat/lon in decimal degrees
+        wxLongLong                            sent_ms;
+    };
+    std::map<wxString, SentRoute>    m_sent_routes;  // short_id → info recorded at SendRoute time
+
+    // Returns GUID of a local route whose waypoint sequence matches pts within
+    // ROUTE_MATCH_EPSILON, or an empty string if none found.
+    wxString FindMatchingLocalRoute(const std::vector<std::pair<double,double>>& pts) const;
+
     static const int TIMEOUT_MS        = 10000;
     static const int POLL_INTERVAL_MS  = 250;
     static const int RECV_BUF_SIZE     = 512;
     static const int LOCAL_SUPPRESS_MS = 2000;
+    // Geometry tolerance for inbound WPL position matching (~55 m, well above NMEA ddmm.mmm rounding).
+    static constexpr double ROUTE_MATCH_EPSILON = 5e-4;
 
     wxDECLARE_EVENT_TABLE();
 };
