@@ -125,6 +125,10 @@ void AutoPilotLink::SendWaypoint(double lat, double lon) {
     SendCommand(wxString::Format("w%.6f,%.6f", lat, lon));
 }
 
+void AutoPilotLink::SendStopFollow() {
+    SendCommand("X");
+}
+
 // ---------------------------------------------------------------------------
 // §1c — NMEA send path
 // ---------------------------------------------------------------------------
@@ -432,6 +436,8 @@ void AutoPilotLink::ParseApdat(char* data) {
     s.course          = nextDouble();
     s.location_lat    = nextDouble();
     s.location_lon    = nextDouble();
+    // Phase B: nav_source is the last field; absent on pre-B firmware → nextInt returns 0 (NONE).
+    s.nav_source      = nextInt();
 
     // Preserve locally-commanded fields for LOCAL_SUPPRESS_MS after a button press,
     // matching the display unit's localCommandTime suppression in AutoPilot.cpp.

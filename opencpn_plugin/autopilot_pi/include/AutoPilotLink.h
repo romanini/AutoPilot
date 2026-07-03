@@ -24,6 +24,7 @@ struct AutoPilotState {
     double bearing, bearing_correction;
     double speed, distance, course;
     double location_lat, location_lon;
+    int    nav_source;  // 0=NONE, 1=GARMIN, 2=OPENCPN (Phase B)
 };
 
 class AutoPilotPanel;
@@ -45,6 +46,7 @@ public:
     void SendNavEnable(bool enable);
     void SendAdjust(float degrees);
     void SendWaypoint(double lat, double lon);
+    void SendStopFollow();   // emits ~APCMD,X$ to clear OPENCPN source immediately
 
     // §1c — wrap a single NMEA sentence as ~APTX and unicast to controller
     void SendNmea(const wxString& nmea_line);

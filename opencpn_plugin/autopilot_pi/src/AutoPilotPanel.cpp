@@ -6,7 +6,7 @@
 
 #include "AutoPilotPanel.h"
 
-// Button IDs
+// Button / control IDs
 enum {
     ID_BTN_MODE       = wxID_HIGHEST + 1,
     ID_BTN_NAV_TOGGLE,
@@ -17,10 +17,12 @@ enum {
     ID_BTN_SEND_WP,
     ID_BTN_SEND_ROUTE,
     ID_BTN_UNDOCK,
+    ID_CHK_FOLLOW,
 };
 
-const float AutoPilotPanel::ADJUSTMENT_SHORT = 1.0f;
-const float AutoPilotPanel::ADJUSTMENT_LONG  = 10.0f;
+const float AutoPilotPanel::ADJUSTMENT_SHORT     = 1.0f;
+const float AutoPilotPanel::ADJUSTMENT_LONG      = 10.0f;
+const int   AutoPilotPanel::HEARTBEAT_INTERVAL_MS = 1000;  // 1 s — well within controller's ~6 s timeout
 
 wxBEGIN_EVENT_TABLE(AutoPilotPanel, wxScrolledWindow)
     EVT_BUTTON(ID_BTN_MODE,       AutoPilotPanel::OnMode)
@@ -32,6 +34,8 @@ wxBEGIN_EVENT_TABLE(AutoPilotPanel, wxScrolledWindow)
     EVT_BUTTON(ID_BTN_SEND_WP,    AutoPilotPanel::OnSendWP)
     EVT_BUTTON(ID_BTN_SEND_ROUTE, AutoPilotPanel::OnSendRoute)
     EVT_BUTTON(ID_BTN_UNDOCK,     AutoPilotPanel::OnUndock)
+    EVT_CHECKBOX(ID_CHK_FOLLOW,   AutoPilotPanel::OnFollowChanged)
+    EVT_TIMER(wxID_ANY,           AutoPilotPanel::OnHeartbeat)
 wxEND_EVENT_TABLE()
 
 // ---------------------------------------------------------------------------
@@ -152,6 +156,7 @@ AutoPilotPanel::AutoPilotPanel(wxWindow* parent, AutoPilotLink* link)
     , m_navigate_available(false)
     , m_navigate_lat(0.0)
     , m_navigate_lon(0.0)
+    , m_heartbeat_timer(this)
 {
     BuildUI_Float();
 }
@@ -166,6 +171,8 @@ bool AutoPilotPanel::SetDockMode(DockMode mode) {
     if (mode == m_dock_mode) return false;
     m_dock_mode = mode;
 
+    bool follow_checked = m_chk_follow->IsChecked();  // preserve across rebuild
+
     Freeze();
     DestroyChildren();  // schedules all child windows for deletion
     m_btn_undock = nullptr;
@@ -175,6 +182,7 @@ bool AutoPilotPanel::SetDockMode(DockMode mode) {
         case DockMode::RIGHT:      BuildUI_Right();    break;
         case DockMode::TOP_BOTTOM: BuildUI_TopBottom();break;
     }
+    m_chk_follow->SetValue(follow_checked);
     Layout();
     Thaw();
     return true;
@@ -351,7 +359,7 @@ void AutoPilotPanel::BuildUI_Float()
 
     // Follow lives in the controls row (not in bottom_row) so the two WP/Rte
     // buttons in bottom_row have full width.
-    m_chk_follow = new wxCheckBox(this, wxID_ANY, "Follow");
+    m_chk_follow = new wxCheckBox(this, ID_CHK_FOLLOW, "Follow");
     m_chk_follow->SetForegroundColour(kWhite);
     m_chk_follow->SetBackgroundColour(kBlack);
 
@@ -372,6 +380,16 @@ void AutoPilotPanel::BuildUI_Float()
     btn_row->Add(m_btn_nav_toggle, 0);
     btn_row->AddStretchSpacer(1);
     root->Add(btn_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 3);
+
+    // ── Following (nav_source from Phase B APDAT field) ────────────────────
+    MakeBox(this, "Following", kCyan, outer, inner, kPanelW, kH_Bar);
+    {   auto* s = new wxBoxSizer(wxVERTICAL);
+        inner->SetSizer(s);
+        m_nav_source_val = MakeVal(inner, kCyan, 11);
+        s->AddStretchSpacer(1);
+        s->Add(m_nav_source_val, 0, wxEXPAND | wxLEFT | wxRIGHT, 2);
+        s->AddStretchSpacer(1); }
+    root->Add(outer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 3);
 
     m_btn_undock = nullptr;  // no undock button in float mode
 
@@ -530,10 +548,20 @@ void AutoPilotPanel::BuildUI_Right()
         root->Add(r, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, kPad); }
 
     // ── Follow ─────────────────────────────────────────────────────────────
-    m_chk_follow = new wxCheckBox(this, wxID_ANY, "Follow");
+    m_chk_follow = new wxCheckBox(this, ID_CHK_FOLLOW, "Follow");
     m_chk_follow->SetForegroundColour(kWhite);
     m_chk_follow->SetBackgroundColour(kBlack);
     root->Add(m_chk_follow, 0, wxALIGN_CENTER_HORIZONTAL | wxBOTTOM, kPad);
+
+    // ── Following (nav_source from Phase B APDAT field) ────────────────────
+    MakeBox(this, "Following", kCyan, outer, inner, 0, kH_Stb);
+    {   auto* s = new wxBoxSizer(wxVERTICAL);
+        inner->SetSizer(s);
+        m_nav_source_val = MakeVal(inner, kCyan, 8);
+        s->AddStretchSpacer(1);
+        s->Add(m_nav_source_val, 0, wxEXPAND | wxLEFT | wxRIGHT, kBP);
+        s->AddStretchSpacer(1); }
+    root->Add(outer, 0, wxEXPAND | wxBOTTOM, kPad);
 
     // ── <  |  > ────────────────────────────────────────────────────────────
     m_btn_port_short = new wxButton(this, ID_BTN_PORT_SHORT, "<");
@@ -662,6 +690,13 @@ void AutoPilotPanel::BuildUI_TopBottom()
         s->Add(m_gpsfix_val, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 1); }
     data->Add(outer, 1, wxEXPAND);
 
+    MakeBox(this, "Flw", kCyan, outer, inner, 0, kH_Compact);
+    {   auto* s = new wxBoxSizer(wxVERTICAL);
+        inner->SetSizer(s);
+        m_nav_source_val = MakeVal(inner, kCyan, 10);
+        s->Add(m_nav_source_val, 1, wxEXPAND | wxALL, 2); }
+    data->Add(outer, 1, wxEXPAND);
+
     root->Add(data, 0, wxEXPAND);
 
     // ── Controls row ───────────────────────────────────────────────────────
@@ -675,7 +710,7 @@ void AutoPilotPanel::BuildUI_TopBottom()
     m_btn_send_route->Enable(false);
     ctrl->Add(m_btn_send_route, 0, wxALL | wxALIGN_CENTER_VERTICAL, kBtnPad);
 
-    m_chk_follow = new wxCheckBox(this, wxID_ANY, "Follow");
+    m_chk_follow = new wxCheckBox(this, ID_CHK_FOLLOW, "Follow");
     m_chk_follow->SetForegroundColour(kWhite);
     m_chk_follow->SetBackgroundColour(kBlack);
     ctrl->Add(m_chk_follow, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, kBtnPad);
@@ -788,6 +823,14 @@ void AutoPilotPanel::UpdateFromState(const AutoPilotState& s, bool connected)
     m_location_val->SetLabel(
         s.fix ? wxString::Format("%.6f\n%.6f", s.location_lat, s.location_lon) : "--");
 
+    // Phase B: nav_source
+    {
+        static const char* kSrcLabel[] = {"NONE", "GARMIN", "OPENCPN"};
+        int ns = s.nav_source;
+        m_nav_source_val->SetLabel(
+            (ns >= 0 && ns <= 2) ? wxString(kSrcLabel[ns]) : wxString::Format("%d", ns));
+    }
+
     // Bottom bar
     if (s.fix) {
         m_datetime_val->SetLabel(wxString::Format("%d:%02d", s.hour, s.minute));
@@ -824,8 +867,44 @@ void AutoPilotPanel::SetNavigateTarget(bool available, double lat, double lon)
     m_navigate_lon = lon;
     m_btn_send_wp->Enable(m_link->IsConnected() && available);
 
-    if (available && m_chk_follow->IsChecked() && m_link->IsConnected())
+    if (!available) {
+        // Active leg cleared — kill the heartbeat stream
+        m_heartbeat_timer.Stop();
+        if (m_link->IsConnected())
+            m_link->SendStopFollow();
+    } else if (m_chk_follow->IsChecked() && m_link->IsConnected()) {
+        // New target while Follow is active: send immediately and (re)start the timer
         m_link->SendWaypoint(lat, lon);
+        if (!m_heartbeat_timer.IsRunning())
+            m_heartbeat_timer.Start(HEARTBEAT_INTERVAL_MS);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Follow checkbox + heartbeat timer
+// ---------------------------------------------------------------------------
+
+void AutoPilotPanel::OnFollowChanged(wxCommandEvent&)
+{
+    if (m_chk_follow->IsChecked()) {
+        if (m_navigate_available && m_link->IsConnected()) {
+            m_link->SendWaypoint(m_navigate_lat, m_navigate_lon);
+            m_heartbeat_timer.Start(HEARTBEAT_INTERVAL_MS);
+        }
+    } else {
+        m_heartbeat_timer.Stop();
+        if (m_link->IsConnected())
+            m_link->SendStopFollow();
+    }
+}
+
+void AutoPilotPanel::OnHeartbeat(wxTimerEvent&)
+{
+    if (!m_navigate_available || !m_link->IsConnected()) {
+        m_heartbeat_timer.Stop();
+        return;
+    }
+    m_link->SendWaypoint(m_navigate_lat, m_navigate_lon);
 }
 
 // ---------------------------------------------------------------------------
@@ -889,6 +968,14 @@ void AutoPilotPanel::OnSendRoute(wxCommandEvent&)
     auto route = GetRoute_Plugin(m_route_guid);
     if (!route || !route->pWaypointList || route->pWaypointList->IsEmpty()) return;
     m_link->SendRoute(route.get(), "OCPN01");
+
+    // Auto-enable Follow so the controller gets a sustained w heartbeat (Scenario 1).
+    m_chk_follow->SetValue(true);
+    if (m_navigate_available && m_link->IsConnected()) {
+        m_link->SendWaypoint(m_navigate_lat, m_navigate_lon);
+        if (!m_heartbeat_timer.IsRunning())
+            m_heartbeat_timer.Start(HEARTBEAT_INTERVAL_MS);
+    }
 }
 
 void AutoPilotPanel::OnUndock(wxCommandEvent&)

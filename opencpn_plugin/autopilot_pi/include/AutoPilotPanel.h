@@ -41,6 +41,8 @@ private:
     void OnStbdShort(wxCommandEvent& event);
     void OnStbdLong(wxCommandEvent& event);
     void OnUndock(wxCommandEvent& event);
+    void OnFollowChanged(wxCommandEvent& event);
+    void OnHeartbeat(wxTimerEvent& event);
 
     AutoPilotLink* m_link;
     DockMode       m_dock_mode;
@@ -66,6 +68,7 @@ private:
     // Bottom bar
     wxStaticText* m_datetime_val;
     wxStaticText* m_gpsfix_val;
+    wxStaticText* m_nav_source_val;  // Phase B: "NONE" / "GARMIN" / "OPENCPN"
 
     // Controls
     wxButton*   m_btn_port_long;
@@ -83,9 +86,11 @@ private:
     double   m_navigate_lat;
     double   m_navigate_lon;
     wxString m_route_guid;      // active OpenCPN route GUID; empty when none
+    wxTimer  m_heartbeat_timer;
 
     static const float ADJUSTMENT_SHORT;
     static const float ADJUSTMENT_LONG;
+    static const int   HEARTBEAT_INTERVAL_MS;
 
     wxDECLARE_EVENT_TABLE();
 };
