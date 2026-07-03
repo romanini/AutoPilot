@@ -25,13 +25,11 @@ void process_print(CustomClientType& client);
 void process_quit(CustomClientType& client);
 void process_waypoint(CustomClientType& client, char buffer[]);
 void process_garmin_inject(CustomClientType& client, char buffer[]);
-void process_follow_arm(CustomClientType& client, char buffer[]);
 void process_help(CustomClientType& client);
 void process_telnet(CustomClientType& client, char buffer[]);
 
-int garmin_inject_line(const char* line);  // defined in garmin.ino
-void navsource_set_armed(bool armed);      // defined in navsource.ino
-bool navsource_is_armed();                 // defined in navsource.ino
+int garmin_inject_line(const char* line);       // defined in garmin.ino
+const char* navsource_selected_name();          // defined in navsource.ino
 
 void setup_telnet() {
   telnet_server.onConnect(onTelnetConnect);
@@ -114,6 +112,9 @@ void process_print(CustomClientType& client) {
     client.print(")");
   }
   client.println("");
+
+  client.print("Nav source: ");
+  client.println(navsource_selected_name());
 
   client.print("Navigation: ");
   if (autoPilot.isNavigationEndabled()) {
@@ -207,19 +208,9 @@ void process_garmin_inject(CustomClientType& client, char buffer[]) {
   }
 }
 
-// Arm/disarm Follow-Garmin (plan §2.4). Armed: an RMB status 'A' auto-engages
-// waypoint-navigate toward the Garmin destination. Disarmed (default): the RMB
-// only populates the waypoint and the operator presses Enable.
-void process_follow_arm(CustomClientType& client, char buffer[]) {
-  int v = atoi(&buffer[1]);
-  navsource_set_armed(v != 0);
-  client.println(navsource_is_armed() ? "Follow-Garmin ARMED" : "Follow-Garmin disarmed");
-}
-
 void process_help(CustomClientType& client) {
   client.println("Possible commands:\n");
   client.println("\ta<heading offset> \t- Adjust heading to be <heading offset> from current heading.");
-  client.println("\tf<0|1> \t\t\t- Arm/disarm Follow-Garmin (auto-engage nav on RMB).");
   client.println("\tg<nmea> \t\t- Inject a Garmin NMEA line (test the ~APRX relay).");
   client.println("\tm<1|2> \t\t\t- Set the mode 1 = compass, 2 = waypoint.");
   client.println("\tn<0|1> \t\t\t- Navigation 0 = off, 1 = on");
@@ -261,9 +252,6 @@ void process_telnet(CustomClientType& client, char buffer[]) {
       break;
     case 'g':
       process_garmin_inject(client, buffer);
-      break;
-    case 'f':
-      process_follow_arm(client, buffer);
       break;
     case '?':
       process_help(client);

@@ -27,7 +27,7 @@ void publish_APDAT() {
   if (millis() - last_publish_time_mills > PUBLISH_INTERVAL) {
     last_publish_time_mills = millis();
     time_t currentTime = autoPilot.getDateTime();
-    sprintf(serialzied_data, "~APDAT,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%f,%.2f,%.2f,%.2f,%.2f,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.6f,%.6f$",
+    sprintf(serialzied_data, "~APDAT,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%f,%.2f,%.2f,%.2f,%.2f,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.6f,%.6f,%d$",
             year(currentTime) % 100,    // %d
             month(currentTime),         //%d
             day(currentTime),           //%d
@@ -57,7 +57,9 @@ void publish_APDAT() {
             autoPilot.getCourse(),    //%.2f
 
             autoPilot.getLocationLat(),  //%.6f
-            autoPilot.getLocationLon()   //%.6f
+            autoPilot.getLocationLon(),  //%.6f
+
+            autoPilot.getNavSource()     // %d  0=NONE, 1=GARMIN, 2=OPENCPN (Phase B)
     );
 
     //DEBUG_PRINTLN(serialzied_data);

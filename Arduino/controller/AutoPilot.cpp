@@ -49,6 +49,7 @@ AutoPilot::AutoPilot(SerialType* ser) {
   heading_desired = 0.0;
   bearing = 0.0;
   bearing_correction = 0.0;
+  nav_source = 0;
 
   heading = 0.0;
   pitch = 0.0;
@@ -237,6 +238,22 @@ int AutoPilot::setMode(int new_mode) {
   }
   this->unlock();
   return retval;
+}
+
+int AutoPilot::getNavSource() {
+  this->lock();
+  int value = this->nav_source;
+  this->unlock();
+  return value;
+}
+
+// Record which source the selector is steering by (0=NONE, 1=GARMIN, 2=OPENCPN).
+// Published in APDAT so the displays/plugin can show "who's steering"; it does
+// NOT gate steering (that's navigation_enabled + mode).
+void AutoPilot::setNavSource(int source) {
+  this->lock();
+  this->nav_source = source;
+  this->unlock();
 }
 
 bool AutoPilot::isNavigationEndabled() {

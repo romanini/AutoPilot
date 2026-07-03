@@ -46,6 +46,7 @@ void AutoPilot::init() {
   satellites = 0;
   navigation_enabled = false;
   mode = 1;
+  nav_source = 0;
   waypoint_set = false;
   waypoint_lat = 0.0;
   waypoint_lon = 0.0;
@@ -128,6 +129,13 @@ int AutoPilot::getSatellites() {
 int AutoPilot::getMode() {
   this->lock();
   int value =this->mode;
+  this->unlock();
+  return value;
+}
+
+int AutoPilot::getNavSource() {
+  this->lock();
+  int value = this->nav_source;
   this->unlock();
   return value;
 }
@@ -740,6 +748,15 @@ void AutoPilot::parseAPDAT(char *sentence) {
     this->location_lon = atof(p);
   } else {
     this->location_lon = 0.0;
+  }
+
+  // nav_source (Phase B): last field. Tolerant of absence so a pre-Phase-B
+  // controller (no trailing field) parses cleanly as NONE.
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
+  if (!isEmpty(p)) {
+    this->nav_source = atoi(p);
+  } else {
+    this->nav_source = 0;
   }
 
   this->unlock();

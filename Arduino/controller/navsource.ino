@@ -1,79 +1,208 @@
-// Nav-source arbitration — step 4: the GARMIN source ("Follow-Garmin") only.
+// Nav-source arbitration — the unified two-source selector (NavigationEngagePlan §2).
 //
-// The full §7.3 state machine (OPENCPN source, liveness selector, failover,
-// agreement check, nav_source telemetry) is step 6/7. This unit implements just
-// Option 1: parse the live Garmin RMB stream (fed from garmin.ino) and, behind
-// the operator "armed" guard, engage the controller's existing waypoint-navigate
-// machinery toward the RMB destination.
+// Tracks two independent navigation sources, GARMIN (live Garmin RMB stream) and
+// OPENCPN (the plugin's `w` heartbeat), each carrying {dest, live, last_update}.
+// navsource_tick() picks one and aims the controller at it:
+//   GARMIN if live, else OPENCPN if live, else NONE.
+//   selected != NONE -> setWaypoint(selected.dest) + setMode(2).
+//   selected == NONE -> if we were steering a source, drop to setMode(1)
+//                       (compass-hold on current heading: the implicit
+//                       end-of-route fallback).
+// Garmin wins when both are live; a non-selected source can never redirect the
+// active steering. CORE RULE: this file NEVER calls setNavigationEnabled() — the
+// operator always presses Enable. (The old "Follow-Garmin armed" auto-engage path
+// has been deleted.)
 //
-// Threading: every function here runs in command_task (Garmin parse, telnet `f`
-// arming, and the periodic tick all originate there), so the file-scope state
-// below needs no mutex. The actual nav-state changes go through autoPilot's
-// locked setters, which keeps them safe against control_task.
+// Threading: the GARMIN feed (navsource_garmin_rmb) and the selector
+// (navsource_tick) run in command_task, but the OPENCPN feed
+// (navsource_opencpn_waypoint / navsource_opencpn_clear) runs in the AsyncUDP
+// task (process_udp_command). The file-scope source state is therefore touched
+// from two tasks and is guarded by navsource_mux below. DEBUG prints and the
+// autoPilot setters (already mutex-guarded internally) are kept OUTSIDE the
+// critical section so we never hold the spinlock across a blocking/USB call.
 
-#define GARMIN_NAV_TIMEOUT_MS 6000   // RMB silence after which we drop a stale Garmin follow
+#include <math.h>
 
-static bool     follow_garmin_armed = false;  // operator safety guard (default: disarmed)
-static bool     garmin_engaged = false;        // nav was auto-engaged *by* the Garmin source
-static bool     garmin_active = false;         // last RMB had status 'A' (valid nav)
-static uint32_t garmin_last_rmb_ms = 0;
+#define GARMIN_NAV_TIMEOUT_MS  6000   // RMB silence after which a live Garmin source goes stale
+#define OPENCPN_PROMOTE_MS     3000   // a 2nd `w` within this window promotes OPENCPN to live (Follow)
+#define OPENCPN_NAV_TIMEOUT_MS 6000   // `w` heartbeat silence after which a live OpenCPN source goes stale
 
-// Arm/disarm "Follow-Garmin". Armed: an RMB with status 'A' auto-engages
-// waypoint-navigate. Disarmed: RMB still populates the waypoint, but the operator
-// presses Enable (preserves the project's "operator engages" safety pattern).
-void navsource_set_armed(bool armed) {
-  follow_garmin_armed = armed;
-  if (!armed) {
-    // Hand control back to the operator: stop treating nav as Garmin-driven.
-    // Leave the current nav state as-is (don't yank the helm); the operator
-    // decides whether to keep navigating or press Disable.
-    garmin_engaged = false;
-  }
-}
+enum NavSrc { NAV_NONE, NAV_GARMIN, NAV_OPENCPN };
 
-bool navsource_is_armed()       { return follow_garmin_armed; }
-bool navsource_garmin_active()  { return garmin_active; }
+// One navigation source's tracked state.
+struct NavSourceState {
+  double   dest_lat;
+  double   dest_lon;
+  bool     have_pos;        // we have ever received a valid destination
+  bool     live;            // currently a valid source to steer by
+  bool     show_pending;    // OPENCPN only: a lone Set WP to surface once (no Mode 2)
+  uint32_t last_update_ms;  // millis() of the last RMB / `w`
+};
 
-// Called for each RMB parsed off the live Garmin channel (garmin.ino).
-//   status 'A' + position -> populate the waypoint; if armed, engage nav.
-//   status 'V'            -> route complete / nav invalid; disengage if we engaged.
+static portMUX_TYPE navsource_mux = portMUX_INITIALIZER_UNLOCKED;
+
+static NavSourceState garmin  = { 0, 0, false, false, false, 0 };
+static NavSourceState opencpn = { 0, 0, false, false, false, 0 };
+
+// What the selector last applied to the autopilot. Touched only in command_task
+// (navsource_tick / the telnet 's'-via-print accessor), so it needs no lock.
+static NavSrc  applied_source = NAV_NONE;
+static double  applied_lat    = NAN;
+static double  applied_lon    = NAN;
+
+// Called for each RMB parsed off the live Garmin channel (garmin.ino). status 'A'
+// + position makes GARMIN live (and refreshes it); status 'V' clears it. The
+// `arrival` field (RMB field 13) is intentionally unused for now: explicit
+// arrival/alarm handling is a deferred TODO (NavigationEngagePlan §3).
 void navsource_garmin_rmb(char status, double dest_lat, double dest_lon,
                           bool have_pos, char arrival) {
-  garmin_last_rmb_ms = millis();
+  (void)arrival;
+  uint32_t now = millis();
+  bool promoted = false, cleared = false;
 
+  portENTER_CRITICAL(&navsource_mux);
+  garmin.last_update_ms = now;
   if (status == 'A' && have_pos) {
-    garmin_active = true;
-    // Populate the destination on every RMB so leg advances (new dest) track the
-    // Garmin. setWaypoint recomputes distance; bearing follows on the next GPS fix.
-    autoPilot.setWaypoint((float)dest_lat, (float)dest_lon);
-
-    if (follow_garmin_armed) {
-      autoPilot.setMode(2);                  // no-op-safe: waypoint_set is now true
-      autoPilot.setNavigationEnabled(true);
-      if (!garmin_engaged) {
-        garmin_engaged = true;
-        DEBUG_PRINTLN("[navsource] GARMIN engaged (armed, RMB 'A')");
-      }
-    }
+    garmin.dest_lat = dest_lat;
+    garmin.dest_lon = dest_lon;
+    garmin.have_pos = true;
+    promoted = !garmin.live;
+    garmin.live = true;
   } else if (status == 'V') {
-    garmin_active = false;
-    if (garmin_engaged) {
-      autoPilot.setNavigationEnabled(false);
-      garmin_engaged = false;
-      DEBUG_PRINTLN("[navsource] GARMIN disengaged (RMB 'V' / route end)");
+    cleared = garmin.live;
+    garmin.live = false;
+  }
+  portEXIT_CRITICAL(&navsource_mux);
+
+  if (promoted) DEBUG_PRINTLN("[navsource] GARMIN live (RMB 'A')");
+  if (cleared)  DEBUG_PRINTLN("[navsource] GARMIN cleared (RMB 'V')");
+}
+
+// Called for every OpenCPN `w` (subscribe.ino, AsyncUDP task). Always records the
+// destination; promotes OPENCPN to live only on a SUSTAINED heartbeat (a 2nd `w`
+// within OPENCPN_PROMOTE_MS of the previous one). A lone Set WP click does not
+// promote — it just flags the destination to be surfaced once (no Mode 2).
+void navsource_opencpn_waypoint(double lat, double lon) {
+  uint32_t now = millis();
+  bool promoted = false;
+
+  portENTER_CRITICAL(&navsource_mux);
+  if (!opencpn.live) {
+    if (opencpn.last_update_ms != 0 &&
+        (now - opencpn.last_update_ms) <= OPENCPN_PROMOTE_MS) {
+      opencpn.live = true;             // sustained stream -> Follow
+      opencpn.show_pending = false;    // the live path owns the destination now
+      promoted = true;
+    } else {
+      opencpn.show_pending = true;     // lone Set WP so far: surface it once
+    }
+  }
+  opencpn.dest_lat = lat;
+  opencpn.dest_lon = lon;
+  opencpn.have_pos = true;
+  opencpn.last_update_ms = now;
+  portEXIT_CRITICAL(&navsource_mux);
+
+  if (promoted) DEBUG_PRINTLN("[navsource] OPENCPN live (sustained heartbeat)");
+}
+
+// Called on `~APCMD,X$` (subscribe.ino, AsyncUDP task): the operator stopped
+// Follow. Clear the OPENCPN source immediately instead of waiting out the
+// timeout. last_update_ms is zeroed so a later lone `w` can't auto-promote off a
+// stale heartbeat clock.
+void navsource_opencpn_clear() {
+  bool cleared;
+  portENTER_CRITICAL(&navsource_mux);
+  cleared = opencpn.live;
+  opencpn.live = false;
+  opencpn.show_pending = false;
+  opencpn.last_update_ms = 0;
+  portEXIT_CRITICAL(&navsource_mux);
+
+  if (cleared) DEBUG_PRINTLN("[navsource] OPENCPN cleared ('X' / Follow stopped)");
+}
+
+// Periodic selector (command_task). Expires stale sources, picks the active one,
+// and aims the autopilot at it. Only ever changes Mode (never nav-enable).
+void navsource_tick() {
+  uint32_t now = millis();
+
+  // --- snapshot + timeout demotion of the cross-task source state ---
+  bool   g_live, o_live, do_show = false;
+  double g_lat, g_lon, o_lat, o_lon, show_lat = 0, show_lon = 0;
+  bool   g_demoted = false, o_demoted = false;
+  NavSrc selected;
+
+  portENTER_CRITICAL(&navsource_mux);
+  if (garmin.live && (now - garmin.last_update_ms) > GARMIN_NAV_TIMEOUT_MS) {
+    garmin.live = false;
+    g_demoted = true;
+  }
+  if (opencpn.live && (now - opencpn.last_update_ms) > OPENCPN_NAV_TIMEOUT_MS) {
+    opencpn.live = false;
+    opencpn.last_update_ms = 0;
+    o_demoted = true;
+  }
+  g_live = garmin.live;  g_lat = garmin.dest_lat;  g_lon = garmin.dest_lon;
+  o_live = opencpn.live; o_lat = opencpn.dest_lat; o_lon = opencpn.dest_lon;
+
+  selected = g_live ? NAV_GARMIN : (o_live ? NAV_OPENCPN : NAV_NONE);
+
+  // A lone Set WP is surfaced once, but only while nothing is actively steering
+  // (so it can never redirect a live source). Consume the flag under the lock.
+  if (selected == NAV_NONE && opencpn.show_pending) {
+    do_show = true;
+    show_lat = opencpn.dest_lat;
+    show_lon = opencpn.dest_lon;
+    opencpn.show_pending = false;
+  }
+  portEXIT_CRITICAL(&navsource_mux);
+
+  if (g_demoted) DEBUG_PRINTLN("[navsource] GARMIN stale (no RMB), demoted");
+  if (o_demoted) DEBUG_PRINTLN("[navsource] OPENCPN stale (no heartbeat), demoted");
+
+  // --- apply the selection (autoPilot setters are self-locked) ---
+  if (selected != NAV_NONE) {
+    double lat = (selected == NAV_GARMIN) ? g_lat : o_lat;
+    double lon = (selected == NAV_GARMIN) ? g_lon : o_lon;
+    bool source_switch = (selected != applied_source);
+    if (source_switch || lat != applied_lat || lon != applied_lon) {
+      autoPilot.setWaypoint((float)lat, (float)lon);
+      applied_lat = lat;
+      applied_lon = lon;
+    }
+    if (source_switch) {
+      autoPilot.setMode(2);
+      DEBUG_PRINT("[navsource] selected -> ");
+      DEBUG_PRINTLN(selected == NAV_GARMIN ? "GARMIN" : "OPENCPN");
+      applied_source = selected;
+      autoPilot.setNavSource(applied_source);  // publish who's steering (APDAT)
+    }
+  } else {
+    // No live source. If WE were steering a source, this is the implicit
+    // end-of-route fallback: drop to compass-hold on the current heading. Gated
+    // on applied_source so we never disturb an operator's manual Mode 2.
+    if (applied_source != NAV_NONE) {
+      if (autoPilot.getMode() == 2) autoPilot.setMode(1);
+      DEBUG_PRINTLN("[navsource] selected -> NONE (compass-hold fallback)");
+      applied_source = NAV_NONE;
+      autoPilot.setNavSource(NAV_NONE);  // publish who's steering (APDAT)
+      applied_lat = NAN;
+      applied_lon = NAN;
+    }
+    // Surface a lone Set WP destination (no mode change).
+    if (do_show) {
+      autoPilot.setWaypoint((float)show_lat, (float)show_lon);
     }
   }
 }
 
-// Periodic liveness guard (call from command_task). If a Garmin follow we engaged
-// goes stale (RMB stream stopped — unplug, crash, out of range), disengage so we
-// don't keep steering to a frozen waypoint. Only affects Garmin-engaged nav; a
-// manually-engaged nav is left to the operator.
-void navsource_tick() {
-  if (garmin_engaged && (millis() - garmin_last_rmb_ms) > GARMIN_NAV_TIMEOUT_MS) {
-    autoPilot.setNavigationEnabled(false);
-    garmin_engaged = false;
-    garmin_active = false;
-    DEBUG_PRINTLN("[navsource] GARMIN stale (no RMB), disengaged");
+// The source the selector is currently steering by (for the telnet 'p' readout).
+// command_task-only access -> no lock needed.
+const char* navsource_selected_name() {
+  switch (applied_source) {
+    case NAV_GARMIN:  return "GARMIN";
+    case NAV_OPENCPN: return "OPENCPN";
+    default:          return "NONE";
   }
 }

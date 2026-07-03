@@ -37,6 +37,7 @@ private:
 
   bool navigation_enabled;
   int mode;                  // 0 = off, 1 = compass, 2 = navigate
+  int nav_source;            // who's steering, from APDAT: 0=NONE, 1=GARMIN, 2=OPENCPN
 
   bool waypoint_set;    // flag indicating if the waypoint has been set
   float waypoint_lat;   // desired waypoint latitide
@@ -94,6 +95,7 @@ public:
   int getSatellites();
   int getMode();
   void setMode(int mode);
+  int getNavSource();
   bool isNavigationEnabled();
   void setNavigationEnabled(bool nav);
   bool isWaypointSet();

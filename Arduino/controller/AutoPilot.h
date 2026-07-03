@@ -34,6 +34,7 @@ private:
   float heading_desired;     // desired heading if navigating by comapss
   float bearing;             // desired direction of travel use in both modes
   float bearing_correction;  // correction needed to return to proper bearing
+  int nav_source;            // who the selector is steering by: 0=NONE, 1=GARMIN, 2=OPENCPN (navsource.ino)
 
   float heading;                       // direction of the bow is pointing at the moment (changes frequently)
   float pitch;
@@ -87,6 +88,8 @@ public:
   int getSatellites();
   int getMode();
   int setMode(int mode);
+  int getNavSource();
+  void setNavSource(int source);
   bool isNavigationEndabled();
   void setNavigationEnabled(bool enable);
   float getHeadingDesired();

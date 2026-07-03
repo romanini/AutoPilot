@@ -16,7 +16,9 @@ static AsyncUDP udpCommandServer;
 // auto-prototype pass at the top of the combined sketch).
 void process_udp_command(AsyncUDPPacket packet);
 void dispatch_command(char buffer[]);
-void garmin_write_line(const char* nmea);  // defined in garmin.ino
+void garmin_write_line(const char* nmea);             // defined in garmin.ino
+void navsource_opencpn_waypoint(double lat, double lon);  // defined in navsource.ino
+void navsource_opencpn_clear();                       // defined in navsource.ino
 
 void setup_subscribe() {
   if (udpCommandServer.listen(UDP_COMMAND_PORT)) {
@@ -96,6 +98,11 @@ void dispatch_command(char buffer[]) {
       break;
     }
     case 'w': {
+      // Route into the OPENCPN nav source rather than calling setWaypoint()
+      // directly: the selector (navsource.ino) owns setWaypoint/setMode so it can
+      // arbitrate against the Garmin source and infer Follow from the `w` cadence.
+      // A lone Set WP surfaces the destination but never sets Mode 2; a sustained
+      // stream promotes OPENCPN to live.
       // strtok_r (not strtok): this runs in the AsyncUDP task and the telnet
       // 'w' handler runs in command_task. A shared static strtok pointer would
       // corrupt if both parsed a waypoint at once; a local saveptr is reentrant.
@@ -105,11 +112,15 @@ void dispatch_command(char buffer[]) {
         float lat = atof(coordinates);
         coordinates = strtok_r(NULL, ",", &saveptr);
         if (coordinates != NULL) {
-          autoPilot.setWaypoint(lat, atof(coordinates));
+          navsource_opencpn_waypoint(lat, atof(coordinates));
         }
       }
       break;
     }
+    case 'X':
+      // Follow stopped: clear the OPENCPN source immediately (optional fast-stop).
+      navsource_opencpn_clear();
+      break;
     default:
       break;
   }
