@@ -21,7 +21,7 @@ To set up a fresh card, follow the from-scratch setup below. Use the commands he
 to back up an existing working card or restore from a backup.
 
 **Two things make `dd` fast on macOS:**
-- Use `/dev/rdisk2` not `/dev/disk2` — the `r` prefix (raw device) bypasses the buffer cache and is ~10× faster.
+- Use `/dev/rdisk3` not `/dev/disk3` — the `r` prefix (raw device) bypasses the buffer cache and is ~10× faster.
 - Use `bs=4m` for large block transfers instead of the default 512-byte blocks.
 
 Pipe through `gzip` to compress the output; this cuts file size roughly in half
@@ -34,30 +34,30 @@ compression. Hit **Ctrl+T** at any time to print progress.
    ```bash
    diskutil list
    ```
-2. Unmount it (replace `disk2` with your actual device):
+2. Unmount it (replace `disk3` with your actual device):
    ```bash
-   diskutil unmountDisk /dev/disk2
+   diskutil unmountDisk /dev/disk3
    ```
 3. Copy and compress (use the filename for your hardware):
    ```bash
    # OrangePi Zero 2W
-   sudo dd if=/dev/rdisk2 bs=4m | gzip > navigator-OrangePiZero2W-$(date +%Y-%m-%d).img.gz
+   sudo dd if=/dev/rdisk3 bs=4m | gzip > navigator-OrangePiZero2W-$(date +%Y-%m-%d).img.gz
    # Raspberry Pi 4 Model B
-   sudo dd if=/dev/rdisk2 bs=4m | gzip > navigator-RaspberryPi4ModelB-$(date +%Y-%m-%d).img.gz
+   sudo dd if=/dev/rdisk3 bs=4m | gzip > navigator-RaspberryPi4ModelB-$(date +%Y-%m-%d).img.gz
    ```
 
 ### Restore: compressed file → SD card
 
 1. Unmount the card:
    ```bash
-   diskutil unmountDisk /dev/disk2
+   diskutil unmountDisk /dev/disk3
    ```
 2. Decompress and write:
    ```bash
    # OrangePi Zero 2W
-   gunzip -c navigator-OrangePiZero2W-YYYY-MM-DD.img.gz | sudo dd of=/dev/rdisk2 bs=4m
+   gunzip -c navigator-OrangePiZero2W-YYYY-MM-DD.img.gz | sudo dd of=/dev/rdisk3 bs=4m
    # Raspberry Pi 4 Model B
-   gunzip -c navigator-RaspberryPi4ModelB-YYYY-MM-DD.img.gz | sudo dd of=/dev/rdisk2 bs=4m
+   gunzip -c navigator-RaspberryPi4ModelB-YYYY-MM-DD.img.gz | sudo dd of=/dev/rdisk3 bs=4m
    ```
 
 ---
