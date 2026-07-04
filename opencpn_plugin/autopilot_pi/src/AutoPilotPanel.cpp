@@ -868,8 +868,9 @@ void AutoPilotPanel::SetNavigateTarget(bool available, double lat, double lon)
     m_btn_send_wp->Enable(m_link->IsConnected() && available);
 
     if (!available) {
-        // Active leg cleared — kill the heartbeat stream
+        // Active leg cleared — kill the heartbeat stream and reflect in UI
         m_heartbeat_timer.Stop();
+        m_chk_follow->SetValue(false);
         if (m_link->IsConnected())
             m_link->SendStopFollow();
     } else if (m_chk_follow->IsChecked() && m_link->IsConnected()) {
@@ -902,6 +903,13 @@ void AutoPilotPanel::OnHeartbeat(wxTimerEvent&)
 {
     if (!m_navigate_available || !m_link->IsConnected()) {
         m_heartbeat_timer.Stop();
+        return;
+    }
+    // OpenCPN does not call SetActiveLegInfo when a route is simply deactivated
+    // from the route manager — it only fires on leg transitions.  Poll here so
+    // the follow state clears within one heartbeat interval of deactivation.
+    if (GetActiveWaypointGUID().IsEmpty()) {
+        SetNavigateTarget(false);
         return;
     }
     m_link->SendWaypoint(m_navigate_lat, m_navigate_lon);

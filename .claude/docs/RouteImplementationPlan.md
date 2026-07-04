@@ -305,12 +305,16 @@ The supported call to activate an existing route from a plugin is
 `HostApi121` is a subclass of `HostApi`; access it via:
 
 ```cpp
-auto api = dynamic_cast<HostApi121*>(GetHostApi().get());
+auto host = GetHostApi();                            // owns HostApi for this scope
+auto* api = dynamic_cast<HostApi121*>(host.get());   // valid as long as `host` lives
 if (api) api->ActivateRoutePI(found_guid, true);
 ```
 
-`GetHostApi()` returns `unique_ptr<HostApi>` so use `dynamic_cast<HostApi121*>`,
-**not** `dynamic_pointer_cast` (which is for `shared_ptr` and does not compile).
+`GetHostApi()` returns an **owning** `unique_ptr<HostApi>` by value — keep it
+alive in a named local (`host`). Calling `.get()` on the temporary and assigning
+only the raw pointer gives a dangling pointer at the very next statement.
+Use `dynamic_cast<HostApi121*>`, **not** `dynamic_pointer_cast` (which is for
+`shared_ptr` and does not compile).
 `api->IsRouteActive(guid)` is also available to guard against re-activation.
 Plugin-messaging (`OCPN_RTE_ACTIVATE`) and comm-bridge approaches are not needed.
 

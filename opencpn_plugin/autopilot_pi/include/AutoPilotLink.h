@@ -57,9 +57,11 @@ public:
     //
     // §3.3 route-activation spike result (confirmed in ocpn_plugin.h):
     //   HostApi121::ActivateRoutePI(wxString guid, bool activate) is the supported
-    //   call.  GetHostApi() returns unique_ptr<HostApi>, so use dynamic_cast (NOT
-    //   dynamic_pointer_cast which is for shared_ptr):
-    //     auto api = dynamic_cast<HostApi121*>(GetHostApi().get());
+    //   call.  GetHostApi() returns an owning unique_ptr<HostApi> by value, so
+    //   keep it alive in a named local — the temporary is destroyed at the
+    //   semicolon if you call .get() inline, leaving a dangling pointer:
+    //     auto host = GetHostApi();                           // owns HostApi for this scope
+    //     auto* api = dynamic_cast<HostApi121*>(host.get()); // valid as long as host lives
     //     if (api) api->ActivateRoutePI(guid, true);
     //   Also available: api->IsRouteActive(guid) to guard against re-activation.
     //   De-dup logic (step 5) calls this from FlushInboundRoute() after matching

@@ -437,7 +437,11 @@ void AutoPilotLink::FlushInboundRoute() {
     // -----------------------------------------------------------------------
     // Activate existing route, or create a new one and then activate it.
     // -----------------------------------------------------------------------
-    auto api = dynamic_cast<HostApi121*>(GetHostApi().get());
+    // Keep `host` alive through both branches — GetHostApi() returns an owning
+    // unique_ptr, so calling .get() on a temporary yields a dangling pointer at
+    // the very next statement.
+    auto host = GetHostApi();
+    auto* api = dynamic_cast<HostApi121*>(host.get());
 
     if (!found_guid.IsEmpty()) {
         // Route already in OpenCPN — just activate it (idempotent guard).
