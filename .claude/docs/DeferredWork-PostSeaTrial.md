@@ -17,13 +17,28 @@ Companion docs: [`RouteImplementationPlan.md`](RouteImplementationPlan.md) §2.6
 
 ## Item A — Option 3 cross-track (XTE) steering
 
-**Machine:** Mac (controller firmware). **Files:** `Arduino/controller/pid.ino`,
-`controller.ino` (`control_task`), possibly `navsource.ino` /
-`AutoPilot.{h,cpp}` to carry leg-course + XTE. Tuning via `pid/`.
+**STATUS: IMPLEMENTED BUT DISABLED-BY-DEFAULT, 2026-07-04.** Landed early
+(ahead of the sea-trial gate) as a compile-time-only feature: `#define
+XTE_STEERING_ENABLED 0` in `Arduino/controller/controller.ino` gates the whole
+thing out (new file `crosstrack.ino` compiles to nothing, the XTE/BOD parsing
+in `garmin.ino` compiles to nothing, the blend hook in `control_task` compiles
+to nothing) — a disabled build is byte-for-byte the same size as before this
+change. No runtime toggle; flip the `#define` to `1`, rebuild, reflash to turn
+it on. **Do not flip it on before the sea-trial gate below is satisfied** —
+landing the code early doesn't change the reasoning for holding off on
+enabling it.
 
-**Why deferred:** it's a drop-in upgrade of the desired-heading term and should
-only be attempted once plain RMB-follow (bearing-to-mark) is proven solid in real
-conditions — you want a known-good baseline to compare against.
+**Machine:** Mac (controller firmware). **Files:** `Arduino/controller/crosstrack.ino`
+(new — state + blend math), `garmin.ino` (XTE/BOD parsing, gated), `controller.ino`
+(the feature flag + `control_task` hook, gated). Tuning constants
+(`XTE_KXT_DEG_PER_NM`, `XTE_MAX_CORRECTION_DEG`, `XTE_BLEND_RADIUS_NM`) live at
+the top of `crosstrack.ino` as placeholders — tune via the `pid/` workflow
+before ever enabling on the water.
+
+**Why still deferred (enabling, not writing):** it's a drop-in upgrade of the
+desired-heading term and should only be *turned on* once plain RMB-follow
+(bearing-to-mark) is proven solid in real conditions — you want a known-good
+baseline to compare against.
 
 **What it is.** Today in mode 2 the PID setpoint is `bearing_to_waypoint` (aim
 straight at the mark; current drifts push you off the rhumb line). Option 3 steers
@@ -52,13 +67,50 @@ sailing.
 - Interacts with the GPS-loss compass-hold fallback in `setFix()` — keep that
   path intact.
 
-**Test.** Bench with the emulator: inject an offset start so XTE ≠ 0, confirm the
-boat converges to the leg line, not just points at the mark; confirm leg-advance
-re-bases `leg_course`; confirm near-mark blend; confirm fallback when XTE/BOD drop.
+**Test.** Bench with the emulator or telnet `g` inject (both route through the
+same `garmin_dispatch_line` the parsing hooks into, with the flag flipped on
+for the test build): inject an offset start so XTE ≠ 0, confirm the boat
+converges to the leg line, not just points at the mark; confirm near-mark
+blend; confirm fallback when XTE/BOD drop or go stale (`XTE_STALE_MS`, matches
+`GARMIN_NAV_TIMEOUT_MS`); confirm OpenCPN-sourced nav (`nav_source == 2`) is
+never affected, only live GARMIN mode-2 nav is. Note: `leg_course` is taken
+directly from the latest BOD each cycle rather than explicitly re-based on an
+RMB dest-ID change — BOD is constant for a given leg, so this is equivalent in
+practice, but worth confirming on the bench with a real multi-leg route.
 
 ---
 
 ## Item B — Arrival / end-of-route behavior
+
+**STATUS: DECIDED AND IMPLEMENTED 2026-07-03** (ahead of the sea-trial gate
+below — the operator chose to pull this one forward). See
+`Arduino/controller/navsource.ino`. Kept here for history; the "never circle"
+reasoning below was the original analysis and was explicitly overridden.
+
+**Decision:** at end-of-route (any source going non-live, whether from genuine
+final-waypoint arrival or the source just going quiet), the controller now
+**keeps steering at the last commanded waypoint** — mode and waypoint are left
+untouched, only the announced `nav_source` telemetry drops to `NONE`. In
+practice this means the boat circles the last mark rather than holding a
+heading. This applies uniformly to **both** Garmin and OpenCPN sources — no
+attempt is made to distinguish "arrived at the final leg" from "source went
+silent for another reason" (e.g. operator-cancelled navigation on the Garmin
+also results in circling, not compass-hold). No new telemetry/alert flag was
+added — the circling itself is the operator-visible signal.
+
+**Why this reverses the original plan below:** the original concern (orbiting a
+fixed point is a hazard — mark, mooring, ground tackle, traffic, shoaling) was
+judged not to outweigh the benefit of the boat waiting at the last waypoint
+instead of sailing off indefinitely on whatever heading it happened to hold at
+arrival. Revisit if sea trials show the near-mark steering is too aggressive
+(see rough edge below).
+
+**Known rough edge, not fixed:** bearing-to-mark steering gets noisy as range →
+0 (small position jitter swings bearing wildly) — the same oscillation this doc
+originally warned about for the OpenCPN keep-active case. A fix (min-range
+floor, or Item A's cross-track/XTE steering) is a separate follow-on.
+
+**Original analysis (superseded, kept for context):**
 
 **Machine:** Both. **Controller (Mac):** make arrival an explicit event +
 telemetry flag (`navsource.ino`, `AutoPilot.{h,cpp}`, `publish.ino`).

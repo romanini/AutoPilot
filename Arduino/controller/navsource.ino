@@ -5,9 +5,13 @@
 // navsource_tick() picks one and aims the controller at it:
 //   GARMIN if live, else OPENCPN if live, else NONE.
 //   selected != NONE -> setWaypoint(selected.dest) + setMode(2).
-//   selected == NONE -> if we were steering a source, drop to setMode(1)
-//                       (compass-hold on current heading: the implicit
-//                       end-of-route fallback).
+//   selected == NONE -> mode and the last commanded waypoint are left alone.
+//                       We only stop announcing a live source (nav_source ->
+//                       NONE). The controller keeps steering at the last
+//                       waypoint it was told about, whether that's because the
+//                       route ended or the source just went quiet -- end-of-
+//                       route behavior is "circle the last mark" (decided
+//                       2026-07-03), not compass-hold.
 // Garmin wins when both are live; a non-selected source can never redirect the
 // active steering. CORE RULE: this file NEVER calls setNavigationEnabled() — the
 // operator always presses Enable. (The old "Follow-Garmin armed" auto-engage path
@@ -150,10 +154,16 @@ void navsource_tick() {
 
   // A lone Set WP is surfaced once, but only while nothing is actively steering
   // (so it can never redirect a live source). Consume the flag under the lock.
-  if (selected == NAV_NONE && opencpn.show_pending) {
-    do_show = true;
-    show_lat = opencpn.dest_lat;
-    show_lon = opencpn.dest_lon;
+  if (opencpn.show_pending) {
+    if (selected == NAV_NONE) {
+      do_show = true;
+      show_lat = opencpn.dest_lat;
+      show_lon = opencpn.dest_lon;
+    }
+    // Consumed either way. If a source is live right now the pending
+    // destination must be dropped, not deferred: were it left set, it would
+    // fire whenever that source later went quiet - possibly hours on - and
+    // silently swing the boat from the last commanded waypoint to a stale one.
     opencpn.show_pending = false;
   }
   portEXIT_CRITICAL(&navsource_mux);
@@ -179,16 +189,15 @@ void navsource_tick() {
       autoPilot.setNavSource(applied_source);  // publish who's steering (APDAT)
     }
   } else {
-    // No live source. If WE were steering a source, this is the implicit
-    // end-of-route fallback: drop to compass-hold on the current heading. Gated
-    // on applied_source so we never disturb an operator's manual Mode 2.
+    // No live source. End-of-route / source-silence policy: keep steering
+    // (circling) the last commanded waypoint rather than falling back to
+    // compass-hold. Mode and the waypoint are left exactly as last applied --
+    // only the announced source changes, so telemetry honestly shows nobody
+    // is currently feeding a destination.
     if (applied_source != NAV_NONE) {
-      if (autoPilot.getMode() == 2) autoPilot.setMode(1);
-      DEBUG_PRINTLN("[navsource] selected -> NONE (compass-hold fallback)");
+      DEBUG_PRINTLN("[navsource] selected -> NONE (holding last waypoint, mode unchanged)");
       applied_source = NAV_NONE;
       autoPilot.setNavSource(NAV_NONE);  // publish who's steering (APDAT)
-      applied_lat = NAN;
-      applied_lon = NAN;
     }
     // Surface a lone Set WP destination (no mode change).
     if (do_show) {

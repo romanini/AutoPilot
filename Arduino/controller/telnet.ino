@@ -303,6 +303,13 @@ void onTelnetConnectionAttempt(String ip) {
 
 void onTelnetInput(String str) {
   int len = str.length() + 1;
+  // Clamp to the buffer: toCharArray with an oversize len would overflow
+  // telnet_buffer and smash adjacent globals. No legitimate command comes
+  // close (a full NMEA line for 'g' is <= 82 chars + the command byte).
+  if (len > BUF_SIZE) {
+    telnet_server.println("-1 Line too long");
+    return;
+  }
   str.toCharArray(telnet_buffer, len);
   telnet_count = BUF_SIZE - len;
   process_telnet(telnet_server, telnet_buffer);

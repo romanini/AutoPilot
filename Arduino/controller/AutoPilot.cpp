@@ -494,7 +494,9 @@ void AutoPilot::setSteerAngle(float steer_angle) {
 void AutoPilot::printAutoPilot() {
   this->lock();
   serial->print("Date&Time: ");
-  char dateTimeString[13];
+  // Worst case "12/31/99 23:59" = 14 chars + NUL; 13 was an overflow waiting
+  // for this function to be re-enabled. Same sizing as telnet.ino's copy.
+  char dateTimeString[16];
   time_t currentTime = this->dateTime;
   sprintf(dateTimeString, "%d/%d/%02d %d:%02d", month(currentTime), day(currentTime), year(currentTime) % 100, hour(currentTime), minute(currentTime));
   serial->print(dateTimeString);

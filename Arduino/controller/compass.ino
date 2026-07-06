@@ -11,8 +11,15 @@ euler_t ypr;
 Adafruit_BNO08x bno08x(BNO08X_RESET);
 sh2_SensorValue_t sensorValue;
 
+// Rotation-vector report interval, microseconds. Must match how fast the
+// consumer drains events: check_compass() runs on control_task's 10 ms loop
+// and getSensorEvent() hands back ONE event per call, so asking the sensor
+// for anything faster (it was 2000 us = 500 Hz) just backs events up in the
+// sensor queue and the heading the PID steers by lags behind the boat.
+#define ROTATION_VECTOR_INTERVAL_US 10000  // 100 Hz = the control loop rate
+
 void setReports(void) {
-  if (!bno08x.enableReport(SH2_ROTATION_VECTOR, 2000)) {
+  if (!bno08x.enableReport(SH2_ROTATION_VECTOR, ROTATION_VECTOR_INTERVAL_US)) {
     DEBUG_PRINTLN("Could not enable Gyro Integrated Rotation Vevtor");
   }
   if (!bno08x.enableReport(SH2_STABILITY_CLASSIFIER)) {

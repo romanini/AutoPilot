@@ -103,9 +103,19 @@ OpenCPN displays it.
 over to the survivor. The design degrades gracefully — as long as one source is OK
 we can navigate.
 
-> 🔲 **TODO — end-of-route / arrival behavior (decision deferred 2026-06-29).**
-> The plan does not yet define what happens at the **final waypoint** when the
-> operator does nothing and nav is still enabled. Current *implicit* behavior:
+> ✅ **DECIDED AND IMPLEMENTED 2026-07-03.** End-of-route now means "keep
+> steering (circling) the last commanded waypoint," for both GARMIN and OPENCPN
+> sources, with no distinction between genuine final-waypoint arrival and the
+> source simply going quiet, and no new telemetry/alert flag. This reverses the
+> "never circle, revert to heading-hold + alert" direction sketched below — see
+> `.claude/docs/DeferredWork-PostSeaTrial.md` Item B for the decision record and
+> the rough edge (near-mark steering noise) still to watch on the water. The
+> mechanism is entirely in `navsource.ino`'s selector: when no source is live it
+> no longer calls `setMode(1)`, it just stops announcing a source.
+>
+> Original TODO (superseded, kept for context): the plan did not define what
+> happens at the **final waypoint** when the operator does nothing and nav is
+> still enabled. Current *implicit* behavior before this change:
 > - **Garmin:** final-WP arrival → `RMB` status `V` → GARMIN source clears →
 >   selector NONE → `setMode(1)` holds the **current heading** (compass-hold), nav
 >   stays **enabled** → boat sails straight on present heading indefinitely.
@@ -114,14 +124,6 @@ we can navigate.
 >   final WP → heartbeat continues → controller keeps Mode 2 on a waypoint now
 >   **behind** the boat → it turns back and **circles/oscillates** around the mark
 >   (bad; driven by an OpenCPN setting, not our code).
->
-> Gaps to close when we circle back: (a) make **arrival** an explicit event rather
-> than a side effect of the selector going NONE; (b) handle the OpenCPN
-> keep-active case so we don't circle; (c) decide the arrival action — likely
-> **revert to heading-hold on current heading + raise an arrival alert** (marine
-> convention; never silently circle, never drop steering entirely); (d) decide how
-> arrival is signalled (telemetry flag → panel/TFT, optional buzzer). Options were
-> sketched but not chosen.
 
 ### The Garmin does not auto-navigate on route upload
 

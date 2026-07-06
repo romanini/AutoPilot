@@ -52,6 +52,13 @@ void publish_APRX(const char* nmea);
 // Defined in navsource.ino -- feed a parsed RMB into the GARMIN nav source (step 4).
 void navsource_garmin_rmb(char status, double dest_lat, double dest_lon, bool have_pos, char arrival);
 
+#if XTE_STEERING_ENABLED
+// Defined in crosstrack.ino -- feed parsed XTE/BOD into the cross-track blend
+// (Item A). Only fed from the live channel, same gating as RMB.
+void crosstrack_update_xte(double xte_nm, char steer_dir);
+void crosstrack_update_bod(double leg_course_true);
+#endif
+
 void setup_garmin() {
 
   //Serial1 on 9,600 baud noote that the pins are revered because we want the Garmin TX to connect to an RX pin
@@ -150,6 +157,26 @@ static void garmin_parse_rmb(const char* line) {
   navsource_garmin_rmb(status, lat, lon, have_pos, arrival);
 }
 
+#if XTE_STEERING_ENABLED
+// XTE fields: 1=LORAN-C blink warning, 2=LORAN-C cycle lock warning,
+// 3=cross-track error magnitude, 4=direction to steer L/R, 5=units (N=nm).
+static void garmin_parse_xte(const char* line) {
+  char mag[16], dir[4];
+  if (nmea_field(line, 3, mag, sizeof(mag)) && mag[0] &&
+      nmea_field(line, 4, dir, sizeof(dir)) && dir[0]) {
+    crosstrack_update_xte(atof(mag), dir[0]);
+  }
+}
+
+// BOD fields: 1=bearing origin->destination, true.
+static void garmin_parse_bod(const char* line) {
+  char brg[16];
+  if (nmea_field(line, 1, brg, sizeof(brg)) && brg[0]) {
+    crosstrack_update_bod(atof(brg));
+  }
+}
+#endif
+
 // Act on one complete line from a Garmin port. `relay` is true only for the live
 // channel (COM1/port A): a valid, in-filter line is broadcast as ~APRX, and its
 // nav sentences (RMB now; XTE/BOD in step 8) feed the nav source (§2.4).
@@ -173,6 +200,13 @@ static int garmin_dispatch_line(const char* line, bool relay, const char* tag) {
     if (strncmp(line + 3, "RMB", 3) == 0) {
       garmin_parse_rmb(line);
     }
+#if XTE_STEERING_ENABLED
+    else if (strncmp(line + 3, "XTE", 3) == 0) {
+      garmin_parse_xte(line);
+    } else if (strncmp(line + 3, "BOD", 3) == 0) {
+      garmin_parse_bod(line);
+    }
+#endif
   }
   return 0;
 }

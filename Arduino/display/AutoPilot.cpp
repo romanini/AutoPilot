@@ -430,7 +430,9 @@ bool AutoPilot::isTackRequested() {
 
 void AutoPilot::printAutoPilot() {
   serial->print("Date&Time: ");
-  char dateTimeString[13];
+  // Worst case "12/31/99 23:59" = 14 chars + NUL; 13 was an overflow waiting
+  // for this function to be re-enabled. Same sizing as the controller's copy.
+  char dateTimeString[16];
   sprintf(dateTimeString, "%d/%d/%02d %d:%02d", this->month, this->day, this->year, this->hour, this->minute);
   serial->print(dateTimeString);
   if (this->fix) {
@@ -496,8 +498,15 @@ void AutoPilot::parse(char *sentence) {
   } else if (strncmp(sentence, RESET, 6) == 0) {
     parseRESET(sentence);
     setConnected(true);
+  } else if (strncmp(sentence, "APRX,", 5) == 0) {
+    // Garmin NMEA relay frames share the telemetry broadcast port. The display
+    // doesn't use them - drop silently. They arrive continuously while the
+    // Garmin navigates, so they must never reach the print path below.
   } else {
-    serial->print("unknown sentence");
+    // Guard like the DEBUG_* macros: this runs on the AsyncUDP task, and a CDC
+    // write during a physical USB detach can park the task on an internal USB
+    // lock (see the note at the top of display.ino).
+    if (*serial) serial->print("unknown sentence");
   }
 }
 
