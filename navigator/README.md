@@ -303,9 +303,13 @@ the power-save / keepalive details are in [Dual Wi-Fi networking](#dual-wi-fi-ne
 below.)
 
 ```bash
-# Connect to each network (nmcli picks the right adapter automatically)
+# Connect to each network. nmcli usually picks the right adapter automatically, but
+# SoberPilot MUST end up on wlan0 (onboard) — the USB adapter is for home/internet only.
 nmcli device wifi connect SoberPilot password <password>
-nmcli device wifi connect <home-ssid> password <password>
+nmcli device wifi connect <home-ssid> password <password> ifname <usb-adapter-ifname>
+
+# Lock SoberPilot to wlan0 so nothing can accidentally pull it onto the USB adapter later
+nmcli connection modify SoberPilot connection.interface-name wlan0
 
 # SoberPilot = high metric (600), home internet = low metric (100)
 nmcli connection modify SoberPilot ipv4.route-metric 600
@@ -314,7 +318,9 @@ nmcli connection up "<home-network-connection-name>"
 nmcli connection up SoberPilot
 ```
 
-To find the connection name nmcli assigned to the home network: `nmcli connection show`.
+Find your USB adapter's interface name with `ip link show` or `nmcli device status` (it'll be
+something like `wlx0013efc00bc4` — a MAC-address-derived name, not `wlan1`). To find the
+connection name nmcli assigned to the home network: `nmcli connection show`.
 
 **Verify the default route goes out your home network:**
 
