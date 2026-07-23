@@ -94,7 +94,7 @@ void check_gps() {
         autoPilot.setDateTime(localTime);
         autoPilot.setFixquality(gps.fixquality, gps.satellites);
         autoPilot.setSpeed(gps.speed);
-        autoPilot.setLoation(gps.latitudeDegrees, gps.longitudeDegrees, gps.angle);
+        autoPilot.setLocation(gps.latitudeDegrees, gps.longitudeDegrees, gps.angle);
       }
       // print_gps();
       // autoPilot.printAutoPilot();

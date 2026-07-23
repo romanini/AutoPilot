@@ -1,9 +1,14 @@
 #include <Wire.h>
+#include <Preferences.h>
 
 // Clamp on the integral term so it can't wind up without bound while fighting a
 // current or a mechanical stop. Tunable: this caps the integral's steering
 // authority relative to the proportional term (P = Kp * e, |e| <= 180).
 #define PID_INTEGRAL_MAX 10.0
+
+// Namespace/keys are only ever written by set_pid_gains() (called from
+// autotune.ino after a completed relay auto-tune) - nothing else touches flash.
+#define PID_PREFS_NAMESPACE "pid"
 
 float Pi;
 float e_prev;
@@ -16,7 +21,31 @@ void setup_pid() {
   Kp = 1.0;
   Ki = 0.05;
   Kd = 0.0;
+
+  // Pull in gains saved by a previous relay auto-tune, if any; otherwise keep
+  // the defaults above.
+  Preferences prefs;
+  prefs.begin(PID_PREFS_NAMESPACE, true);  // read-only
+  Kp = prefs.getFloat("kp", Kp);
+  Ki = prefs.getFloat("ki", Ki);
+  prefs.end();
+
   DEBUG_PRINTLN("PID all setup.");
+}
+
+// Apply new P/I gains immediately and persist them to flash so they survive a
+// reboot. Called by autotune.ino when a relay auto-tune completes. Kd is left
+// alone - the D term is currently disabled in pid_loop() regardless of its
+// value (see the comment above `change_angle` below), so there's nothing
+// meaningful to tune there yet.
+void set_pid_gains(float new_kp, float new_ki) {
+  Kp = new_kp;
+  Ki = new_ki;
+  Preferences prefs;
+  prefs.begin(PID_PREFS_NAMESPACE, false);  // read-write
+  prefs.putFloat("kp", Kp);
+  prefs.putFloat("ki", Ki);
+  prefs.end();
 }
 
 // Clear the integral accumulator and error history. Called when navigation is

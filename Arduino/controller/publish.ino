@@ -27,7 +27,7 @@ void publish_APDAT() {
   if (millis() - last_publish_time_mills > PUBLISH_INTERVAL) {
     last_publish_time_mills = millis();
     time_t currentTime = autoPilot.getDateTime();
-    sprintf(serialzied_data, "~APDAT,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%f,%.2f,%.2f,%.2f,%.2f,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.6f,%.6f,%d$",
+    sprintf(serialzied_data, "~APDAT,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%f,%.2f,%.2f,%.2f,%.2f,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.6f,%.6f,%d,%d$",
             year(currentTime) % 100,    // %d
             month(currentTime),         //%d
             day(currentTime),           //%d
@@ -43,7 +43,11 @@ void publish_APDAT() {
             autoPilot.getWaypointLat(),  // %f
             autoPilot.getWaypointLon(),  // %f
 
-            autoPilot.getHeadingDesired(),            //%.2f
+            // heading_desired is only meaningful in mode 1 (compass hold); in
+            // mode 2 report the live magnetic-frame setpoint (Option 3) so
+            // the displays show what's actually being steered to, not a stale
+            // value from the last time mode 1 was active.
+            (autoPilot.getMode() == 2) ? autoPilot.getHeadingCommand() : autoPilot.getHeadingDesired(),  //%.2f
 
             autoPilot.getHeading(),            //%.2f
             autoPilot.getPitch(),             // %.2f
@@ -59,7 +63,11 @@ void publish_APDAT() {
             autoPilot.getLocationLat(),  //%.6f
             autoPilot.getLocationLon(),  //%.6f
 
-            autoPilot.getNavSource()     // %d  0=NONE, 1=GARMIN, 2=OPENCPN (Phase B)
+            autoPilot.getNavSource(),     // %d  0=NONE, 1=GARMIN, 2=OPENCPN (Phase B)
+
+            // Last field, appended - old parsers (autopilot_pi, monitor.py)
+            // that don't know about it simply ignore the extra trailing value.
+            autoPilot.getAutoTuneState()  // %d  0=idle, 1=ready, 2=running (autotune.ino)
     );
 
     //DEBUG_PRINTLN(serialzied_data);

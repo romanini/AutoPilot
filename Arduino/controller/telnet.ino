@@ -217,10 +217,24 @@ void process_help(CustomClientType& client) {
   client.println("\tp \t\t\t- Print current auto pilot status.");
   client.println("\tq \t\t\t- Quit the current session.");
   client.println("\tw<lat,long> \t\t- Set the waypoint to <lat,long>.");
+  client.println("\tpat \t\t\t- Arm relay auto-tune (only while navigation is disabled).");
   client.println("\t? \t\t\t- Print this help screen.");
 }
 
 void process_telnet(CustomClientType& client, char buffer[]) {
+  // "pat" (Pilot Auto-Tune) is the one multi-char command, so it's checked
+  // ahead of the single-char switch below (buffer[0] == 'p' is otherwise the
+  // 'p' print-status command).
+  if (strcmp(buffer, "pat") == 0) {
+    if (autotune_try_arm()) {
+      client.println("Autotune: armed - ready. Start it within 30s (e.g. from a display) or it will cancel.");
+    } else {
+      client.println("Autotune: could not arm - disable navigation first, or a tune is already ready/running.");
+    }
+    process_print(client);
+    return;
+  }
+
   char command = buffer[0];
   bool show_state = false;  // echo current state after state-changing commands
   switch (command) {

@@ -61,3 +61,20 @@ void set_navigation(int nav) {
   DEBUG_PRINTLN(nav);
 #endif
 }
+
+// Relay auto-tune (autotune.ino): 1 = arm ("ready"), 2 = start running, 0 = abort.
+void send_autotune(int state) {
+#ifndef MOCK_SEND
+  sprintf(command, "t%d", state);
+  send_command(command);
+  if (state == 1) {
+    autoPilot.armAutoTune();
+  } else if (state == 2) {
+    autoPilot.startAutoTune();
+  } else {
+    autoPilot.cancelAutoTune();
+  }
+  DEBUG_PRINT("autotune ");
+  DEBUG_PRINTLN(state);
+#endif
+}

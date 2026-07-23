@@ -11,6 +11,16 @@ euler_t ypr;
 Adafruit_BNO08x bno08x(BNO08X_RESET);
 sh2_SensorValue_t sensorValue;
 
+// The BNO08x is not mounted with its forward axis exactly on the boat's
+// centerline, so a fixed offset is added to the heading to make it agree with
+// the binnacle compass. Bench calibration 2026-07-19: the previous value made
+// the display read 000 when the boat actually pointed 028 magnetic, so 28 was
+// added to the old implicit offset of -10 (the code used 350 where the plain
+// quaternion-to-compass conversion is 360 - yaw). To recalibrate: add however
+// many degrees the binnacle reads above the display (subtract if it reads
+// below), then normalize to [-180, 180] if you care about tidiness.
+#define COMPASS_MOUNT_OFFSET_DEG 18.0
+
 // Rotation-vector report interval, microseconds. Must match how fast the
 // consumer drains events: check_compass() runs on control_task's 10 ms loop
 // and getSensorEvent() hands back ONE event per call, so asking the sensor
@@ -72,7 +82,11 @@ void quaternionToEuler(float qr, float qi, float qj, float qk, euler_t* ypr) {
   ypr->pitch = asin(-2.0 * (qi * qk - qj * qr) / (sqi + sqj + sqk + sqr));
   ypr->roll = atan2(2.0 * (qj * qk + qi * qr), (-sqi - sqj + sqk + sqr));
 
-  ypr->yaw = fmod(350-(ypr->yaw * RAD_TO_DEG) , 360);
+  // 360 - yaw converts the sensor's counterclockwise-positive, magnetic-north
+  // referenced yaw into a clockwise compass heading (still magnetic - the
+  // rotation vector's yaw reference is the magnetometer, no declination here).
+  // The extra +360 keeps fmod's argument positive for any offset value.
+  ypr->yaw = fmod(360.0 - (ypr->yaw * RAD_TO_DEG) + COMPASS_MOUNT_OFFSET_DEG + 360.0, 360.0);
   ypr->pitch = fmod((ypr->pitch * RAD_TO_DEG) + 360, 360);
   ypr->roll = fmod((ypr->roll * RAD_TO_DEG) + 360, 360);
 }

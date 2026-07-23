@@ -60,6 +60,8 @@ private:
   bool destinationChanged;
   bool modeChanged;
   unsigned long tackRequested;
+  int autoTuneState;              // 0 = idle, 1 = ready (armed), 2 = running - mirrors the controller's copy
+  unsigned long autoTuneReadyAt;  // local millis() timestamp, for the display's own 30s "ready" timeout
   float battery_voltage;
   int battery_voltage_average_size;
   float input_voltage;
@@ -130,6 +132,11 @@ public:
   void setTackRequested(unsigned long time);
   void cancelTackRequested();
   bool isTackRequested();
+  int getAutoTuneState();
+  unsigned long getAutoTuneReadyAt();
+  void armAutoTune();
+  void startAutoTune();
+  void cancelAutoTune();
 };
 
 #endif

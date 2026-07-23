@@ -9,6 +9,12 @@
 #define ADJUSTMENT_AMOUNT_TACK 90.0
 #define TACK_REQUEST_TIMEOUT 30000
 
+// Hold MODE for this long while navigation is disabled to arm relay
+// auto-tune (autotune.ino); release before AUTOTUNE_READY_TIMEOUT to start it
+// with the enable/disable button, same pattern as TACK above.
+#define AUTOTUNE_ARM_HOLD_TIME 5000
+#define AUTOTUNE_READY_TIMEOUT 30000
+
 #define PORT_ADJUST_BUTTON_PIN D3
 #define STARBORD_ADJUST_BUTTON_PIN D2
 #define NAVIGATION_DISABLE_BUTTON_PIN D4
@@ -35,6 +41,7 @@ bool button_pressed_states[num_buttons];
 
 bool beep_short_triggered[num_buttons];
 bool beep_long_triggered[num_buttons];
+bool autotune_armed_triggered[num_buttons];  // has the 5s arm-hold beep already fired for this press?
 
 void setup_button() {
   for (int pin = 0; pin < num_buttons; pin++) {
@@ -43,6 +50,7 @@ void setup_button() {
     button_pressed_states[pin] = false;
     beep_short_triggered[pin] = false;
     beep_long_triggered[pin] = false;
+    autotune_armed_triggered[pin] = false;
   }
 
   pinMode(BEEP_PIN, OUTPUT);
@@ -78,6 +86,19 @@ void update_tack() {
   }
 }
 
+// Local (display-side) copy of the "ready" arm timeout - the controller runs
+// its own independent watchdog (autotune_check_ready_timeout in autotune.ino)
+// in case this packet never arrives, but we don't wait to hear back before
+// reverting the display's own optimistic state, same as every other command.
+void update_autotune_ready() {
+  unsigned long currentTime = millis();
+  unsigned long readyAt = autoPilot.getAutoTuneReadyAt();
+  if (autoPilot.getAutoTuneState() == 1 && readyAt > 0 && currentTime >= readyAt + AUTOTUNE_READY_TIMEOUT) {
+    autoPilot.cancelAutoTune();
+    DEBUG_PRINTLN("Auto-tune ready timed out, reverting");
+  }
+}
+
 void button_pressed(int pin) {
   // if we are not connected then buttons are useless
   if (autoPilot.isConnected()) {
@@ -92,8 +113,10 @@ void button_pressed(int pin) {
         }
         break;
       case MODE_BUTTON_PIN:
-        // no action if navigation is disabled
-        if (!autoPilot.isNavigationEnabled()) {
+        // Normally mode-toggle needs navigation on. The one exception: holding
+        // MODE while disabled (and idle) arms relay auto-tune, so let that
+        // press register too - but not if a tune is already armed/running.
+        if (!autoPilot.isNavigationEnabled() && autoPilot.getAutoTuneState() != 0) {
           // the button press didn't happen
           return;
         }
@@ -112,6 +135,7 @@ void button_release(int pin) {
   button_pressed_states[pin] = false;
   beep_short_triggered[pin] = false;
   beep_long_triggered[pin] = false;
+  autotune_armed_triggered[pin] = false;
 
   unsigned long press_duration = current_time - button_press_times[pin];
 
@@ -184,8 +208,17 @@ void button_release(int pin) {
         }
       }
       break;
-    case NAVIGATION_DISABLE_BUTTON_PIN:
-      if (autoPilot.isNavigationEnabled()) {
+    case NAVIGATION_DISABLE_BUTTON_PIN: {
+      int atState = autoPilot.getAutoTuneState();
+      if (atState == 2) {
+        // Auto-tuning: this button is the abort switch.
+        DEBUG_PRINTLN("Aborting auto-tune");
+        send_autotune(0);
+      } else if (atState == 1) {
+        // Ready/armed: this button fires the tune.
+        DEBUG_PRINTLN("Starting auto-tune");
+        send_autotune(2);
+      } else if (autoPilot.isNavigationEnabled()) {
         set_navigation(0);
         DEBUG_PRINTLN("Disabling Navigation");
       } else {
@@ -197,18 +230,29 @@ void button_release(int pin) {
       }
       DEBUG_PRINTLN("Navigation on/off Button Pressed");
       break;
+    }
     case MODE_BUTTON_PIN:
-      if (autoPilot.getMode() == 1) {
-        if (autoPilot.isWaypointSet()) {
-          set_mode(2);
-          DEBUG_PRINTLN("GPS Mode");
+      if (!autoPilot.isNavigationEnabled()) {
+        // Disabled: the only thing a MODE press can do here is arm auto-tune,
+        // and only if it was held the full AUTOTUNE_ARM_HOLD_TIME (the beep in
+        // check_button_press_diuration told the operator to release now).
+        if (press_duration >= AUTOTUNE_ARM_HOLD_TIME && autoPilot.getAutoTuneState() == 0) {
+          DEBUG_PRINTLN("Arming auto-tune");
+          send_autotune(1);
         }
-      } else if (autoPilot.getMode() == 2) {
-        set_mode(1);
-        DEBUG_PRINTLN("Compass Mode");
-      }
-      if (autoPilot.isTackRequested()) {
-        autoPilot.cancelTackRequested();
+      } else {
+        if (autoPilot.getMode() == 1) {
+          if (autoPilot.isWaypointSet()) {
+            set_mode(2);
+            DEBUG_PRINTLN("GPS Mode");
+          }
+        } else if (autoPilot.getMode() == 2) {
+          set_mode(1);
+          DEBUG_PRINTLN("Compass Mode");
+        }
+        if (autoPilot.isTackRequested()) {
+          autoPilot.cancelTackRequested();
+        }
       }
       DEBUG_PRINTLN("Mode Button Pressed");
       break;
@@ -256,6 +300,15 @@ void check_button_press_diuration(int pin) {
       // set_beep(BEEP_INTERVAL);
       // beep_short_triggered[pin] = true;
     }
+  } else if (button_pins[pin] == MODE_BUTTON_PIN && !autoPilot.isNavigationEnabled()) {
+    // Holding MODE for AUTOTUNE_ARM_HOLD_TIME while disabled arms relay
+    // auto-tune - beep once (same as the adjust buttons' hold-to-beep above)
+    // to tell the operator to release now, which is what fires the action.
+    if (press_duration >= AUTOTUNE_ARM_HOLD_TIME && !autotune_armed_triggered[pin]) {
+      DEBUG_PRINTLN("MODE held while disabled - release to arm auto-tune");
+      set_beep(BEEP_HOLD_INTERVAL);
+      autotune_armed_triggered[pin] = true;
+    }
   } else {
     if (press_duration >= 25 && !beep_short_triggered[pin]) {
       // DEBUG_PRINT("Button ");
@@ -271,6 +324,7 @@ void check_button_press_diuration(int pin) {
 void check_button() {
   update_beep();
   update_tack();
+  update_autotune_ready();
   for (uint8_t pin = 0; pin < num_buttons; pin++) {
     int buttonState = digitalRead(button_pins[pin]);
 

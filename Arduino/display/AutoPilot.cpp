@@ -66,6 +66,8 @@ void AutoPilot::init() {
   reset = false;
   connected = false;
   tackRequested = 0;
+  autoTuneState = 0;
+  autoTuneReadyAt = 0;
   localCommandTime = 0;
   this->unlock();
 }
@@ -428,6 +430,53 @@ bool AutoPilot::isTackRequested() {
   return value;
 }
 
+int AutoPilot::getAutoTuneState() {
+  this->lock();
+  int value = this->autoTuneState;
+  this->unlock();
+  return value;
+}
+
+unsigned long AutoPilot::getAutoTuneReadyAt() {
+  this->lock();
+  unsigned long value = this->autoTuneReadyAt;
+  this->unlock();
+  return value;
+}
+
+// Optimistic local update (mirrors setMode/setNavigationEnabled): applied
+// immediately so the screen reacts on the button press, then suppressed in
+// the parsed telemetry for LOCAL_COMMAND_SUPPRESS_MS so the next APDAT frame
+// (still reflecting the pre-command controller state) doesn't clobber it.
+void AutoPilot::armAutoTune() {
+  this->lock();
+  this->localCommandTime = millis();
+  this->autoTuneState = 1;
+  this->autoTuneReadyAt = millis();
+  this->modeChanged = true;
+  this->destinationChanged = true;
+  this->unlock();
+}
+
+void AutoPilot::startAutoTune() {
+  this->lock();
+  this->localCommandTime = millis();
+  this->autoTuneState = 2;
+  this->modeChanged = true;
+  this->destinationChanged = true;
+  this->unlock();
+}
+
+void AutoPilot::cancelAutoTune() {
+  this->lock();
+  this->localCommandTime = millis();
+  this->autoTuneState = 0;
+  this->autoTuneReadyAt = 0;
+  this->modeChanged = true;
+  this->destinationChanged = true;
+  this->unlock();
+}
+
 void AutoPilot::printAutoPilot() {
   serial->print("Date&Time: ");
   // Worst case "12/31/99 23:59" = 14 chars + NUL; 13 was an overflow waiting
@@ -759,13 +808,30 @@ void AutoPilot::parseAPDAT(char *sentence) {
     this->location_lon = 0.0;
   }
 
-  // nav_source (Phase B): last field. Tolerant of absence so a pre-Phase-B
-  // controller (no trailing field) parses cleanly as NONE.
+  // nav_source (Phase B). Tolerant of absence so a pre-Phase-B controller (no
+  // trailing field) parses cleanly as NONE.
   p = advance_field(p);  // Advance to the next field; NULL if none remain.
   if (!isEmpty(p)) {
     this->nav_source = atoi(p);
   } else {
     this->nav_source = 0;
+  }
+
+  // autoTuneState (autotune.ino): operator-controlled like mode/navigation, so
+  // it goes through the same suppression window and change-detection. Tolerant
+  // of absence so an older controller (no trailing field) parses as idle.
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
+  if (!suppressLocalFields) {
+    int currentAutoTuneState = this->autoTuneState;
+    if (!isEmpty(p)) {
+      this->autoTuneState = atoi(p);
+    } else {
+      this->autoTuneState = 0;
+    }
+    if (currentAutoTuneState != this->autoTuneState) {
+      this->destinationChanged = true;
+      this->modeChanged = true;
+    }
   }
 
   this->unlock();

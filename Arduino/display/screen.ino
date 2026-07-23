@@ -326,7 +326,22 @@ void display_destination() {
   uint16_t foregroundColor = 0xF57F;             // Default foreground color used in this canvas
 
   destination_value_canvas.fillScreen(0);  // Use 0 for background index
-  if (autoPilot.isNavigationEnabled()) {
+  int autoTuneState = autoPilot.getAutoTuneState();
+  if (autoTuneState == 1) {
+    // Ready/armed - only reachable while navigation is disabled, so this has
+    // to be drawn ahead of (not inside) the isNavigationEnabled() branch below.
+    destination_value_canvas.setTextColor(1);
+    destination_value_canvas.setFont(&FreeSansBold12pt7b);
+    destination_value_canvas.setCursor(0, 18);
+    destination_value_canvas.print("Ready to");
+    destination_value_canvas.setCursor(0, 45);
+    destination_value_canvas.print("auto-tune");
+  } else if (autoTuneState == 2) {
+    destination_value_canvas.setTextColor(1);
+    destination_value_canvas.setFont(&FreeSansBold12pt7b);
+    destination_value_canvas.setCursor(0, 30);
+    destination_value_canvas.print("Auto-tuning");
+  } else if (autoPilot.isNavigationEnabled()) {
     if (autoPilot.getMode() == 2) {
       destination_value_canvas.setTextColor(1);  // Use 1 for foreground index
       destination_value_canvas.setFont(&FreeSansBold12pt7b);

@@ -1,16 +1,25 @@
 # Navigator
 
-The navigation computer runs Ubuntu 22.04 with OpenCPN (Flatpak) and the `autopilot_pi` plugin.
-Two hardware options have been evaluated:
+The navigation computer runs Ubuntu with OpenCPN (Flatpak) and the `autopilot_pi` plugin.
+Version depends on hardware: 22.04 on the OrangePi and RPi 4, 24.04 on the RPi 5 (22.04
+predates Pi 5 hardware support). Hardware options evaluated so far:
 
 | Hardware | Power @ 12 V | OpenGL | Notes |
 |----------|-------------|--------|-------|
 | OrangePi Zero 2W | ~2.4-3.3 W (0.2-0.28 A) | Off — GPU driver unreliable | Development unit |
 | Raspberry Pi 4 Model B (8 GB) | ~3.0-6.0W (0.25-0.5 A) | On — VideoCore VI (vc4-kms-v3d) works | Better chart rendering |
+| Raspberry Pi 5 (8 GB) | TBD — being measured | On — VideoCore VII, faster than RPi 4 | SD card + NVMe (see below) |
 
-OpenGL makes chart panning and zooming significantly faster. The RPi 4 supports it; the
-OrangePi does not. Measure actual power draw with a meter before choosing which to install
+OpenGL makes chart panning and zooming significantly faster. The RPi 4 and RPi 5 support it;
+the OrangePi does not. Measure actual power draw with a meter before choosing which to install
 on the boat.
+
+**RPi 5 boot media:** the Pi 5 uses both an SD card and an NVMe drive (attached via a PCIe
+M.2 HAT). NVMe is the primary boot device — faster and no SD wear-out concerns for an
+appliance that's powered on/off with the boat. The SD card stays installed as a fallback: if
+the NVMe drive ever fails or is removed, the bootloader falls back to booting it. Both cards
+get a full, independent Ubuntu install — see [Part 1](#part-1--flash-the-boot-media-on-your-mac)
+and [Enable NVMe boot](#raspberry-pi-5--enable-nvme-boot) below.
 
 ---
 
@@ -38,12 +47,17 @@ compression. Hit **Ctrl+T** at any time to print progress.
    ```bash
    diskutil unmountDisk /dev/disk3
    ```
-3. Copy and compress (use the filename for your hardware):
+3. Copy and compress (use the filename for your hardware/media):
    ```bash
    # OrangePi Zero 2W
    sudo dd if=/dev/rdisk3 bs=4m | gzip > navigator-OrangePiZero2W-$(date +%Y-%m-%d).img.gz
    # Raspberry Pi 4 Model B
    sudo dd if=/dev/rdisk3 bs=4m | gzip > navigator-RaspberryPi4ModelB-$(date +%Y-%m-%d).img.gz
+   # Raspberry Pi 5 — SD card (fallback boot)
+   sudo dd if=/dev/rdisk3 bs=4m | gzip > navigator-RaspberryPi5-SD-$(date +%Y-%m-%d).img.gz
+   # Raspberry Pi 5 — NVMe (primary boot; remove from the M.2 HAT and attach via a
+   # USB-to-M.2 NVMe enclosure — the device node will differ, check `diskutil list`)
+   sudo dd if=/dev/rdisk4 bs=4m | gzip > navigator-RaspberryPi5-NVMe-$(date +%Y-%m-%d).img.gz
    ```
 
 ### Restore: compressed file → SD card
@@ -58,13 +72,17 @@ compression. Hit **Ctrl+T** at any time to print progress.
    gunzip -c navigator-OrangePiZero2W-YYYY-MM-DD.img.gz | sudo dd of=/dev/rdisk3 bs=4m
    # Raspberry Pi 4 Model B
    gunzip -c navigator-RaspberryPi4ModelB-YYYY-MM-DD.img.gz | sudo dd of=/dev/rdisk3 bs=4m
+   # Raspberry Pi 5 — SD card
+   gunzip -c navigator-RaspberryPi5-SD-YYYY-MM-DD.img.gz | sudo dd of=/dev/rdisk3 bs=4m
+   # Raspberry Pi 5 — NVMe (via USB-to-M.2 enclosure; check `diskutil list` for the device node)
+   gunzip -c navigator-RaspberryPi5-NVMe-YYYY-MM-DD.img.gz | sudo dd of=/dev/rdisk4 bs=4m
    ```
 
 ---
 
 ## From-scratch setup
 
-### Part 1 — Flash the SD card (on your Mac)
+### Part 1 — Flash the boot media (on your Mac)
 
 #### OrangePi Zero 2W
 
@@ -94,6 +112,26 @@ compression. Hit **Ctrl+T** at any time to print progress.
 
 The root filesystem expands to fill the card automatically on first boot — no manual step needed.
 
+#### Raspberry Pi 5 (SD card + NVMe)
+
+Flash **both** cards now, before the Pi 5 ever powers on — it's easiest to do them
+back-to-back on the Mac while Imager is already open.
+
+1. **SD card first** (this becomes the fallback boot media): same steps as RPi 4 above, except
+   choose **Ubuntu Server 24.04 LTS (64-bit)** and use hostname `navigator`. Set the same
+   username/password/SSH settings you'll use on the NVMe drive.
+2. **NVMe drive** (this becomes the primary boot media): connect the NVMe drive to your Mac
+   via a USB-to-M.2 NVMe enclosure/adapter (it isn't readable directly — the Pi 5's M.2 HAT
+   is the only thing that talks to it over PCIe). In Imager, repeat the same OS choice
+   (**Ubuntu Server 24.04 LTS (64-bit)**) and the same ⚙ settings (hostname `navigator`,
+   same username/password, SSH enabled) → **Choose Storage** → select the NVMe device (not
+   the SD card!) → **Write**.
+3. Do **not** assemble the Pi 5 yet. NVMe boot has to be enabled from the EEPROM bootloader
+   first, and that has to happen while running from the SD card — see
+   [Enable NVMe boot](#raspberry-pi-5--enable-nvme-boot) after Part 2 below. Insert only the
+   SD card for now; leave the NVMe drive out of the M.2 HAT until that step tells you to
+   install it.
+
 ---
 
 ### Part 2 — First boot
@@ -104,6 +142,7 @@ Insert the SD card, connect monitor + keyboard + mouse, power on.
 |----------|--------------|
 | OrangePi | `orangepi` / `orangepi` |
 | RPi 4 | `navigator` / your choice |
+| RPi 5 | `navigator` / your choice (boots from the SD card at this point) |
 
 ```bash
 # OrangePi only — RPi hostname was already set in Imager
@@ -113,6 +152,57 @@ sudo hostnamectl set-hostname navigator
 sudo apt update && sudo apt full-upgrade -y
 sudo reboot
 ```
+
+**RPi 5 only:** stop here and do
+[Enable NVMe boot](#raspberry-pi-5--enable-nvme-boot) before continuing to Part 3 — it needs
+to run while still booted from the SD card.
+
+---
+
+### Raspberry Pi 5 — enable NVMe boot
+
+> Do this once, right after the SD card's first boot/update/reboot above, and before
+> installing the NVMe drive in the M.2 HAT.
+
+1. Update the EEPROM bootloader to the latest version (older units shipped without NVMe boot
+   support):
+   ```bash
+   sudo apt update && sudo apt install -y rpi-eeprom
+   sudo rpi-eeprom-update -a
+   sudo reboot
+   ```
+2. After reboot, set the boot order to try NVMe first and fall back to the SD card:
+   ```bash
+   sudo -E rpi-eeprom-config --edit
+   ```
+   Set (or add) this line, then save and exit the editor:
+   ```
+   BOOT_ORDER=0xf16
+   ```
+   (Reading right-to-left: `6`=NVMe tried first, `1`=SD card fallback, `f`=retry the sequence
+   forever rather than giving up.) Confirm with `sudo rpi-eeprom-config` — the new config is
+   written to the EEPROM and takes effect after the next power cycle.
+3. Shut down, install the NVMe drive in the M.2 HAT, and power back on:
+   ```bash
+   sudo shutdown -h now
+   ```
+4. If the NVMe drive isn't detected reliably (PCIe signal integrity issues are common with
+   longer ribbon cables), force Gen 3 speed by adding this to `/boot/firmware/config.txt` and
+   rebooting:
+   ```
+   dtparam=pciex1_gen=3
+   ```
+5. Verify you're actually running from NVMe:
+   ```bash
+   lsblk           # rootfs should be on nvme0n1, not mmcblk0
+   df -h /
+   ```
+   If it still booted from the SD card, double check `BOOT_ORDER` with
+   `sudo rpi-eeprom-config` and that the NVMe drive was flashed correctly in Part 1.
+
+From here on, log in and do all further setup (networking, `apt full-upgrade`, Claude Code
+bootstrap) on the **NVMe-booted** system — the SD card just sits in the slot as a cold
+fallback and doesn't need further updates until you actually fail over to it.
 
 ---
 
@@ -200,8 +290,8 @@ claude
 Tell Claude Code:
 
 > "Set up this machine as the navigator computer. Follow `navigator/README.md` exactly.
-> My hardware is [OrangePi Zero 2W / Raspberry Pi 4 Model B]. Networking is already configured —
-> do not touch the Wi-Fi adapters, connections, or routes."
+> My hardware is [OrangePi Zero 2W / Raspberry Pi 4 Model B / Raspberry Pi 5]. Networking is
+> already configured — do not touch the Wi-Fi adapters, connections, or routes."
 
 Claude Code will work through the remaining System Configuration sections below — udev
 rules, systemd service, OpenCPN, and the autopilot_pi plugin. **Networking is already
@@ -322,7 +412,7 @@ sudo udevadm control --reload-rules && sudo udevadm trigger
 
 ---
 
-### Desktop environment (RPi 4 only)
+### Desktop environment (RPi 4 and RPi 5 only)
 
 RPi Ubuntu Server ships without a GUI. OpenCPN needs a windowed desktop, so install
 XFCE (lightweight, low overhead for a nav computer):
@@ -498,7 +588,7 @@ rm ~/.var/app/org.opencpn.OpenCPN/config/opencpn/load_stamps/libautopilot_pi
 
 These steps require the graphical desktop and cannot be automated by Claude Code.
 
-### OpenCPN — enable OpenGL (RPi 4 only)
+### OpenCPN — enable OpenGL (RPi 4 and RPi 5 only)
 
 Launch OpenCPN → Toolbox → Settings → Display → tick **Enable OpenGL rendering** →
 restart OpenCPN. This makes chart panning and zooming much faster.

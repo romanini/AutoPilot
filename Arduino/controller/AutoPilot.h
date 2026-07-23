@@ -36,6 +36,16 @@ private:
   float bearing_correction;  // correction needed to return to proper bearing
   int nav_source;            // who the selector is steering by: 0=NONE, 1=GARMIN, 2=OPENCPN (navsource.ino)
 
+  // Option 3 waypoint-nav restructure: mode 2 steers the 100 Hz PID by compass
+  // heading, same as mode 1, but with a setpoint that gpstracktrim.ino slowly
+  // trims (~every 10s) to keep the GPS track pointed at the target course.
+  float heading_command;        // magnetic-frame steering setpoint the PID uses in mode 2
+  bool cog_usable;               // hysteresis latch: is COG currently trusted for damping? (speed-gated)
+  bool cog_damped_initialized;   // has the vector-averaged COG ever been seeded?
+  double cog_sin_avg;            // vector average of COG samples (sin/cos avoids the 0/360 wrap)
+  double cog_cos_avg;
+  float cog_damped;              // cached damped COG, degrees - valid only when cog_usable && cog_damped_initialized
+
   float heading;                       // direction of the bow is pointing at the moment (changes frequently)
   float pitch;
   float roll;
@@ -56,6 +66,9 @@ private:
   bool modeChanged;         // flag indicating that the mode has changed
   float steer_angle;
 
+  int autoTuneState;              // 0 = idle, 1 = ready (armed), 2 = running - see autotune.ino
+  unsigned long autoTuneReadyAt;  // millis() timestamp of the last transition into "ready", for the controller-side arm timeout
+
   SerialType* serial;
 
   float toRadians(float degrees);
@@ -64,6 +77,7 @@ private:
   float getCourseCorrection(float bearing, float course);
   float getDistance(float lat1, float lon1, float lat2, float lon2);
   float getBearing(float lat1, float lon1, float lat2, float lon2);
+  void seedHeadingCommand();  // heading_command = heading + angleDiff(bearing, damped COG), or just heading if damped COG isn't trusted yet
   void lock();
   void unlock();
 public:
@@ -110,13 +124,22 @@ public:
   void setWaypoint(float lat, float lon);
   float getLocationLat();
   float getLocationLon();
-  void setLoation(float lat, float lon, float course);
+  void setLocation(float lat, float lon, float course);
   float getCourse();
   float getSpeed();
   void setSpeed(float speed);
   float getDistance();
   float getSteerAngle();
   void setSteerAngle(float steer_angle);
+  bool isDampedCourseValid();
+  float getDampedCourse();
+  float getHeadingCommand();
+  void applyHeadingCommandTrim(float target_course, float gain, float clamp_deg);
+  int getAutoTuneState();
+  unsigned long getAutoTuneReadyAt();
+  void armAutoTune();
+  void startAutoTune();
+  void cancelAutoTune();
   void printAutoPilot();
 };
 

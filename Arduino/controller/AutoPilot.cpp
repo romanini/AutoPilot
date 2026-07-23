@@ -17,6 +17,17 @@
 // set in setup_gps() (0.2 m/s ~= 0.39 kn) so it acts as a true backstop.
 #define GPS_SPEED_DEADBAND_KNOTS 0.8
 
+// Hysteresis latch for trusting raw COG enough to fold it into the damped
+// average (Doppler COG quality scales with speed; PMTK386 freezes course
+// entirely near 0). Same values/reasoning as the old COG_FALLBACK_ENABLED
+// latch in controller.ino, which this supersedes.
+#define COG_TRUST_ENTER_KNOTS 1.0f
+#define COG_TRUST_EXIT_KNOTS  0.8f
+// Exponential-smoothing coefficient for the vector-averaged COG. setLocation()
+// runs roughly once per GPS fix (~1 Hz), so alpha ~= dt/tau for a ~10s time
+// constant.
+#define COG_DAMPING_ALPHA 0.1
+
 AutoPilot::AutoPilot(SerialType* ser) {
   serial = ser;
 
@@ -51,6 +62,13 @@ AutoPilot::AutoPilot(SerialType* ser) {
   bearing_correction = 0.0;
   nav_source = 0;
 
+  heading_command = 0.0;
+  cog_usable = false;
+  cog_damped_initialized = false;
+  cog_sin_avg = 0.0;
+  cog_cos_avg = 0.0;
+  cog_damped = 0.0;
+
   heading = 0.0;
   pitch = 0.0;
   roll = 0.0;
@@ -71,6 +89,9 @@ AutoPilot::AutoPilot(SerialType* ser) {
   distance = 0.0;
   destinationChanged = true;
   modeChanged = true;
+
+  autoTuneState = 0;
+  autoTuneReadyAt = 0;
 }
 
 AutoPilot::~AutoPilot() {
@@ -231,6 +252,13 @@ int AutoPilot::setMode(int new_mode) {
     if (this->mode == 1) {
       this->heading_desired = this->heading;
       this->bearing = this->heading_desired;
+    } else if (this->mode == 2 && this->fix) {
+      // Entering waypoint nav: refresh bearing-to-mark now rather than waiting
+      // for the next GPS fix, and seed heading_command so the wheel doesn't
+      // lurch - it starts at the current compass heading, corrected for
+      // whatever track error is already known.
+      this->bearing = this->getBearing(this->location_lat, this->location_lon, this->waypoint_lat, this->waypoint_lon);
+      this->seedHeadingCommand();
     }
     this->modeChanged = true;
     this->destinationChanged = true;
@@ -268,6 +296,14 @@ void AutoPilot::setNavigationEnabled(bool enable) {
   // Operator toggled navigation explicitly - cancel any pending auto-resume to
   // waypoint nav from a GPS fix-loss fallback.
   this->compass_fallback = false;
+  // Relay auto-tune (autotune.ino) only ever runs while navigation is disabled.
+  // If something re-enables navigation out from under an armed/running tune
+  // (telnet, a stale display, ...) cancel it rather than leaving stale state -
+  // control_task stops driving the relay the moment autoTuneState != 2.
+  if (enable && this->autoTuneState != 0) {
+    this->autoTuneState = 0;
+    this->autoTuneReadyAt = 0;
+  }
   if (this->navigation_enabled == false && enable == true) {
     // if we are re-enabling and current mode is compass we should stat to navigate to current heading to previous one.
     if (this->mode == 1) {
@@ -411,6 +447,13 @@ void AutoPilot::setWaypoint(float lat, float lon) {
     this->distance = this->getDistance(this->location_lat, this->location_lon, this->waypoint_lat, this->waypoint_lon);
   }
   if (this->mode == 2) {
+    if (this->fix) {
+      // A new destination mid-leg (e.g. the next route waypoint) invalidates
+      // the old bearing - refresh it and reseed heading_command so a sharp
+      // turn on the chart doesn't wait out several trim ticks to catch up.
+      this->bearing = this->getBearing(this->location_lat, this->location_lon, this->waypoint_lat, this->waypoint_lon);
+      this->seedHeadingCommand();
+    }
     this->destinationChanged = true;
   }
   this->unlock();
@@ -430,16 +473,48 @@ float AutoPilot::getLocationLon() {
   return value;
 }
 
-void AutoPilot::setLoation(float lat, float lon, float course) {
+void AutoPilot::setLocation(float lat, float lon, float course) {
   this->lock();
   this->location_lat = lat;
   this->location_lon = lon;
   this->course = course;
+
+  // Maintain the vector-averaged (sin/cos) damped COG. Trust hysteresis: only
+  // fold a sample in while speed is comfortably above the GPS's static-nav
+  // threshold - Doppler COG is noisy at low speed and PMTK386 freezes it near
+  // zero anyway. setSpeed() always runs before setLocation() (see gps.ino), so
+  // this->speed already reflects the current fix.
+  if (this->speed >= COG_TRUST_ENTER_KNOTS) {
+    this->cog_usable = true;
+  } else if (this->speed < COG_TRUST_EXIT_KNOTS) {
+    this->cog_usable = false;
+  }
+  if (this->cog_usable) {
+    float rad = this->toRadians(course);
+    double s = sin(rad);
+    double c = cos(rad);
+    if (!this->cog_damped_initialized) {
+      this->cog_sin_avg = s;
+      this->cog_cos_avg = c;
+      this->cog_damped_initialized = true;
+    } else {
+      this->cog_sin_avg += COG_DAMPING_ALPHA * (s - this->cog_sin_avg);
+      this->cog_cos_avg += COG_DAMPING_ALPHA * (c - this->cog_cos_avg);
+    }
+    this->cog_damped = this->normalizeDegrees(this->toDegrees(atan2(this->cog_sin_avg, this->cog_cos_avg)));
+  }
+
   if (this->waypoint_set) {
     this->distance = this->getDistance(this->location_lat, this->location_lon, this->waypoint_lat, this->waypoint_lon);
     if (this->mode == 2) {
       this->bearing = this->getBearing(this->location_lat, this->location_lon, this->waypoint_lat, this->waypoint_lon);
-      this->bearing_correction = this->getCourseCorrection(this->bearing, this->course);
+      // Now "how far is my GPS track trending from the mark" (what
+      // gpstracktrim.ino is correcting), not a per-fix noisy snapshot -
+      // steady and meaningful once cog_damped is trusted; 0 (nothing to
+      // report yet) until then.
+      this->bearing_correction = (this->cog_usable && this->cog_damped_initialized)
+          ? this->getCourseCorrection(this->bearing, this->cog_damped)
+          : 0.0f;
     }
   }
   this->unlock();
@@ -591,6 +666,102 @@ float AutoPilot::getBearing(float lat1, float lon1, float lat2, float lon2) {
   float bearing = toDegrees(atan2(y, x));
 
   return normalizeDegrees(bearing);
+}
+
+// Not locked - only ever called from setMode()/setWaypoint() while the
+// recursive mutex is already held.
+void AutoPilot::seedHeadingCommand() {
+  if (this->cog_usable && this->cog_damped_initialized) {
+    this->heading_command = this->normalizeDegrees(this->heading + this->getCourseCorrection(this->bearing, this->cog_damped));
+  } else {
+    this->heading_command = this->heading;
+  }
+}
+
+bool AutoPilot::isDampedCourseValid() {
+  this->lock();
+  bool value = this->cog_usable && this->cog_damped_initialized;
+  this->unlock();
+  return value;
+}
+
+float AutoPilot::getDampedCourse() {
+  this->lock();
+  float value = this->cog_damped;
+  this->unlock();
+  return value;
+}
+
+float AutoPilot::getHeadingCommand() {
+  this->lock();
+  float value = this->heading_command;
+  this->unlock();
+  return value;
+}
+
+// Nudge heading_command toward whatever GPS-frame target_course the caller
+// selected (plain bearing-to-mark, or the XTE-blended course) by a clamped
+// fraction of the error between it and the damped COG. This is the only
+// place gpstracktrim.ino touches AutoPilot state - it never reads/writes
+// cog_damped or heading_command directly, so the angle-wrap math stays
+// inside this class alongside everything else that manipulates it.
+void AutoPilot::applyHeadingCommandTrim(float target_course, float gain, float clamp_deg) {
+  this->lock();
+  float error = this->getCourseCorrection(target_course, this->cog_damped);
+  float adjust = gain * error;
+  if (adjust > clamp_deg) {
+    adjust = clamp_deg;
+  } else if (adjust < -clamp_deg) {
+    adjust = -clamp_deg;
+  }
+  this->heading_command = this->normalizeDegrees(this->heading_command + adjust);
+  this->unlock();
+}
+
+int AutoPilot::getAutoTuneState() {
+  this->lock();
+  int value = this->autoTuneState;
+  this->unlock();
+  return value;
+}
+
+unsigned long AutoPilot::getAutoTuneReadyAt() {
+  this->lock();
+  unsigned long value = this->autoTuneReadyAt;
+  this->unlock();
+  return value;
+}
+
+// Arm relay auto-tune ("ready"). Callers (subscribe.ino, telnet.ino) are
+// expected to have already checked isNavigationEndabled() == false and
+// autoTuneState == 0 - this just records the transition.
+void AutoPilot::armAutoTune() {
+  this->lock();
+  this->autoTuneState = 1;
+  this->autoTuneReadyAt = millis();
+  this->modeChanged = true;
+  this->destinationChanged = true;
+  this->unlock();
+}
+
+// Move from "ready" to actually running the relay. autotune.ino resets its own
+// (module-local) oscillation-measurement state around this call.
+void AutoPilot::startAutoTune() {
+  this->lock();
+  this->autoTuneState = 2;
+  this->modeChanged = true;
+  this->destinationChanged = true;
+  this->unlock();
+}
+
+// Cancel from any state (ready-timeout, operator abort, or a completed tune).
+void AutoPilot::cancelAutoTune() {
+  this->lock();
+  this->autoTuneState = 0;
+  this->autoTuneReadyAt = 0;
+  this->modeChanged = true;
+  this->destinationChanged = true;
+  this->unlock();
 }
 
 float AutoPilot::normalizeDegrees(float degrees) {

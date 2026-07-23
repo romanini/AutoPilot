@@ -73,6 +73,13 @@ void stop_motor() {
   //autoPilot.setMotorLastRunTime(millis());
 }
 
+// Report the virtual rudder position in steer-angle degrees. Used on the
+// navigation-disable edge (control_task) to hand the wheel over "where it is"
+// instead of unwinding the standing helm the PID was holding.
+float motor_position_degrees() {
+  return current_mills / (float)MILLIS_PER_DEGREE_RATE_CHANGE;
+}
+
 void motor_control_loop(float new_steer_angle) {
   unsigned long cur_mills = millis();
   if (last_mills == 0) {

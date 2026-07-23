@@ -63,7 +63,7 @@ void setup_garmin() {
 
   //Serial1 on 9,600 baud noote that the pins are revered because we want the Garmin TX to connect to an RX pin
   // and the Garmin RX to connect to a TX pin.  The  being() function parsm are in order of RX then TX
-  Serial1Port.begin(4800, SERIAL_8N1, GARMIN_TX_A, GARMIN_RX_A);
+  Serial1Port.begin(4800, SERIAL_8N1, GARMIN_TX_A, GARMIN_RX_A, true);
 
   //Serial2 on 9,600 baud noote that the pins are revered because we want the Garmin TX to connect to an RX pin
   // and the Garmin RX to connect to a TX pin.  The  being() function parsm are in order of RX then TX

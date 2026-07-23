@@ -121,6 +121,20 @@ void dispatch_command(char buffer[]) {
       // Follow stopped: clear the OPENCPN source immediately (optional fast-stop).
       navsource_opencpn_clear();
       break;
+    case 't': {
+      // Relay auto-tune (autotune.ino): t1 = arm ("ready"), t2 = start
+      // running, t0 = abort. All three are no-ops if the requested transition
+      // isn't valid from the current state (e.g. t1 while navigation is on).
+      int at_cmd = atoi(&buffer[1]);
+      if (at_cmd == 1) {
+        autotune_try_arm();
+      } else if (at_cmd == 2) {
+        autotune_try_start();
+      } else if (at_cmd == 0) {
+        autotune_abort();
+      }
+      break;
+    }
     default:
       break;
   }

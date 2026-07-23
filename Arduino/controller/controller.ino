@@ -32,30 +32,6 @@
 // trace of it.
 #define XTE_STEERING_ENABLED 0
 
-// Low-speed COG fallback for mode 2 (compile-time toggle, same style as
-// XTE_STEERING_ENABLED: flip the define, rebuild, reflash).
-//
-//   1 = fallback active (the on-the-water setting): waypoint nav normally
-//       steers course-over-ground, but below the GPS static-nav threshold
-//       (PMTK386 in gps.ino, backstopped by the setSpeed() deadband in
-//       AutoPilot.cpp) the receiver freezes position AND course - so at low
-//       speed the PID would steer against a frozen input and could hold the
-//       rudder hard over. Below COG_DROP_SPEED_KNOTS we steer by the compass
-//       heading instead; COG comes back at/above COG_MIN_SPEED_KNOTS. The two
-//       thresholds are deliberately apart (hysteresis) so the input source
-//       doesn't flap when boat speed hovers at the limit.
-//       COG_DROP_SPEED_KNOTS must stay >= GPS_SPEED_DEADBAND_KNOTS (0.8,
-//       AutoPilot.cpp) - below that the reported speed is snapped to zero, so
-//       COG is definitionally untrustworthy.
-//
-//   0 = old behavior (mode 2 always steers COG, even at speed 0) - the
-//       DEFAULT. Also what WORKBENCH builds need: on the bench speed is
-//       always 0, so with the fallback active mode 2 would silently steer by
-//       compass heading and you could never exercise the COG path.
-#define COG_FALLBACK_ENABLED 0
-#define COG_MIN_SPEED_KNOTS 1.0f
-#define COG_DROP_SPEED_KNOTS 0.8f
-
 #if defined(ARDUINO_ARCH_ESP32)  // Check if the board is based on the ESP32 architecture (like Arduino Nano ESP32)
 // Define the cores
 #define CORE_0 0
@@ -66,14 +42,6 @@
 void control_task(void *pvParameters);
 void command_task(void *pvParameters);
 #endif
-#endif
-
-#if XTE_STEERING_ENABLED
-// Defined in crosstrack.ino. Returns true and fills *out_heading with a
-// leg-course + cross-track-error blended setpoint when live Garmin BOD/XTE
-// data is fresh; returns false (leaves *out_heading untouched) otherwise,
-// meaning "fall back to plain bearing-to-mark".
-bool crosstrack_get_desired_heading(float bearing_to_mark, float distance_nm, float* out_heading);
 #endif
 
 AutoPilot autoPilot = AutoPilot(&Serial);
@@ -122,9 +90,6 @@ void control_task(void *pvParameters) {
   unsigned long last_mills = millis();
   unsigned long cur_mills;
   bool was_navigating = false;
-#if COG_FALLBACK_ENABLED
-  bool cog_usable = false;  // hysteresis latch for the mode-2 input source
-#endif
   float setpoint;
   float input;
   for (;;) {  // A Task shall never return or exit.
@@ -137,6 +102,19 @@ void control_task(void *pvParameters) {
     float diff_time = (cur_mills - last_mills) * 0.001f;
     last_mills = cur_mills;
 
+    int autotune_state = autoPilot.getAutoTuneState();
+    if (autotune_state == 2) {
+      // Auto-tuning (autotune.ino) owns the wheel this tick - skip the normal
+      // navigate/manual-steer path entirely until it finishes or is aborted.
+      autotune_loop(diff_time);
+      was_navigating = false;
+      vTaskDelay(10 / portTICK_PERIOD_MS);
+      continue;
+    }
+    if (autotune_state == 1) {
+      autotune_check_ready_timeout();
+    }
+
     bool navigating = autoPilot.isNavigationEndabled();
     if (navigating) {
       // Re-engaging navigation: clear the integral/derivative history so stale
@@ -145,45 +123,30 @@ void control_task(void *pvParameters) {
       if (!was_navigating) {
         reset_pid();
       }
-#if COG_FALLBACK_ENABLED
-      // Track whether the GPS course is trustworthy (see the
-      // COG_FALLBACK_ENABLED comment at the top of the file). Updated every
-      // loop so the latch is current the moment mode 2 needs it.
-      float speed = autoPilot.getSpeed();
-      if (speed >= COG_MIN_SPEED_KNOTS) {
-        cog_usable = true;
-      } else if (speed < COG_DROP_SPEED_KNOTS) {
-        cog_usable = false;
-      }
-      if (autoPilot.getMode() == 1 || !cog_usable) {
-        input = autoPilot.getHeading();
-      } else {
-        input = autoPilot.getCourse();
-      }
-#else
-      if (autoPilot.getMode() == 1) {
-        input = autoPilot.getHeading();
-      } else {
-        input = autoPilot.getCourse();
-      }
-#endif
-      setpoint = autoPilot.getBearing();
-#if XTE_STEERING_ENABLED
-      // Blend in cross-track steering only for a live Garmin waypoint nav
-      // (mode 2, nav_source == GARMIN == 1 per the AutoPilot.h contract).
-      // OpenCPN-sourced waypoints have no XTE/BOD and always steer plain
-      // bearing-to-mark.
-      if (autoPilot.getMode() == 2 && autoPilot.getNavSource() == 1) {
-        float xte_setpoint;
-        if (crosstrack_get_desired_heading(setpoint, autoPilot.getDistance(), &xte_setpoint)) {
-          setpoint = xte_setpoint;
-        }
-      }
-#endif
+      // Option 3: the inner loop always steers by the compass - it's rock
+      // steady at 100 Hz, unlike raw/damped GPS course at ~1 Hz. Mode 1's
+      // setpoint is the operator's compass heading; mode 2's setpoint is
+      // heading_command, a magnetic-frame value that gpstracktrim.ino trims
+      // slowly (see gpstracktrim.ino) to keep the GPS track on the bearing
+      // (or XTE-corrected course) to the waypoint. GPS noise never reaches
+      // this loop directly.
+      input = autoPilot.getHeading();
+      setpoint = (autoPilot.getMode() == 1) ? autoPilot.getBearing() : autoPilot.getHeadingCommand();
       // Compute PID output
       float steer_angle = pid_loop(setpoint, input, diff_time);
       motor_control_loop(steer_angle);
     } else {
+      // Navigation just disengaged: freeze the wheel where it is. The PID had
+      // been holding standing helm (the virtual rudder position is well away
+      // from zero), while steer_angle is whatever it last was - usually 0. If
+      // we steered toward it here, Disable would unwind all that standing
+      // rudder in one hard multi-second turn. Adopting the current position as
+      // the manual setpoint makes Disable a no-op for the wheel; telnet manual
+      // steering still works from there because it sets steer_angle absolutely.
+      if (was_navigating) {
+        autoPilot.setSteerAngle(motor_position_degrees());
+        move_motor(0);
+      }
       float steer_angle = autoPilot.getSteerAngle();
       motor_control_loop(steer_angle);
     }
@@ -198,6 +161,7 @@ void command_task(void *pvParameters) {
     check_gps();
     check_garmin();
     navsource_tick();
+    gps_track_trim();
     publish_APDAT();
     //print_diagnostics();
     vTaskDelay(100 / portTICK_PERIOD_MS);
