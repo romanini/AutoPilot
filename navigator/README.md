@@ -132,6 +132,90 @@ back-to-back on the Mac while Imager is already open.
    SD card for now; leave the NVMe drive out of the M.2 HAT until that step tells you to
    install it.
 
+**Don't have the NVMe drive yet?** Skip step 2 above and do everything through Post-setup on
+the SD card alone — see
+[Set up on the SD card now, clone to NVMe later](#set-up-on-the-sd-card-now-clone-to-nvme-later)
+below for how to catch the NVMe drive up once it arrives.
+
+#### Set up on the SD card now, clone to NVMe later
+
+You don't need the NVMe drive in hand to get started — flash and set up the SD card only
+(steps above minus step 2), work all the way through Part 2 → Post-setup on it, and validate
+everything works. When the NVMe drive arrives:
+
+1. Shut down, remove the SD card, and image it on your Mac using the
+   [backup commands](#backup-sd-card--compressed-file) (the `navigator-RaspberryPi5-SD-...img.gz`
+   line). Re-insert the SD card and boot the Pi 5 normally again.
+2. Connect the new NVMe drive to the Pi 5 itself (not the Mac) via a USB-to-M.2 enclosure,
+   using a spare USB port — not the internal M.2 HAT yet. It'll show up as an external disk;
+   confirm the device name before touching anything:
+   ```bash
+   lsblk    # e.g. /dev/sda — do NOT run the following against mmcblk0, the live SD card!
+   ```
+3. Write the SD image onto it directly from the running Pi 5 (all the Linux partition tools
+   you'll need next are already there, so it's simpler than round-tripping through the Mac):
+   ```bash
+   gunzip -c navigator-RaspberryPi5-SD-YYYY-MM-DD.img.gz | sudo dd of=/dev/sda bs=4M status=progress
+   sync
+   ```
+   This is now a byte-for-bit copy of the SD card.
+4. **De-duplicate identifiers before the two ever run together.** A straight clone means the
+   NVMe has the exact same MBR disk signature (and therefore `PARTUUID`s), filesystem UUIDs,
+   machine-id, and SSH host keys as the SD card. With both physically installed at once —
+   which is the whole point of the fallback design — that's not cosmetic: the kernel/udev/blkid
+   can't reliably tell the two partitions apart and may mount the wrong one. Fix it now, while
+   the clone is still just an external disk (adjust `/dev/sda1`/`/dev/sda2` below if `lsblk`
+   showed different partition numbers):
+
+   a. **MBR disk signature** — this is what each partition's `PARTUUID` is derived from
+      (`<disk-id>-<partition-number>`):
+      ```bash
+      sudo sfdisk --disk-id /dev/sda 0x$(openssl rand -hex 4)
+      sudo partprobe /dev/sda
+      sudo blkid /dev/sda1 /dev/sda2     # note the new PARTUUIDs, you'll need them in (d)
+      ```
+   b. **ext4 root filesystem UUID** (the root partition — normally `sda2`):
+      ```bash
+      sudo tune2fs -U random /dev/sda2
+      ```
+   c. **FAT32 boot partition volume ID** (the boot partition — normally `sda1`). `dosfstools`
+      has no in-place command for this, so patch the 4-byte `BS_VolID` field directly at its
+      fixed offset (67) in the boot sector instead of reformatting:
+      ```bash
+      sudo dd if=/dev/urandom of=/dev/sda1 bs=1 count=4 seek=67 conv=notrunc
+      ```
+   d. **Update `cmdline.txt` / `fstab` on the clone to match** — mount the clone's partitions
+      and check which scheme your image actually uses before assuming (Ubuntu Raspberry Pi
+      images have used both `PARTUUID=` and `LABEL=` across releases):
+      ```bash
+      sudo mkdir -p /mnt/nvme-boot /mnt/nvme-root
+      sudo mount /dev/sda1 /mnt/nvme-boot
+      sudo mount /dev/sda2 /mnt/nvme-root
+      grep -H root= /mnt/nvme-boot/cmdline.txt
+      grep -H -E "PARTUUID|LABEL" /mnt/nvme-root/etc/fstab
+      ```
+      If either references `PARTUUID=`, replace the old value with the matching new one from
+      (a)'s `blkid` output. If it references `LABEL=` instead, there's nothing to change —
+      labels weren't touched by any of this.
+   e. **machine-id and SSH host keys** — not partition-related, but the same "identical clone"
+      problem: both media would otherwise claim the same machine identity on the network.
+      ```bash
+      sudo rm /mnt/nvme-root/etc/machine-id
+      sudo systemd-machine-id-setup --root=/mnt/nvme-root
+      sudo rm /mnt/nvme-root/etc/ssh/ssh_host_*
+      sudo ssh-keygen -A -f /mnt/nvme-root
+      sudo umount /mnt/nvme-boot /mnt/nvme-root
+      ```
+5. Shut down, move the NVMe drive from the USB enclosure into the internal M.2 HAT slot, and
+   pick up at step 3 of [Enable NVMe boot](#raspberry-pi-5--enable-nvme-boot) below (EEPROM
+   update → `BOOT_ORDER` → verify it actually boots from `nvme0n1`).
+
+> I haven't verified the exact partition numbering or the `PARTUUID`-vs-`LABEL` scheme against
+> the specific Ubuntu 24.04 RPi image — the `lsblk`/`blkid`/`grep` checks above are there so you
+> confirm against your actual clone rather than trusting the device names as gospel. If
+> something looks off, the SD card image from step 1 is your safety net — you can always
+> re-run steps 2–4 from scratch on the NVMe.
+
 ---
 
 ### Part 2 — First boot
