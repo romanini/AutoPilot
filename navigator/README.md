@@ -620,6 +620,51 @@ xfconf-query -c xfce4-panel -p /plugins/plugin-1 -s applicationsmenu
 xfce4-panel --restart
 ```
 
+#### Applications menu — pin OpenCPN and Terminal Emulator to the top
+
+The `applicationsmenu` panel plugin's `custom-menu-file` / `use-custom-menu`
+xfconf properties are not honored by this XFCE build (setting them and
+restarting the panel has no effect), so the pinning has to be done by editing
+the merged menu file directly: `~/.config/menus/xfce-applications.menu`. This
+is a user override merged (via `<MergeFile type="parent">`) on top of the
+system default `/etc/xdg/xdg-xubuntu/menus/xfce-applications.menu`, so the
+rest of the menu (categories, Web Browser, Mail Reader, Settings Manager,
+etc.) is untouched — only the root `<Include>` and root `<Layout>` are edited.
+
+1. Add OpenCPN to the root `<Include>` (it isn't pulled in by the
+   `X-Xfce-Toplevel` category, unlike Terminal Emulator/Web Browser):
+
+   ```xml
+   <Include>
+   	<Category>X-Xfce-Toplevel</Category>
+   	<Filename>org.opencpn.OpenCPN.desktop</Filename>
+   </Include>
+   ```
+
+2. In the root `<Layout>` (near the end of the file), move OpenCPN and
+   Terminal Emulator ahead of Web Browser, and remove Terminal Emulator's old
+   trailing entry so it isn't listed twice:
+
+   ```xml
+   <Layout>
+   	<Filename>org.opencpn.OpenCPN.desktop</Filename>
+   	<Filename>xfce4-terminal-emulator.desktop</Filename>
+   	<Filename>xfce4-web-browser.desktop</Filename>
+   	<Filename>xfce4-mail-reader.desktop</Filename>
+   	<Separator />
+   	<Filename>xfce-settings-manager.desktop</Filename>
+   	...
+   	<Filename>xfce4-file-manager.desktop</Filename>
+   	<Filename>xfce4-run.desktop</Filename>
+   </Layout>
+   ```
+
+3. Restart the panel to apply:
+
+   ```bash
+   xfce4-panel --restart
+   ```
+
 ---
 
 ### OpenCPN
