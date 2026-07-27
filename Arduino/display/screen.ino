@@ -217,7 +217,7 @@ void display_speed() {
     canvas.setCursor(0, 37);
     canvas.print(cur_speed, 2);
   }
-  tft.drawBitmap(341, 30, canvas.getBuffer(), 130, 44, foregroundColor, backgroundColor);
+  tft.drawBitmap(20, 208, canvas.getBuffer(), 130, 44, foregroundColor, backgroundColor);
 }
 
 void display_track() {
@@ -401,7 +401,7 @@ void display_location_lat() {
     canvas.setCursor(0, 18);
     canvas.print(cur_lat, 6);
   }
-  tft.drawBitmap(20, 205, canvas.getBuffer(), 115, 22, foregroundColor, backgroundColor);
+  tft.drawBitmap(341, 27, canvas.getBuffer(), 115, 22, foregroundColor, backgroundColor);
 }
 
 void display_location_lon() {
@@ -421,7 +421,7 @@ void display_location_lon() {
     canvas.setCursor(0, 18);
     canvas.print(cur_lon, 6);
   }
-  tft.drawBitmap(10, 229, canvas.getBuffer(), 139, 22, foregroundColor, backgroundColor);
+  tft.drawBitmap(331, 51, canvas.getBuffer(), 139, 22, foregroundColor, backgroundColor);
 }
 
 // Mirrors display_location_lat/lon exactly (same font, same two-line layout)
@@ -503,7 +503,7 @@ void display_fix() {
   disp.fix_hasFix = cur_hasFix;
 
   GFXcanvas1 canvas(110, 22);
-  uint16_t foregroundColor = HX8357_WHITE;
+  uint16_t foregroundColor = HX8357_CYAN;
   canvas.fillScreen(0);
 
   canvas.setTextColor(1);
@@ -544,7 +544,7 @@ void initialize_display() {
 // Row heights: the bottom bar is back to its original 54px (matching the old
 // standalone Volts box), so Heading/Speed/Track (and everything else in rows
 // 1-3) pick up the freed height, split proportionately (89/89/88).
-// Column 1 (x 0-160): Heading / Track / Location.
+// Column 1 (x 0-160): Heading / Track / Speed.
 void initialize_heading() {
   int16_t x1, y1;
   uint16_t w, h;
@@ -607,19 +607,19 @@ void initialize_target() {
   tft.drawBitmap(161, 89, canvas.getBuffer(), 159, 177, MAGENTA, HX8357_BLACK);
 }
 
-// Column 3 (x 321-480): Speed (top), Distance, Waypoint.
-void initialize_speed() {
+// Column 3 (x 321-480): Location (top), Distance, Waypoint.
+void initialize_location() {
   int16_t x1, y1;
   uint16_t w, h;
   GFXcanvas1 canvas(159, 89);
   canvas.fillScreen(HX8357_BLACK);
   canvas.setFont(&FreeSans9pt7b);
   canvas.drawRect(0, 0, 159, 89, HX8357_CYAN);
-  canvas.getTextBounds("Speed", 0, 12, &x1, &y1, &w, &h);
-  canvas.fillRect(x1, y1, w + 8, h + 1, HX8357_CYAN);
-  canvas.setCursor(0, 12);
+  canvas.getTextBounds("Location", 0, 12, &x1, &y1, &w, &h);
+  canvas.fillRect(x1, y1, w + 8, h + 3, HX8357_CYAN);
+  canvas.setCursor(0, 14);
   canvas.setTextColor(HX8357_BLACK);
-  canvas.print("Speed");
+  canvas.print("Location");
   tft.drawBitmap(321, 0, canvas.getBuffer(), 159, 89, HX8357_CYAN, HX8357_BLACK);
 }
 
@@ -653,20 +653,20 @@ void initialize_waypoint() {
   tft.drawBitmap(321, 178, canvas.getBuffer(), 159, 88, HX8357_WHITE, HX8357_BLACK);
 }
 
-// Column 1's third slot (Track's old spot): Location, now that Track has
-// taken Speed's old slot and Speed has taken Location's old slot above.
-void initialize_location() {
+// Column 1's third slot: Speed, now that Location has taken Speed's old slot
+// in column 3.
+void initialize_speed() {
   int16_t x1, y1;
   uint16_t w, h;
   GFXcanvas1 canvas(160, 88);
   canvas.fillScreen(HX8357_BLACK);
   canvas.setFont(&FreeSans9pt7b);
   canvas.drawRect(0, 0, 160, 88, HX8357_CYAN);
-  canvas.getTextBounds("Location", 0, 12, &x1, &y1, &w, &h);
-  canvas.fillRect(x1, y1, w + 8, h + 3, HX8357_CYAN);
-  canvas.setCursor(0, 14);
+  canvas.getTextBounds("Speed", 0, 12, &x1, &y1, &w, &h);
+  canvas.fillRect(x1, y1, w + 8, h + 1, HX8357_CYAN);
+  canvas.setCursor(0, 12);
   canvas.setTextColor(HX8357_BLACK);
-  canvas.print("Location");
+  canvas.print("Speed");
   tft.drawBitmap(0, 178, canvas.getBuffer(), 160, 88, HX8357_CYAN, HX8357_BLACK);
 }
 
