@@ -19,6 +19,17 @@
 
 static constexpr uint32_t TFT_SPI_HZ = 24000000; // try 40 MHz; drop to 24 MHz if unstable
 
+// Box color coding is by data source, not by column or box:
+//   Yellow  - data from the compass (Heading)
+//   Cyan    - data straight from the GPS (Speed, Location, Date/Time)
+//   Magenta - data calculated on the controller (Mode, Target, Correction, Distance,
+//             Track - Distance is the haversine calc from Location to Waypoint;
+//             Track is cog_damped, a smoothed/trust-gated value, not a raw GPS
+//             reading)
+//   White   - general info / data sent in rather than measured or computed
+//             (Volts, fix/satellites, Waypoint - a commanded destination, not
+//             something read off a sensor)
+
 // Same lavender/magenta used everywhere the old "Destination" box used to draw
 // (Mode text, Target/Correction, and previously Follow) - kept as one named
 // constant since the Target box now carries all of that meaning.
@@ -206,7 +217,7 @@ void display_speed() {
     canvas.setCursor(0, 37);
     canvas.print(cur_speed, 2);
   }
-  tft.drawBitmap(20, 119, canvas.getBuffer(), 130, 44, foregroundColor, backgroundColor);
+  tft.drawBitmap(341, 30, canvas.getBuffer(), 130, 44, foregroundColor, backgroundColor);
 }
 
 void display_track() {
@@ -220,7 +231,7 @@ void display_track() {
   disp.track_valid = cur_valid;
 
   GFXcanvas1 canvas(130, 44);
-  uint16_t foregroundColor = HX8357_CYAN;
+  uint16_t foregroundColor = MAGENTA;
   canvas.fillScreen(0);
 
   if (cur_valid) {
@@ -229,7 +240,7 @@ void display_track() {
     canvas.setCursor(0, 37);
     canvas.print(cur_track, 1);
   }
-  tft.drawBitmap(20, 208, canvas.getBuffer(), 130, 44, foregroundColor, backgroundColor);
+  tft.drawBitmap(20, 119, canvas.getBuffer(), 130, 44, foregroundColor, backgroundColor);
 }
 
 // Polled every loop rather than gated on hasModeChanged(): nav_source can
@@ -260,24 +271,24 @@ void display_mode() {
   canvas.setCursor(0, 18);
 
   if (!cur_connected) {
-    canvas.print("no link");
+    canvas.print("No Link");
   } else if (cur_navEnabled) {
     if (cur_tack) {
-      canvas.print("tack");
+      canvas.print("Tack");
     } else if (cur_mode == 2) {
       switch (cur_navSource) {
              //  canvas.print("no link");
              //  canvas.print("compass");
              //  canvas.print("disabled");
-        case 1:  canvas.print("garmin");   break;
-        case 2:  canvas.print("opencpn");  break;
-        default: canvas.print("waypoint"); break;
+        case 1:  canvas.print("Garmin");   break;
+        case 2:  canvas.print("OpenCPN");  break;
+        default: canvas.print("Waypoint"); break;
       }
     } else if (cur_mode == 1) {
-      canvas.print("compass");
+      canvas.print("Compass");
     }
   } else {
-    canvas.print("disabled");
+    canvas.print("Disabled");
   }
   tft.drawBitmap(176, 38, canvas.getBuffer(), 135, 24, MAGENTA, backgroundColor);
 }
@@ -361,7 +372,7 @@ void display_distance() {
   disp.distance_hasFix     = cur_hasFix;
 
   GFXcanvas1 canvas(130, 44);
-  uint16_t foregroundColor = HX8357_CYAN;
+  uint16_t foregroundColor = MAGENTA;
   canvas.fillScreen(0);
 
   if (cur_waypointSet && cur_hasFix) {
@@ -381,7 +392,7 @@ void display_location_lat() {
   disp.lat_hasFix  = cur_hasFix;
 
   GFXcanvas1 canvas(115, 22);
-  uint16_t foregroundColor = 0x7FE8;
+  uint16_t foregroundColor = HX8357_CYAN;
   canvas.fillScreen(0);
 
   if (cur_hasFix) {
@@ -390,7 +401,7 @@ void display_location_lat() {
     canvas.setCursor(0, 18);
     canvas.print(cur_lat, 6);
   }
-  tft.drawBitmap(341, 22, canvas.getBuffer(), 115, 22, foregroundColor, backgroundColor);
+  tft.drawBitmap(20, 205, canvas.getBuffer(), 115, 22, foregroundColor, backgroundColor);
 }
 
 void display_location_lon() {
@@ -401,7 +412,7 @@ void display_location_lon() {
   disp.lon_hasFix  = cur_hasFix;
 
   GFXcanvas1 canvas(139, 22);
-  uint16_t foregroundColor = 0x7FE8;
+  uint16_t foregroundColor = HX8357_CYAN;
   canvas.fillScreen(0);
 
   if (cur_hasFix) {
@@ -410,7 +421,7 @@ void display_location_lon() {
     canvas.setCursor(0, 18);
     canvas.print(cur_lon, 6);
   }
-  tft.drawBitmap(331, 46, canvas.getBuffer(), 139, 22, foregroundColor, backgroundColor);
+  tft.drawBitmap(10, 229, canvas.getBuffer(), 139, 22, foregroundColor, backgroundColor);
 }
 
 // Mirrors display_location_lat/lon exactly (same font, same two-line layout)
@@ -423,7 +434,7 @@ void display_waypoint_lat() {
   disp.waypointLat_set = cur_set;
 
   GFXcanvas1 canvas(115, 22);
-  uint16_t foregroundColor = 0x7FE8;
+  uint16_t foregroundColor = HX8357_WHITE;
   canvas.fillScreen(0);
 
   if (cur_set) {
@@ -432,7 +443,7 @@ void display_waypoint_lat() {
     canvas.setCursor(0, 18);
     canvas.print(cur_lat, 6);
   }
-  tft.drawBitmap(341, 200, canvas.getBuffer(), 115, 22, foregroundColor, backgroundColor);
+  tft.drawBitmap(341, 205, canvas.getBuffer(), 115, 22, foregroundColor, backgroundColor);
 }
 
 void display_waypoint_lon() {
@@ -443,7 +454,7 @@ void display_waypoint_lon() {
   disp.waypointLon_set = cur_set;
 
   GFXcanvas1 canvas(139, 22);
-  uint16_t foregroundColor = 0x7FE8;
+  uint16_t foregroundColor = HX8357_WHITE;
   canvas.fillScreen(0);
 
   if (cur_set) {
@@ -452,7 +463,7 @@ void display_waypoint_lon() {
     canvas.setCursor(0, 18);
     canvas.print(cur_lon, 6);
   }
-  tft.drawBitmap(331, 224, canvas.getBuffer(), 139, 22, foregroundColor, backgroundColor);
+  tft.drawBitmap(331, 229, canvas.getBuffer(), 139, 22, foregroundColor, backgroundColor);
 }
 
 void display_datetime() {
@@ -468,7 +479,7 @@ void display_datetime() {
   disp.dtHour   = cur_hour;  disp.dtMinute = cur_minute; disp.dt_hasFix = cur_hasFix;
 
   GFXcanvas1 canvas(165, 22);
-  uint16_t foregroundColor = HX8357_WHITE;
+  uint16_t foregroundColor = HX8357_CYAN;
   canvas.fillScreen(0);
 
   canvas.setTextColor(1);
@@ -533,7 +544,7 @@ void initialize_display() {
 // Row heights: the bottom bar is back to its original 54px (matching the old
 // standalone Volts box), so Heading/Speed/Track (and everything else in rows
 // 1-3) pick up the freed height, split proportionately (89/89/88).
-// Column 1 (x 0-160): Heading / Speed / Track.
+// Column 1 (x 0-160): Heading / Track / Location.
 void initialize_heading() {
   int16_t x1, y1;
   uint16_t w, h;
@@ -549,34 +560,19 @@ void initialize_heading() {
   tft.drawBitmap(0, 0, canvas.getBuffer(), 160, 89, HX8357_YELLOW, HX8357_BLACK);
 }
 
-void initialize_speed() {
+void initialize_track() {
   int16_t x1, y1;
   uint16_t w, h;
   GFXcanvas1 canvas(160, 89);
   canvas.fillScreen(HX8357_BLACK);
   canvas.setFont(&FreeSans9pt7b);
-  canvas.drawRect(0, 0, 160, 89, HX8357_CYAN);
-  canvas.getTextBounds("Speed", 0, 12, &x1, &y1, &w, &h);
-  canvas.fillRect(x1, y1, w + 8, h + 1, HX8357_CYAN);
-  canvas.setCursor(0, 12);
-  canvas.setTextColor(HX8357_BLACK);
-  canvas.print("Speed");
-  tft.drawBitmap(0, 89, canvas.getBuffer(), 160, 89, HX8357_CYAN, HX8357_BLACK);
-}
-
-void initialize_track() {
-  int16_t x1, y1;
-  uint16_t w, h;
-  GFXcanvas1 canvas(160, 88);
-  canvas.fillScreen(HX8357_BLACK);
-  canvas.setFont(&FreeSans9pt7b);
-  canvas.drawRect(0, 0, 160, 88, HX8357_CYAN);
+  canvas.drawRect(0, 0, 160, 89, MAGENTA);
   canvas.getTextBounds("Track", 0, 12, &x1, &y1, &w, &h);
-  canvas.fillRect(x1, y1, w + 8, h + 1, HX8357_CYAN);
+  canvas.fillRect(x1, y1, w + 8, h + 1, MAGENTA);
   canvas.setCursor(0, 12);
   canvas.setTextColor(HX8357_BLACK);
   canvas.print("Track");
-  tft.drawBitmap(0, 178, canvas.getBuffer(), 160, 88, HX8357_CYAN, HX8357_BLACK);
+  tft.drawBitmap(0, 89, canvas.getBuffer(), 160, 89, MAGENTA, HX8357_BLACK);
 }
 
 // Column 2 (x 161-320): Mode (top row), Target+Correction (spans the next two
@@ -611,20 +607,20 @@ void initialize_target() {
   tft.drawBitmap(161, 89, canvas.getBuffer(), 159, 177, MAGENTA, HX8357_BLACK);
 }
 
-// Column 3 (x 321-480): Location (top), Distance, Waypoint.
-void initialize_location() {
+// Column 3 (x 321-480): Speed (top), Distance, Waypoint.
+void initialize_speed() {
   int16_t x1, y1;
   uint16_t w, h;
   GFXcanvas1 canvas(159, 89);
   canvas.fillScreen(HX8357_BLACK);
   canvas.setFont(&FreeSans9pt7b);
-  canvas.drawRect(0, 0, 159, 89, HX8357_YELLOW);
-  canvas.getTextBounds("Location", 0, 12, &x1, &y1, &w, &h);
-  canvas.fillRect(x1, y1, w + 8, h + 3, HX8357_YELLOW);
-  canvas.setCursor(0, 14);
+  canvas.drawRect(0, 0, 159, 89, HX8357_CYAN);
+  canvas.getTextBounds("Speed", 0, 12, &x1, &y1, &w, &h);
+  canvas.fillRect(x1, y1, w + 8, h + 1, HX8357_CYAN);
+  canvas.setCursor(0, 12);
   canvas.setTextColor(HX8357_BLACK);
-  canvas.print("Location");
-  tft.drawBitmap(321, 0, canvas.getBuffer(), 159, 89, 0x7FE8, HX8357_BLACK);
+  canvas.print("Speed");
+  tft.drawBitmap(321, 0, canvas.getBuffer(), 159, 89, HX8357_CYAN, HX8357_BLACK);
 }
 
 void initialize_distance() {
@@ -639,7 +635,7 @@ void initialize_distance() {
   canvas.setCursor(0, 14);
   canvas.setTextColor(HX8357_BLACK);
   canvas.print("Distance");
-  tft.drawBitmap(321, 89, canvas.getBuffer(), 159, 89, HX8357_CYAN, HX8357_BLACK);
+  tft.drawBitmap(321, 89, canvas.getBuffer(), 159, 89, MAGENTA, HX8357_BLACK);
 }
 
 void initialize_waypoint() {
@@ -648,13 +644,30 @@ void initialize_waypoint() {
   GFXcanvas1 canvas(159, 88);
   canvas.fillScreen(HX8357_BLACK);
   canvas.setFont(&FreeSans9pt7b);
-  canvas.drawRect(0, 0, 159, 88, HX8357_YELLOW);
+  canvas.drawRect(0, 0, 159, 88, HX8357_WHITE);
   canvas.getTextBounds("Waypoint", 0, 12, &x1, &y1, &w, &h);
-  canvas.fillRect(x1, y1, w + 8, h + 3, HX8357_YELLOW);
+  canvas.fillRect(x1, y1, w + 8, h + 3, HX8357_WHITE);
   canvas.setCursor(0, 14);
   canvas.setTextColor(HX8357_BLACK);
   canvas.print("Waypoint");
-  tft.drawBitmap(321, 178, canvas.getBuffer(), 159, 88, 0x7FE8, HX8357_BLACK);
+  tft.drawBitmap(321, 178, canvas.getBuffer(), 159, 88, HX8357_WHITE, HX8357_BLACK);
+}
+
+// Column 1's third slot (Track's old spot): Location, now that Track has
+// taken Speed's old slot and Speed has taken Location's old slot above.
+void initialize_location() {
+  int16_t x1, y1;
+  uint16_t w, h;
+  GFXcanvas1 canvas(160, 88);
+  canvas.fillScreen(HX8357_BLACK);
+  canvas.setFont(&FreeSans9pt7b);
+  canvas.drawRect(0, 0, 160, 88, HX8357_CYAN);
+  canvas.getTextBounds("Location", 0, 12, &x1, &y1, &w, &h);
+  canvas.fillRect(x1, y1, w + 8, h + 3, HX8357_CYAN);
+  canvas.setCursor(0, 14);
+  canvas.setTextColor(HX8357_BLACK);
+  canvas.print("Location");
+  tft.drawBitmap(0, 178, canvas.getBuffer(), 160, 88, HX8357_CYAN, HX8357_BLACK);
 }
 
 // Bottom bar (y 266-320, 54px - back to the original Volts/Date-Time height):
@@ -681,11 +694,11 @@ void initialize_date_time() {
   GFXcanvas1 canvas(319, 54);
   canvas.fillScreen(HX8357_BLACK);
   canvas.setFont(&FreeSans9pt7b);
-  canvas.drawRect(0, 0, 319, 54, HX8357_WHITE);
+  canvas.drawRect(0, 0, 319, 54, HX8357_CYAN);
   canvas.getTextBounds("Date &Time", 0, 12, &x1, &y1, &w, &h);
-  canvas.fillRect(x1, y1, w + 8, h + 3, HX8357_WHITE);
+  canvas.fillRect(x1, y1, w + 8, h + 3, HX8357_CYAN);
   canvas.setCursor(0, 14);
   canvas.setTextColor(HX8357_BLACK);
   canvas.print("Date & Time");
-  tft.drawBitmap(161, 266, canvas.getBuffer(), 319, 54, HX8357_WHITE, HX8357_BLACK);
+  tft.drawBitmap(161, 266, canvas.getBuffer(), 319, 54, HX8357_CYAN, HX8357_BLACK);
 }
