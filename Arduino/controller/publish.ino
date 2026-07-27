@@ -27,7 +27,7 @@ void publish_APDAT() {
   if (millis() - last_publish_time_mills > PUBLISH_INTERVAL) {
     last_publish_time_mills = millis();
     time_t currentTime = autoPilot.getDateTime();
-    sprintf(serialzied_data, "~APDAT,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%f,%.2f,%.2f,%.2f,%.2f,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.6f,%.6f,%d,%d$",
+    sprintf(serialzied_data, "~APDAT,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%f,%.2f,%.2f,%.2f,%.2f,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.6f,%.6f,%d,%d,%.2f,%d$",
             year(currentTime) % 100,    // %d
             month(currentTime),         //%d
             day(currentTime),           //%d
@@ -65,9 +65,17 @@ void publish_APDAT() {
 
             autoPilot.getNavSource(),     // %d  0=NONE, 1=GARMIN, 2=OPENCPN (Phase B)
 
-            // Last field, appended - old parsers (autopilot_pi, monitor.py)
-            // that don't know about it simply ignore the extra trailing value.
-            autoPilot.getAutoTuneState()  // %d  0=idle, 1=ready, 2=running (autotune.ino)
+            // Appended - old parsers (autopilot_pi, monitor.py) that don't
+            // know about these simply ignore the extra trailing values.
+            autoPilot.getAutoTuneState(),  // %d  0=idle, 1=ready, 2=running (autotune.ino)
+
+            // Damped/trust-gated GPS track (gpstracktrim.ino's cog_damped),
+            // published alongside - not instead of - raw course above, so
+            // existing consumers of that field are unaffected. Displays that
+            // want a stable "Track" reading should use this + the validity
+            // flag instead of raw course, which is known-noisy below ~1kn.
+            autoPilot.getDampedCourse(),      // %.2f
+            autoPilot.isDampedCourseValid()   // %d
     );
 
     //DEBUG_PRINTLN(serialzied_data);

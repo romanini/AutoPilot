@@ -59,6 +59,8 @@ void AutoPilot::init() {
   speed = 0.0;
   distance = 0.0;
   course = 0.0;
+  cog_damped = 0.0;
+  cog_damped_valid = false;
   location_lat = 0.0;
   location_lon = 0.0;
   destinationChanged = true;
@@ -296,6 +298,20 @@ float AutoPilot::getDistance() {
 float AutoPilot::getCourse() {
   this->lock();
   float value =this->course;
+  this->unlock();
+  return value;
+}
+
+float AutoPilot::getDampedCourse() {
+  this->lock();
+  float value = this->cog_damped;
+  this->unlock();
+  return value;
+}
+
+bool AutoPilot::isDampedCourseValid() {
+  this->lock();
+  bool value = this->cog_damped_valid;
   this->unlock();
   return value;
 }
@@ -832,6 +848,23 @@ void AutoPilot::parseAPDAT(char *sentence) {
       this->destinationChanged = true;
       this->modeChanged = true;
     }
+  }
+
+  // Damped/trust-gated GPS track (publish.ino, alongside raw course above).
+  // Tolerant of absence so an older controller (no trailing fields) parses as
+  // "not valid" rather than showing a stale or fabricated track.
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
+  if (!isEmpty(p)) {
+    this->cog_damped = atof(p);
+  } else {
+    this->cog_damped = 0.0;
+  }
+
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
+  if (!isEmpty(p)) {
+    this->cog_damped_valid = atoi(p) > 0;
+  } else {
+    this->cog_damped_valid = false;
   }
 
   this->unlock();

@@ -362,10 +362,34 @@ sudo npm install -g @anthropic-ai/claude-code
 
 # Authenticate — opens a browser window for OAuth
 claude login
+```
 
-# Clone this repo
+#### Generate an SSH key for GitHub
+
+```bash
+ssh-keygen -t ed25519 -C "romaninim@gmail.com"
+```
+Accept the default path (`~/.ssh/id_ed25519`); set a passphrase or leave it blank on a
+headless box like this one.
+
+```bash
+eval "$(ssh-agent -s)"
+ssh-add ~/.ssh/id_ed25519
+cat ~/.ssh/id_ed25519.pub
+```
+
+Copy that public key into [github.com/settings/keys](https://github.com/settings/keys) →
+**New SSH key**, then verify it:
+
+```bash
+ssh -T git@github.com   # should reply "Hi <username>! You've successfully authenticated..."
+```
+
+#### Clone this repo
+
+```bash
 mkdir -p ~/dev
-git clone https://github.com/romanini/AutoPilot.git ~/dev/AutoPilot
+git clone git@github.com:romanini/AutoPilot.git ~/dev/AutoPilot
 ```
 
 ---
@@ -514,6 +538,47 @@ sudo reboot
 
 After reboot the LightDM greeter appears and you can log in graphically. The OrangePi
 image ships with a desktop already — skip this step there.
+
+#### If you get a blank screen with a blinking cursor after reboot
+
+Stock Ubuntu's `xubuntu-desktop` doesn't ship the vc4 driver pinning that Raspberry Pi
+OS includes by default, so LightDM/Xorg can crash-loop on first boot. Check:
+
+```bash
+systemctl status lightdm
+cat /var/log/Xorg.0.log | tail -40
+```
+
+Two known causes, both seen back-to-back on a Pi 5:
+
+1. **`(EE) Cannot run in framebuffer mode. Please specify busIDs for all framebuffer
+   devices`** — Xorg fell back to the `fbdev` driver because it's installed and got
+   probed ahead of `modesetting`. Fix:
+   ```bash
+   sudo apt remove -y xserver-xorg-video-fbdev
+   ```
+
+2. **`(EE) No devices detected` / `(EE) no screens found`**, with the log showing
+   `modeset(G0): using drv /dev/dri/cardN` — the `modesetting` driver bound to the
+   `v3d` card (GPU compute only, no display output) instead of `vc4` (the actual
+   display). Confirm which card is which, then pin it explicitly:
+   ```bash
+   cat /sys/class/drm/card0/device/uevent   # look for DRIVER=vc4 vs DRIVER=v3d
+   cat /sys/class/drm/card1/device/uevent
+
+   sudo tee /etc/X11/xorg.conf.d/10-vc4.conf > /dev/null <<'EOF'
+   Section "OutputClass"
+       Identifier "vc4"
+       MatchDriver "vc4"
+       Driver "modesetting"
+       Option "PrimaryGPU" "true"
+       Option "kmsdev" "/dev/dri/cardN"
+   EndSection
+   EOF
+   ```
+   (Replace `cardN` with whichever device reported `DRIVER=vc4`.)
+
+After either fix: `sudo systemctl restart lightdm`.
 
 #### Auto-login
 

@@ -1,3 +1,4 @@
+#include <Arduino.h>
 #include <cstdarg>
 #include "FreeRTOS.h"
 #include "freertos/portmacro.h"

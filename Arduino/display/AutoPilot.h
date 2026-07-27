@@ -55,6 +55,9 @@ private:
   float distance;       // distance to desired waypoint from current location according to GPS
   float course;         // compass course towads desired waypoint
 
+  float cog_damped;         // trust-gated, vector-averaged GPS track (controller's gpstracktrim.ino) - stable, but only meaningful while valid below
+  bool  cog_damped_valid;    // true once cog_damped has a real (speed-trusted) sample; false near-zero speed or before the first one
+
   float location_lat;   // current latitude
   float location_lon;  // current longitude
   bool destinationChanged;
@@ -114,6 +117,8 @@ public:
   float getSpeed();
   float getDistance();
   float getCourse();
+  float getDampedCourse();
+  bool  isDampedCourseValid();
   float getLocationLat();
   float getLocationLon();
   bool hasDestinationChanged();

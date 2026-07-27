@@ -19,6 +19,11 @@
 
 static constexpr uint32_t TFT_SPI_HZ = 24000000; // try 40 MHz; drop to 24 MHz if unstable
 
+// Same lavender/magenta used everywhere the old "Destination" box used to draw
+// (Mode text, Target/Correction, and previously Follow) - kept as one named
+// constant since the Target box now carries all of that meaning.
+static const uint16_t MAGENTA = 0xF57F;
+
 Adafruit_HX8357 tft = Adafruit_HX8357(&SPI, TFT_CS, TFT_DC, TFT_RST);
 
 uint16_t backgroundColor = HX8357_BLACK;
@@ -27,45 +32,49 @@ uint16_t backgroundColor = HX8357_BLACK;
 // Initialized to sentinels in initialize_displayed_values() so everything
 // paints on the first call to display().
 struct {
-  bool bearing_nav_enabled;
-  bool bearing_correction_nav_enabled;
-
   float speed;
   bool  speed_hasFix;
 
   float heading;
   bool  heading_connected;
 
-  float pitch;
-  bool  pitch_connected;
+  float track;
+  bool  track_valid;
 
-  float roll;
-  bool  roll_connected;
+  // Mode box now folds in nav_source (who's steering), which the controller
+  // can change without the mode value itself changing (e.g. Garmin -> OpenCPN,
+  // or a live source going stale back to NONE while mode stays 2). None of
+  // that flips the one-shot hasModeChanged() flag, so this box is polled every
+  // loop like Follow used to be, instead of being event-driven.
+  bool connected_mode;
+  bool navEnabled_mode;
+  bool tack_mode;
+  int  mode_mode;
+  int  navSource_mode;
 
-  int  stability;
-  bool stability_connected;
+  float target;
+  bool  target_connected;
+  bool  target_navEnabled;
 
-  float bearing;
-  int   bearing_mode;
-
-  float bearingCorrection;
-  int   bearingCorrection_mode;
+  float correction;
+  bool  correction_connected;
+  bool  correction_navEnabled;
 
   float distance;
   bool  distance_waypointSet;
   bool  distance_hasFix;
-
-  float course;
-  bool  course_hasFix;
-
-  int  navSource;
-  bool navSource_connected;
 
   float locationLat;
   bool  lat_hasFix;
 
   float locationLon;
   bool  lon_hasFix;
+
+  float waypointLat;
+  bool  waypointLat_set;
+
+  float waypointLon;
+  bool  waypointLon_set;
 
   int  dtMonth, dtDay, dtYear, dtHour, dtMinute;
   bool dt_hasFix;
@@ -79,19 +88,22 @@ struct {
 } disp;
 
 void initialize_displayed_values() {
-  disp.bearing_nav_enabled = false;   disp.bearing_correction_nav_enabled = false;
   disp.speed = -999.0f;          disp.speed_hasFix = false;
   disp.heading = -999.0f;        disp.heading_connected = false;
-  disp.pitch = -999.0f;          disp.pitch_connected = false;
-  disp.roll = -999.0f;           disp.roll_connected = false;
-  disp.stability = -1;           disp.stability_connected = false;
-  disp.bearing = -999.0f;        disp.bearing_mode = -1;
-  disp.bearingCorrection = -999.0f; disp.bearingCorrection_mode = -1;
+  disp.track = -999.0f;          disp.track_valid = false;
+
+  disp.connected_mode = false;   disp.navEnabled_mode = false; disp.tack_mode = false;
+  disp.mode_mode = -1;           disp.navSource_mode = -1;
+
+  disp.target = -999.0f;         disp.target_connected = false; disp.target_navEnabled = false;
+  disp.correction = -999.0f;     disp.correction_connected = false; disp.correction_navEnabled = false;
+
   disp.distance = -999.0f;       disp.distance_waypointSet = false; disp.distance_hasFix = false;
-  disp.course = -999.0f;         disp.course_hasFix = false;
-  disp.navSource = -1;           disp.navSource_connected = false;
   disp.locationLat = -999.0f;    disp.lat_hasFix = false;
   disp.locationLon = -999.0f;    disp.lon_hasFix = false;
+  disp.waypointLat = -999.0f;    disp.waypointLat_set = false;
+  disp.waypointLon = -999.0f;    disp.waypointLon_set = false;
+
   disp.dtMonth = -1; disp.dtDay = -1; disp.dtYear = -1;
   disp.dtHour = -1;  disp.dtMinute = -1; disp.dt_hasFix = false;
   disp.fixquality = -1;          disp.satellites = -1; disp.fix_hasFix = false;
@@ -141,55 +153,20 @@ void setup_screen() {
 // function tracks the last value it painted and skips the repaint if nothing
 // has changed, keeping the display as snappy and current as possible.
 void display() {
-  // mode/destination use one-shot consuming flags in AutoPilot, so keep them event-driven.
-  if (autoPilot.hasModeChanged()) {
-    DEBUG_PRINTLN("display Mode ");
-    display_mode();
-    DEBUG_PRINTLN("done display Mode");
-  }
-  if (autoPilot.hasDestinationChanged()) {
-    DEBUG_PRINTLN("display destination");
-    display_destination();
-    DEBUG_PRINTLN("done display destination");
-  }
-
   display_speed();
   display_heading();
-  display_pitch();
-  display_roll();
-  display_stability();
-  display_bearing();
-  display_bearing_correction();
-  display_follow();
+  display_track();
+  display_mode();
+  display_target();
+  display_correction();
   display_distance();
-  display_course();
   display_location_lat();
   display_location_lon();
+  display_waypoint_lat();
+  display_waypoint_lon();
   display_datetime();
   display_fix();
   display_volts();
-}
-
-void display_speed() {
-  float cur_speed  = autoPilot.getSpeed();
-  bool  cur_hasFix = autoPilot.hasFix();
-  if (cur_speed == disp.speed && cur_hasFix == disp.speed_hasFix) return;
-  disp.speed      = cur_speed;
-  disp.speed_hasFix = cur_hasFix;
-
-  GFXcanvas1 speed_value_canvas(90, 42);
-  uint16_t foregroundColor = HX8357_CYAN;
-  speed_value_canvas.fillScreen(0);  // Background index
-
-  if (cur_hasFix) {
-    speed_value_canvas.setTextColor(1);  // Foreground index
-    speed_value_canvas.setFont(&FreeSansBold24pt7b);
-    speed_value_canvas.setCursor(0, 37);
-    speed_value_canvas.print(cur_speed, 2);
-  }
-  // If no fix, the canvas remains cleared (black background)
-  // and will be drawn as such, effectively showing nothing or just background.
-  tft.drawBitmap(20, 23, speed_value_canvas.getBuffer(), 90, 42, foregroundColor, backgroundColor);
 }
 
 void display_heading() {
@@ -199,208 +176,159 @@ void display_heading() {
   disp.heading           = cur_heading;
   disp.heading_connected = cur_connected;
 
-  GFXcanvas1 compass_value_canvas(107, 32);
+  GFXcanvas1 canvas(130, 44);
   uint16_t foregroundColor = HX8357_YELLOW;
-  compass_value_canvas.fillScreen(0);  // Background index
+  canvas.fillScreen(0);
 
-  compass_value_canvas.setTextColor(1);  // Foreground index
-  compass_value_canvas.setFont(&FreeSansBold18pt7b);
-  compass_value_canvas.setCursor(0, 29);
   if (cur_connected) {
-    compass_value_canvas.print(cur_heading);
+    canvas.setTextColor(1);
+    canvas.setFont(&FreeSansBold24pt7b);
+    canvas.setCursor(0, 37);
+    canvas.print(cur_heading);
   }
-  tft.drawBitmap(20, 101, compass_value_canvas.getBuffer(), 107, 32, foregroundColor, backgroundColor);
+  tft.drawBitmap(20, 30, canvas.getBuffer(), 130, 44, foregroundColor, backgroundColor);
 }
 
-void display_pitch() {
-  float cur_pitch     = autoPilot.getPitch();
-  bool  cur_connected = autoPilot.isConnected();
-  if (cur_pitch == disp.pitch && cur_connected == disp.pitch_connected) return;
-  disp.pitch           = cur_pitch;
-  disp.pitch_connected = cur_connected;
+void display_speed() {
+  float cur_speed  = autoPilot.getSpeed();
+  bool  cur_hasFix = autoPilot.hasFix();
+  if (cur_speed == disp.speed && cur_hasFix == disp.speed_hasFix) return;
+  disp.speed      = cur_speed;
+  disp.speed_hasFix = cur_hasFix;
 
-  GFXcanvas1 compass_value_canvas(107, 32);
-  uint16_t foregroundColor = HX8357_YELLOW;
-  compass_value_canvas.fillScreen(0);  // Background index
+  GFXcanvas1 canvas(130, 44);
+  uint16_t foregroundColor = HX8357_CYAN;
+  canvas.fillScreen(0);
 
-  compass_value_canvas.setTextColor(1);  // Foreground index
-  compass_value_canvas.setFont(&FreeSansBold18pt7b);
-  compass_value_canvas.setCursor(0, 29);
-  if (cur_connected) {
-    compass_value_canvas.print(cur_pitch);
+  if (cur_hasFix) {
+    canvas.setTextColor(1);
+    canvas.setFont(&FreeSansBold24pt7b);
+    canvas.setCursor(0, 37);
+    canvas.print(cur_speed, 2);
   }
-  tft.drawBitmap(20, 158, compass_value_canvas.getBuffer(), 107, 32, foregroundColor, backgroundColor);
+  tft.drawBitmap(20, 119, canvas.getBuffer(), 130, 44, foregroundColor, backgroundColor);
 }
 
-void display_roll() {
-  float cur_roll      = autoPilot.getRoll();
-  bool  cur_connected = autoPilot.isConnected();
-  if (cur_roll == disp.roll && cur_connected == disp.roll_connected) return;
-  disp.roll           = cur_roll;
-  disp.roll_connected = cur_connected;
+void display_track() {
+  // Damped, trust-gated GPS track - not raw course, which is known-noisy
+  // below ~1kn (see AutoPilot.cpp's COG_TRUST_ENTER/EXIT_KNOTS). Blanks
+  // instead of showing a value until isDampedCourseValid() is true.
+  float cur_track = autoPilot.getDampedCourse();
+  bool  cur_valid = autoPilot.isDampedCourseValid();
+  if (cur_track == disp.track && cur_valid == disp.track_valid) return;
+  disp.track        = cur_track;
+  disp.track_valid = cur_valid;
 
-  GFXcanvas1 compass_value_canvas(107, 32);
-  uint16_t foregroundColor = HX8357_YELLOW;
-  compass_value_canvas.fillScreen(0);  // Background index
+  GFXcanvas1 canvas(130, 44);
+  uint16_t foregroundColor = HX8357_CYAN;
+  canvas.fillScreen(0);
 
-  compass_value_canvas.setTextColor(1);  // Foreground index
-  compass_value_canvas.setFont(&FreeSansBold18pt7b);
-  compass_value_canvas.setCursor(0, 29);
-  if (cur_connected) {
-    compass_value_canvas.print(cur_roll);
+  if (cur_valid) {
+    canvas.setTextColor(1);
+    canvas.setFont(&FreeSansBold24pt7b);
+    canvas.setCursor(0, 37);
+    canvas.print(cur_track, 1);
   }
-  tft.drawBitmap(20, 217, compass_value_canvas.getBuffer(), 107, 32, foregroundColor, backgroundColor);
+  tft.drawBitmap(20, 208, canvas.getBuffer(), 130, 44, foregroundColor, backgroundColor);
 }
 
-void display_stability() {
-  int  cur_stability  = autoPilot.getStabilityClassification();
-  bool cur_connected  = autoPilot.isConnected();
-  if (cur_stability == disp.stability && cur_connected == disp.stability_connected) return;
-  disp.stability           = cur_stability;
-  disp.stability_connected = cur_connected;
-
-  GFXcanvas1 compass_value_canvas(112, 32);
-  uint16_t foregroundColor = HX8357_YELLOW;
-  compass_value_canvas.fillScreen(0);  // Background index
-
-  compass_value_canvas.setTextColor(1);  // Foreground index
-  compass_value_canvas.setFont(&FreeSansBold12pt7b);
-  compass_value_canvas.setCursor(0, 29);
-  if (cur_connected) {
-    switch (cur_stability) {
-      case STABILITY_CLASSIFIER_UNKNOWN:
-        compass_value_canvas.print("Unknown");
-        break;
-      case STABILITY_CLASSIFIER_ON_TABLE:
-        compass_value_canvas.print("On Table");
-        break;
-      case STABILITY_CLASSIFIER_STATIONARY:
-        compass_value_canvas.print("Stationary");
-        break;
-      case STABILITY_CLASSIFIER_STABLE:
-        compass_value_canvas.print("Stable");
-        break;
-      case STABILITY_CLASSIFIER_MOTION:
-        compass_value_canvas.print("In Motion");
-        break;
-    }
-  }
-  tft.drawBitmap(20, 279, compass_value_canvas.getBuffer(), 112, 32, foregroundColor, backgroundColor);
-}
-
+// Polled every loop rather than gated on hasModeChanged(): nav_source can
+// change (Garmin <-> OpenCPN <-> NONE) without the numeric mode value itself
+// changing, which is exactly the "was following Garmin, source went stale,
+// now circling the last waypoint" case we most want this box to catch.
 void display_mode() {
-  GFXcanvas1 mode_value_canvas(115, 24);
-  uint16_t foregroundColor = 0xF57F;
-  mode_value_canvas.fillScreen(0);  // Background index
+  bool cur_connected  = autoPilot.isConnected();
+  bool cur_navEnabled = autoPilot.isNavigationEnabled();
+  bool cur_tack       = autoPilot.isTackRequested();
+  int  cur_mode       = autoPilot.getMode();
+  int  cur_navSource  = autoPilot.getNavSource();
 
-  mode_value_canvas.setTextColor(1);  // Foreground index
-  mode_value_canvas.setFont(&FreeSansBold12pt7b);
+  if (cur_connected == disp.connected_mode && cur_navEnabled == disp.navEnabled_mode &&
+      cur_tack == disp.tack_mode && cur_mode == disp.mode_mode && cur_navSource == disp.navSource_mode) {
+    return;
+  }
+  disp.connected_mode  = cur_connected;
+  disp.navEnabled_mode = cur_navEnabled;
+  disp.tack_mode       = cur_tack;
+  disp.mode_mode       = cur_mode;
+  disp.navSource_mode  = cur_navSource;
 
-  if (!autoPilot.isConnected()) {
-      mode_value_canvas.setCursor(0, 18);
-      mode_value_canvas.print("no link");
-  } else {
-    if (autoPilot.isNavigationEnabled()) {
-      if (autoPilot.isTackRequested()) {
-        mode_value_canvas.setCursor(0, 18);
-        mode_value_canvas.print("<- tack ->");
-      } else {
-        if (autoPilot.getMode() == 2) {
-          mode_value_canvas.setCursor(5, 18);
-          mode_value_canvas.print("waypoint");
-        } else if (autoPilot.getMode() == 1) {
-          mode_value_canvas.setCursor(0, 18);
-          mode_value_canvas.print("compass");
-        }
+  GFXcanvas1 canvas(135, 24);
+  canvas.fillScreen(0);
+  canvas.setTextColor(1);
+  canvas.setFont(&FreeSansBold12pt7b);
+  canvas.setCursor(0, 18);
+
+  if (!cur_connected) {
+    canvas.print("no link");
+  } else if (cur_navEnabled) {
+    if (cur_tack) {
+      canvas.print("tack");
+    } else if (cur_mode == 2) {
+      switch (cur_navSource) {
+             //  canvas.print("no link");
+             //  canvas.print("compass");
+             //  canvas.print("disabled");
+        case 1:  canvas.print("garmin");   break;
+        case 2:  canvas.print("opencpn");  break;
+        default: canvas.print("waypoint"); break;
       }
-    } else {
-      mode_value_canvas.setCursor(0, 18);
-      mode_value_canvas.print("disabled");
+    } else if (cur_mode == 1) {
+      canvas.print("compass");
     }
+  } else {
+    canvas.print("disabled");
   }
-  tft.drawBitmap(185, 20, mode_value_canvas.getBuffer(), 115, 24, foregroundColor, backgroundColor);
+  tft.drawBitmap(176, 38, canvas.getBuffer(), 135, 24, MAGENTA, backgroundColor);
 }
 
-void display_destination() {
-  GFXcanvas1 destination_value_canvas(139, 50);  // Changed to GFXcanvas1
-  uint16_t foregroundColor = 0xF57F;             // Default foreground color used in this canvas
+// Target = the live compass setpoint the autopilot is steering to: the held
+// heading in mode 1, or the GPS-track-trimmed steering setpoint in mode 2
+// (AutoPilot::heading_command on the controller) - publish.ino already picks
+// the right one for this same wire field, so no mode check is needed here.
+void display_target() {
+  bool  cur_connected  = autoPilot.isConnected();
+  bool  cur_navEnabled = autoPilot.isNavigationEnabled();
+  float cur_target     = autoPilot.getHeadingDesired();
+  if (cur_target == disp.target && cur_connected == disp.target_connected &&
+      cur_navEnabled == disp.target_navEnabled) return;
+  disp.target          = cur_target;
+  disp.target_connected  = cur_connected;
+  disp.target_navEnabled = cur_navEnabled;
 
-  destination_value_canvas.fillScreen(0);  // Use 0 for background index
-  int autoTuneState = autoPilot.getAutoTuneState();
-  if (autoTuneState == 1) {
-    // Ready/armed - only reachable while navigation is disabled, so this has
-    // to be drawn ahead of (not inside) the isNavigationEnabled() branch below.
-    destination_value_canvas.setTextColor(1);
-    destination_value_canvas.setFont(&FreeSansBold12pt7b);
-    destination_value_canvas.setCursor(0, 18);
-    destination_value_canvas.print("Ready to");
-    destination_value_canvas.setCursor(0, 45);
-    destination_value_canvas.print("auto-tune");
-  } else if (autoTuneState == 2) {
-    destination_value_canvas.setTextColor(1);
-    destination_value_canvas.setFont(&FreeSansBold12pt7b);
-    destination_value_canvas.setCursor(0, 30);
-    destination_value_canvas.print("Auto-tuning");
-  } else if (autoPilot.isNavigationEnabled()) {
-    if (autoPilot.getMode() == 2) {
-      destination_value_canvas.setTextColor(1);  // Use 1 for foreground index
-      destination_value_canvas.setFont(&FreeSansBold12pt7b);
-      destination_value_canvas.setCursor(23, 18);
-      destination_value_canvas.print(autoPilot.getWaypointLat(), 6);
-      destination_value_canvas.setCursor(0, 45);
-      destination_value_canvas.println(autoPilot.getWaypointLon(), 6);
-    } else if (autoPilot.getMode() == 1) {
-      destination_value_canvas.setTextColor(1);  // Use 1 for foreground index
-      destination_value_canvas.setFont(&FreeSansBold24pt7b);
-      destination_value_canvas.setCursor(10, 35);
-      destination_value_canvas.print(autoPilot.getHeadingDesired(), 1);
-    }
+  GFXcanvas1 canvas(130, 44);
+  canvas.fillScreen(0);
+  if (cur_connected && cur_navEnabled) {
+    canvas.setTextColor(1);
+    canvas.setFont(&FreeSansBold24pt7b);
+    canvas.setCursor(0, 37);
+    canvas.print(cur_target, 1);
   }
-  tft.drawBitmap(171, 52, destination_value_canvas.getBuffer(), 139, 50, foregroundColor, backgroundColor);
+  tft.drawBitmap(181, 130, canvas.getBuffer(), 130, 44, MAGENTA, backgroundColor);
 }
 
-void display_bearing() {
-  bool cur_nav = autoPilot.isNavigationEnabled();
-  float cur_bearing = autoPilot.getBearing();
-  if (cur_bearing == disp.bearing && cur_nav == disp.bearing_nav_enabled) return;
-  disp.bearing      = cur_bearing;
-  disp.bearing_nav_enabled = cur_nav;
+// Correction lives in the same box as Target, right underneath it, with no
+// label of its own - the only "unit" kept is the L/R steer direction.
+void display_correction() {
+  bool  cur_connected  = autoPilot.isConnected();
+  bool  cur_navEnabled = autoPilot.isNavigationEnabled();
+  float cur_correction = autoPilot.getBearingCorrection();
+  if (cur_correction == disp.correction && cur_connected == disp.correction_connected &&
+      cur_navEnabled == disp.correction_navEnabled) return;
+  disp.correction          = cur_correction;
+  disp.correction_connected  = cur_connected;
+  disp.correction_navEnabled = cur_navEnabled;
 
-  GFXcanvas1 bearing_value_canvas(115, 42);
-  uint16_t foregroundColor = 0xFC09;
-  bearing_value_canvas.fillScreen(0);  // Background index
-  if (autoPilot.isConnected() && autoPilot.isNavigationEnabled()) {
-    bearing_value_canvas.setFont(&FreeSansBold18pt7b);
-    bearing_value_canvas.setTextColor(1);  // Foreground index
-    bearing_value_canvas.setCursor(0, 29);
-    bearing_value_canvas.print(cur_bearing, 1);
+  GFXcanvas1 canvas(135, 32);
+  canvas.fillScreen(0);
+  if (cur_connected && cur_navEnabled) {
+    canvas.setTextColor(1);
+    canvas.setFont(&FreeSansBold18pt7b);
+    canvas.setCursor(0, 29);
+    canvas.print((cur_correction > 0) ? cur_correction : cur_correction * -1.0, 1);
+    canvas.println((cur_correction > 0) ? " R" : " L");
   }
-  // If mode is not > 0, canvas is cleared and drawn as such (effectively black)
-  tft.drawBitmap(182, 130, bearing_value_canvas.getBuffer(), 115, 42, foregroundColor, backgroundColor);
-}
-
-void display_bearing_correction() {
-  bool cur_nav = autoPilot.isNavigationEnabled();
-  float cur_bc   = autoPilot.getBearingCorrection();
-  if (cur_bc == disp.bearingCorrection && cur_nav == disp.bearing_correction_nav_enabled) return;
-  disp.bearingCorrection      = cur_bc;
-  disp.bearing_correction_nav_enabled = cur_nav;
-
-  // Canvas is 140 wide (was 115) and drawn 10px further left so a 3-digit
-  // correction like "180.0 L" has room for the L/R suffix without clipping.
-  GFXcanvas1 bearing_correction_value_canvas(140, 32);
-  uint16_t foregroundColor = 0xFC09;
-  bearing_correction_value_canvas.fillScreen(0);  // Background index
-
-  if (autoPilot.isConnected() && autoPilot.isNavigationEnabled()) {
-    bearing_correction_value_canvas.setTextColor(1);  // Foreground index
-    bearing_correction_value_canvas.setFont(&FreeSansBold18pt7b);
-    bearing_correction_value_canvas.setCursor(0, 29);
-    bearing_correction_value_canvas.print((cur_bc > 0) ? cur_bc : cur_bc * -1.0, 1);
-    bearing_correction_value_canvas.println((cur_bc > 0) ? " R" : " L");
-  }
-  // If mode is not > 0, canvas is cleared and drawn as such (effectively black)
-  tft.drawBitmap(177, 169, bearing_correction_value_canvas.getBuffer(), 140, 32, foregroundColor, backgroundColor);
+  tft.drawBitmap(182, 182, canvas.getBuffer(), 135, 32, MAGENTA, backgroundColor);
 }
 
 void display_volts() {
@@ -410,17 +338,17 @@ void display_volts() {
   disp.batteryVoltage = cur_batt;
   disp.inputVoltage   = cur_input;
 
-  GFXcanvas1 volts_value_canvas(120, 22);
+  GFXcanvas1 canvas(120, 22);
   uint16_t foregroundColor = HX8357_WHITE;
-  volts_value_canvas.fillScreen(0);  // Background index
+  canvas.fillScreen(0);
 
-  volts_value_canvas.setTextColor(1);  // Foreground index
-  volts_value_canvas.setFont(&FreeSansBold12pt7b);
-  volts_value_canvas.setCursor(0, 18);
-  volts_value_canvas.print(cur_batt, 2);
-  volts_value_canvas.print(" / ");
-  volts_value_canvas.println(cur_input, 1);
-  tft.drawBitmap(181, 239, volts_value_canvas.getBuffer(), 120, 22, foregroundColor, backgroundColor);
+  canvas.setTextColor(1);
+  canvas.setFont(&FreeSansBold12pt7b);
+  canvas.setCursor(0, 18);
+  canvas.print(cur_batt, 2);
+  canvas.print(" / ");
+  canvas.println(cur_input, 1);
+  tft.drawBitmap(20, 289, canvas.getBuffer(), 120, 22, foregroundColor, backgroundColor);
 }
 
 void display_distance() {
@@ -432,65 +360,17 @@ void display_distance() {
   disp.distance_waypointSet = cur_waypointSet;
   disp.distance_hasFix     = cur_hasFix;
 
-  // 18pt value (matches Heading), vertically centered in the shortened box.
-  GFXcanvas1 distance_value_canvas(105, 32);
+  GFXcanvas1 canvas(130, 44);
   uint16_t foregroundColor = HX8357_CYAN;
-  distance_value_canvas.fillScreen(0);  // Background index
+  canvas.fillScreen(0);
 
-  distance_value_canvas.setTextColor(1);  // Foreground index
-  distance_value_canvas.setFont(&FreeSansBold18pt7b);
-  distance_value_canvas.setCursor(0, 29);
   if (cur_waypointSet && cur_hasFix) {
-    distance_value_canvas.print(cur_distance, 2);
+    canvas.setTextColor(1);
+    canvas.setFont(&FreeSansBold24pt7b);
+    canvas.setCursor(0, 37);
+    canvas.print(cur_distance, 2);
   }
-  tft.drawBitmap(341, 80, distance_value_canvas.getBuffer(), 105, 32, foregroundColor, backgroundColor);
-}
-
-void display_course() {
-  float cur_course = autoPilot.getCourse();
-  bool  cur_hasFix = autoPilot.hasFix();
-  if (cur_course == disp.course && cur_hasFix == disp.course_hasFix) return;
-  disp.course        = cur_course;
-  disp.course_hasFix = cur_hasFix;
-
-  // 18pt value (matches Heading), vertically centered in the shortened box.
-  GFXcanvas1 course_value_canvas(115, 32);
-  uint16_t foregroundColor = 0x7FE8;
-  course_value_canvas.fillScreen(0);  // Background index
-
-  if (cur_hasFix) {
-    course_value_canvas.setTextColor(1);  // Foreground index
-    course_value_canvas.setFont(&FreeSansBold18pt7b);
-    course_value_canvas.setCursor(0, 29);
-    course_value_canvas.print(cur_course, 1);
-  }
-  // If no fix, canvas is cleared and drawn as such
-  tft.drawBitmap(341, 147, course_value_canvas.getBuffer(), 115, 32, foregroundColor, backgroundColor);
-}
-
-void display_follow() {
-  int  cur_source    = autoPilot.getNavSource();
-  bool cur_connected = autoPilot.isConnected();
-  if (cur_source == disp.navSource && cur_connected == disp.navSource_connected) return;
-  disp.navSource           = cur_source;
-  disp.navSource_connected = cur_connected;
-
-  GFXcanvas1 follow_value_canvas(130, 24);
-  uint16_t foregroundColor = 0xF57F;  // same lavender as Destination
-  follow_value_canvas.fillScreen(0);  // Background index
-
-  follow_value_canvas.setTextColor(1);  // Foreground index
-  follow_value_canvas.setFont(&FreeSansBold12pt7b);
-  follow_value_canvas.setCursor(0, 18);
-  if (cur_connected) {
-    switch (cur_source) {
-      case 1:  follow_value_canvas.print("Garmin");  break;
-      case 2:  follow_value_canvas.print("OpenCPN"); break;
-      default: follow_value_canvas.print("None");    break;
-    }
-  }
-  // If no link, canvas stays cleared (blank)
-  tft.drawBitmap(340, 23, follow_value_canvas.getBuffer(), 130, 24, foregroundColor, backgroundColor);
+  tft.drawBitmap(341, 119, canvas.getBuffer(), 130, 44, foregroundColor, backgroundColor);
 }
 
 void display_location_lat() {
@@ -500,18 +380,17 @@ void display_location_lat() {
   disp.locationLat = cur_lat;
   disp.lat_hasFix  = cur_hasFix;
 
-  GFXcanvas1 location_lat_value_canvas(115, 22);
+  GFXcanvas1 canvas(115, 22);
   uint16_t foregroundColor = 0x7FE8;
-  location_lat_value_canvas.fillScreen(0);  // Background index
+  canvas.fillScreen(0);
 
   if (cur_hasFix) {
-    location_lat_value_canvas.setTextColor(1);  // Foreground index
-    location_lat_value_canvas.setFont(&FreeSansBold12pt7b);
-    location_lat_value_canvas.setCursor(0, 18);
-    location_lat_value_canvas.print(cur_lat, 6);
+    canvas.setTextColor(1);
+    canvas.setFont(&FreeSansBold12pt7b);
+    canvas.setCursor(0, 18);
+    canvas.print(cur_lat, 6);
   }
-  // If no fix, canvas is cleared and drawn as such
-  tft.drawBitmap(354, 214, location_lat_value_canvas.getBuffer(), 115, 22, foregroundColor, backgroundColor);
+  tft.drawBitmap(341, 22, canvas.getBuffer(), 115, 22, foregroundColor, backgroundColor);
 }
 
 void display_location_lon() {
@@ -521,18 +400,59 @@ void display_location_lon() {
   disp.locationLon = cur_lon;
   disp.lon_hasFix  = cur_hasFix;
 
-  GFXcanvas1 location_lon_value_canvas(139, 22);
+  GFXcanvas1 canvas(139, 22);
   uint16_t foregroundColor = 0x7FE8;
-  location_lon_value_canvas.fillScreen(0);  // Background index
+  canvas.fillScreen(0);
 
   if (cur_hasFix) {
-    location_lon_value_canvas.setTextColor(1);  // Foreground index
-    location_lon_value_canvas.setFont(&FreeSansBold12pt7b);
-    location_lon_value_canvas.setCursor(0, 18);
-    location_lon_value_canvas.print(cur_lon, 6);
+    canvas.setTextColor(1);
+    canvas.setFont(&FreeSansBold12pt7b);
+    canvas.setCursor(0, 18);
+    canvas.print(cur_lon, 6);
   }
-  // If no fix, canvas is cleared and drawn as such
-  tft.drawBitmap(331, 238, location_lon_value_canvas.getBuffer(), 139, 22, foregroundColor, backgroundColor);
+  tft.drawBitmap(331, 46, canvas.getBuffer(), 139, 22, foregroundColor, backgroundColor);
+}
+
+// Mirrors display_location_lat/lon exactly (same font, same two-line layout)
+// but for the commanded waypoint, and only while one is actually set.
+void display_waypoint_lat() {
+  float cur_lat = autoPilot.getWaypointLat();
+  bool  cur_set = autoPilot.isWaypointSet();
+  if (cur_lat == disp.waypointLat && cur_set == disp.waypointLat_set) return;
+  disp.waypointLat     = cur_lat;
+  disp.waypointLat_set = cur_set;
+
+  GFXcanvas1 canvas(115, 22);
+  uint16_t foregroundColor = 0x7FE8;
+  canvas.fillScreen(0);
+
+  if (cur_set) {
+    canvas.setTextColor(1);
+    canvas.setFont(&FreeSansBold12pt7b);
+    canvas.setCursor(0, 18);
+    canvas.print(cur_lat, 6);
+  }
+  tft.drawBitmap(341, 200, canvas.getBuffer(), 115, 22, foregroundColor, backgroundColor);
+}
+
+void display_waypoint_lon() {
+  float cur_lon = autoPilot.getWaypointLon();
+  bool  cur_set = autoPilot.isWaypointSet();
+  if (cur_lon == disp.waypointLon && cur_set == disp.waypointLon_set) return;
+  disp.waypointLon     = cur_lon;
+  disp.waypointLon_set = cur_set;
+
+  GFXcanvas1 canvas(139, 22);
+  uint16_t foregroundColor = 0x7FE8;
+  canvas.fillScreen(0);
+
+  if (cur_set) {
+    canvas.setTextColor(1);
+    canvas.setFont(&FreeSansBold12pt7b);
+    canvas.setCursor(0, 18);
+    canvas.print(cur_lon, 6);
+  }
+  tft.drawBitmap(331, 224, canvas.getBuffer(), 139, 22, foregroundColor, backgroundColor);
 }
 
 void display_datetime() {
@@ -547,21 +467,19 @@ void display_datetime() {
   disp.dtMonth  = cur_month; disp.dtDay  = cur_day;  disp.dtYear   = cur_year;
   disp.dtHour   = cur_hour;  disp.dtMinute = cur_minute; disp.dt_hasFix = cur_hasFix;
 
-  GFXcanvas1 date_time_value_canvas(165, 22);
+  GFXcanvas1 canvas(165, 22);
   uint16_t foregroundColor = HX8357_WHITE;
-  date_time_value_canvas.fillScreen(0);  // Background index
+  canvas.fillScreen(0);
 
-  date_time_value_canvas.setTextColor(1);  // Foreground index
-  date_time_value_canvas.setFont(&FreeSansBold12pt7b);
-  date_time_value_canvas.setCursor(0, 18);
+  canvas.setTextColor(1);
+  canvas.setFont(&FreeSansBold12pt7b);
+  canvas.setCursor(0, 18);
   if (cur_hasFix) {
     char dateTimeString[16];
     sprintf(dateTimeString, "%d/%d/%02d %d:%02d", cur_month, cur_day, cur_year % 100, cur_hour, cur_minute);
-    date_time_value_canvas.print(dateTimeString);
-  } else {
-    date_time_value_canvas.print("");
+    canvas.print(dateTimeString);
   }
-  tft.drawBitmap(181, 293, date_time_value_canvas.getBuffer(), 165, 22, foregroundColor, backgroundColor);
+  tft.drawBitmap(181, 289, canvas.getBuffer(), 165, 22, foregroundColor, backgroundColor);
 }
 
 void display_fix() {
@@ -573,255 +491,201 @@ void display_fix() {
   disp.satellites = cur_satellites;
   disp.fix_hasFix = cur_hasFix;
 
-  GFXcanvas1 gps_fix_value_canvas(110, 22);
+  GFXcanvas1 canvas(110, 22);
   uint16_t foregroundColor = HX8357_WHITE;
-  gps_fix_value_canvas.fillScreen(0);  // Background index
+  canvas.fillScreen(0);
 
-  gps_fix_value_canvas.setTextColor(1);  // Foreground index
-  gps_fix_value_canvas.setFont(&FreeSansBold12pt7b);
-  gps_fix_value_canvas.setCursor(0, 18);
+  canvas.setTextColor(1);
+  canvas.setFont(&FreeSansBold12pt7b);
+  canvas.setCursor(0, 18);
   if (cur_hasFix) {
     if (cur_fixquality == 0) {
-      gps_fix_value_canvas.print("n/a");
+      canvas.print("n/a");
     } else if (cur_fixquality == 1) {
-      gps_fix_value_canvas.print("GPS");
+      canvas.print("GPS");
     } else if (cur_fixquality == 2) {
-      gps_fix_value_canvas.print("DGPS");
+      canvas.print("DGPS");
     } else {
       // if it is not 1 or 2 let's display it so we can figure out what it is.
-      gps_fix_value_canvas.print(cur_fixquality);
+      canvas.print(cur_fixquality);
     }
-    gps_fix_value_canvas.print("(");
-    gps_fix_value_canvas.print(cur_satellites);
-    gps_fix_value_canvas.print(")");
+    canvas.print("(");
+    canvas.print(cur_satellites);
+    canvas.print(")");
   }
-  // If no fix, canvas is cleared and drawn as such
-  tft.drawBitmap(360, 293, gps_fix_value_canvas.getBuffer(), 110, 22, foregroundColor, backgroundColor);
+  tft.drawBitmap(360, 289, canvas.getBuffer(), 110, 22, foregroundColor, backgroundColor);
 }
 
 void initialize_display() {
   DEBUG_PRINTLN("Initializing display");
+  initialize_heading();
   initialize_speed();
-  initialize_compass();
-  initialize_pitch();
-  initialize_roll();
-  initialize_stability();
-  initialize_destination();
-  initialize_bearing();
-  initialize_volts();
-  initialize_follow();
-  initialize_distance();
-  initialize_course();
+  initialize_track();
+  initialize_mode();
+  initialize_target();
   initialize_location();
+  initialize_distance();
+  initialize_waypoint();
+  initialize_volts();
   initialize_date_time();
+}
+
+// Row heights: the bottom bar is back to its original 54px (matching the old
+// standalone Volts box), so Heading/Speed/Track (and everything else in rows
+// 1-3) pick up the freed height, split proportionately (89/89/88).
+// Column 1 (x 0-160): Heading / Speed / Track.
+void initialize_heading() {
+  int16_t x1, y1;
+  uint16_t w, h;
+  GFXcanvas1 canvas(160, 89);
+  canvas.fillScreen(HX8357_BLACK);
+  canvas.setFont(&FreeSans9pt7b);
+  canvas.drawRect(0, 0, 160, 89, HX8357_YELLOW);
+  canvas.getTextBounds("Heading", 0, 12, &x1, &y1, &w, &h);
+  canvas.fillRect(x1, y1, w + 8, h + 1, HX8357_YELLOW);
+  canvas.setCursor(0, 12);
+  canvas.setTextColor(HX8357_BLACK);
+  canvas.print("Heading");
+  tft.drawBitmap(0, 0, canvas.getBuffer(), 160, 89, HX8357_YELLOW, HX8357_BLACK);
 }
 
 void initialize_speed() {
   int16_t x1, y1;
   uint16_t w, h;
-  // Canvas for Speed
-  GFXcanvas1 speed_canvas(160, 80);
-  speed_canvas.fillScreen(HX8357_BLACK);
-  speed_canvas.setFont(&FreeSans9pt7b);
-  speed_canvas.drawRect(0, 0, 160, 80, HX8357_CYAN);
-  speed_canvas.getTextBounds("Speed", 0, 12, &x1, &y1, &w, &h);
-  speed_canvas.fillRect(x1, y1, w + 8, h + 2, HX8357_CYAN);
-  speed_canvas.setCursor(0, 14);
-  speed_canvas.setTextColor(HX8357_BLACK);
-  speed_canvas.print("Speed");
-  tft.drawBitmap(0, 0, speed_canvas.getBuffer(), 160, 80, HX8357_CYAN, HX8357_BLACK);
+  GFXcanvas1 canvas(160, 89);
+  canvas.fillScreen(HX8357_BLACK);
+  canvas.setFont(&FreeSans9pt7b);
+  canvas.drawRect(0, 0, 160, 89, HX8357_CYAN);
+  canvas.getTextBounds("Speed", 0, 12, &x1, &y1, &w, &h);
+  canvas.fillRect(x1, y1, w + 8, h + 1, HX8357_CYAN);
+  canvas.setCursor(0, 12);
+  canvas.setTextColor(HX8357_BLACK);
+  canvas.print("Speed");
+  tft.drawBitmap(0, 89, canvas.getBuffer(), 160, 89, HX8357_CYAN, HX8357_BLACK);
 }
 
-void initialize_compass() {
+void initialize_track() {
   int16_t x1, y1;
   uint16_t w, h;
-  // Heading
-  GFXcanvas1 compass_canvas(160, 60);
-  compass_canvas.fillScreen(HX8357_BLACK);
-  compass_canvas.setFont(&FreeSans9pt7b);
-  compass_canvas.drawRect(0, 0, 160, 60, HX8357_YELLOW);
-  compass_canvas.getTextBounds("Heading", 0, 12, &x1, &y1, &w, &h);
-  compass_canvas.fillRect(x1, y1, w + 8, h + 1, HX8357_YELLOW);
-  compass_canvas.setCursor(0, 12);
-  compass_canvas.setTextColor(HX8357_BLACK);
-  compass_canvas.print("Heading");
-  tft.drawBitmap(0, 81, compass_canvas.getBuffer(), 160, 60, HX8357_YELLOW, HX8357_BLACK);
+  GFXcanvas1 canvas(160, 88);
+  canvas.fillScreen(HX8357_BLACK);
+  canvas.setFont(&FreeSans9pt7b);
+  canvas.drawRect(0, 0, 160, 88, HX8357_CYAN);
+  canvas.getTextBounds("Track", 0, 12, &x1, &y1, &w, &h);
+  canvas.fillRect(x1, y1, w + 8, h + 1, HX8357_CYAN);
+  canvas.setCursor(0, 12);
+  canvas.setTextColor(HX8357_BLACK);
+  canvas.print("Track");
+  tft.drawBitmap(0, 178, canvas.getBuffer(), 160, 88, HX8357_CYAN, HX8357_BLACK);
 }
 
-void initialize_pitch() {
+// Column 2 (x 161-320): Mode (top row), Target+Correction (spans the next two
+// rows and holds both values in one box, no label on Correction).
+void initialize_mode() {
   int16_t x1, y1;
   uint16_t w, h;
-  // Pitch
-  GFXcanvas1 compass_canvas(160, 60);
-  compass_canvas.fillScreen(HX8357_BLACK);
-  compass_canvas.setFont(&FreeSans9pt7b);
-  compass_canvas.drawRect(0, 0, 160, 60, HX8357_YELLOW);
-  compass_canvas.getTextBounds("Pitch", 0, 12, &x1, &y1, &w, &h);
-  compass_canvas.fillRect(x1, y1, w + 8, h + 1, HX8357_YELLOW);
-  compass_canvas.setCursor(0, 12);
-  compass_canvas.setTextColor(HX8357_BLACK);
-  compass_canvas.print("Pitch");
-  tft.drawBitmap(0, 141, compass_canvas.getBuffer(), 160, 60, HX8357_YELLOW, HX8357_BLACK);
+  GFXcanvas1 canvas(159, 89);
+  canvas.fillScreen(HX8357_BLACK);
+  canvas.setFont(&FreeSans9pt7b);
+  canvas.drawRect(0, 0, 159, 89, HX8357_WHITE);
+  canvas.getTextBounds("Mode", 0, 12, &x1, &y1, &w, &h);
+  canvas.fillRect(x1, y1, w + 8, h + 1, HX8357_WHITE);
+  canvas.setCursor(0, 12);
+  canvas.setTextColor(HX8357_BLACK);
+  canvas.print("Mode");
+  tft.drawBitmap(161, 0, canvas.getBuffer(), 159, 89, MAGENTA, HX8357_BLACK);
 }
 
-void initialize_roll() {
+void initialize_target() {
   int16_t x1, y1;
   uint16_t w, h;
-  // Roll
-  GFXcanvas1 compass_canvas(160, 60);
-  compass_canvas.fillScreen(HX8357_BLACK);
-  compass_canvas.setFont(&FreeSans9pt7b);
-  compass_canvas.drawRect(0, 0, 160, 60, HX8357_YELLOW);
-  compass_canvas.getTextBounds("Roll", 0, 12, &x1, &y1, &w, &h);
-  compass_canvas.fillRect(x1, y1, w + 8, h + 1, HX8357_YELLOW);
-  compass_canvas.setCursor(0, 12);
-  compass_canvas.setTextColor(HX8357_BLACK);
-  compass_canvas.print("Roll");
-  tft.drawBitmap(0, 201, compass_canvas.getBuffer(), 160, 60, HX8357_YELLOW, HX8357_BLACK);
+  GFXcanvas1 canvas(159, 177);
+  canvas.fillScreen(HX8357_BLACK);
+  canvas.setFont(&FreeSans9pt7b);
+  canvas.drawRect(0, 0, 159, 177, HX8357_WHITE);
+  canvas.getTextBounds("Target", 0, 12, &x1, &y1, &w, &h);
+  canvas.fillRect(x1, y1, w + 8, h + 1, HX8357_WHITE);
+  canvas.setCursor(0, 12);
+  canvas.setTextColor(HX8357_BLACK);
+  canvas.print("Target");
+  tft.drawBitmap(161, 89, canvas.getBuffer(), 159, 177, MAGENTA, HX8357_BLACK);
 }
 
-void initialize_stability() {
+// Column 3 (x 321-480): Location (top), Distance, Waypoint.
+void initialize_location() {
   int16_t x1, y1;
   uint16_t w, h;
-  // Roll
-  GFXcanvas1 compass_canvas(160, 59);
-  compass_canvas.fillScreen(HX8357_BLACK);
-  compass_canvas.setFont(&FreeSans9pt7b);
-  compass_canvas.drawRect(0, 0, 160, 59, HX8357_YELLOW);
-  compass_canvas.getTextBounds("Stability", 0, 12, &x1, &y1, &w, &h);
-  compass_canvas.fillRect(x1, y1, w + 8, h + 1, HX8357_YELLOW);
-  compass_canvas.setCursor(0, 12);
-  compass_canvas.setTextColor(HX8357_BLACK);
-  compass_canvas.print("Stability");
-  tft.drawBitmap(0, 261, compass_canvas.getBuffer(), 160, 59, HX8357_YELLOW, HX8357_BLACK);
-}
-
-void initialize_destination() {
-  int16_t x1, y1;
-  uint16_t w, h;
-  // Canvas for GPS Coordinates lat and long
-  // for current and desired location
-  GFXcanvas1 destination_canvas(159, 135);
-  destination_canvas.fillScreen(HX8357_BLACK);
-  destination_canvas.setFont(&FreeSans9pt7b);
-  destination_canvas.drawRect(0, 0, 159, 105, HX8357_YELLOW);
-  destination_canvas.getTextBounds("Destination", 0, 12, &x1, &y1, &w, &h);
-  destination_canvas.fillRect(x1, y1, w + 8, h + 3, HX8357_YELLOW);
-  destination_canvas.setCursor(0, 14);
-  destination_canvas.setTextColor(HX8357_BLACK);
-  destination_canvas.print("Destination");
-  tft.drawBitmap(161, 0, destination_canvas.getBuffer(), 159, 105, 0xF57F, HX8357_BLACK);
-}
-
-void initialize_bearing() {
-  int16_t x1, y1;
-  uint16_t w, h;
-  // // Canvas for Course Correction
-  GFXcanvas1 bearing_canvas(159, 109);
-  bearing_canvas.fillScreen(HX8357_BLACK);
-  bearing_canvas.drawRect(0, 0, 159, 109, HX8357_WHITE);
-  bearing_canvas.setFont(&FreeSans9pt7b);
-  bearing_canvas.getTextBounds("Bearing", 0, 12, &x1, &y1, &w, &h);
-  bearing_canvas.fillRect(x1, y1, w + 8, h + 3, HX8357_WHITE);
-  bearing_canvas.setCursor(0, 14);
-  bearing_canvas.setTextColor(HX8357_BLACK);
-  bearing_canvas.print("Bearing");
-  tft.drawBitmap(161, 106, bearing_canvas.getBuffer(), 159, 109, 0xFC09, HX8357_BLACK);
-}
-
-void initialize_volts() {
-  int16_t x1, y1;
-  uint16_t w, h;
-  // // Canvas for Course Correction
-  GFXcanvas1 volts_canvas(159, 54);
-  volts_canvas.fillScreen(HX8357_BLACK);
-  volts_canvas.drawRect(0, 0, 159, 54, HX8357_WHITE);
-  volts_canvas.setFont(&FreeSans9pt7b);
-  volts_canvas.getTextBounds("Volts", 0, 12, &x1, &y1, &w, &h);
-  volts_canvas.fillRect(x1, y1, w + 8, h + 3, HX8357_WHITE);
-  volts_canvas.setCursor(0, 14);
-  volts_canvas.setTextColor(HX8357_BLACK);
-  volts_canvas.print("Volts");
-  tft.drawBitmap(161, 216, volts_canvas.getBuffer(), 159, 54, HX8357_WHITE, HX8357_BLACK);
+  GFXcanvas1 canvas(159, 89);
+  canvas.fillScreen(HX8357_BLACK);
+  canvas.setFont(&FreeSans9pt7b);
+  canvas.drawRect(0, 0, 159, 89, HX8357_YELLOW);
+  canvas.getTextBounds("Location", 0, 12, &x1, &y1, &w, &h);
+  canvas.fillRect(x1, y1, w + 8, h + 3, HX8357_YELLOW);
+  canvas.setCursor(0, 14);
+  canvas.setTextColor(HX8357_BLACK);
+  canvas.print("Location");
+  tft.drawBitmap(321, 0, canvas.getBuffer(), 159, 89, 0x7FE8, HX8357_BLACK);
 }
 
 void initialize_distance() {
   int16_t x1, y1;
   uint16_t w, h;
-  // Canvas for Distance (shortened, lowered to sit below the Follow box)
-  GFXcanvas1 distance_canvas(159, 66);
-  distance_canvas.fillScreen(HX8357_BLACK);
-  distance_canvas.setFont(&FreeSans9pt7b);
-  distance_canvas.drawRect(0, 0, 159, 66, HX8357_WHITE);
-  distance_canvas.getTextBounds("Distance", 0, 12, &x1, &y1, &w, &h);
-  distance_canvas.fillRect(x1, y1, w + 8, h + 3, HX8357_WHITE);
-  distance_canvas.setCursor(0, 14);
-  distance_canvas.setTextColor(HX8357_BLACK);
-  distance_canvas.print("Distance");
-  tft.drawBitmap(321, 55, distance_canvas.getBuffer(), 159, 66, HX8357_CYAN, HX8357_BLACK);
+  GFXcanvas1 canvas(159, 89);
+  canvas.fillScreen(HX8357_BLACK);
+  canvas.setFont(&FreeSans9pt7b);
+  canvas.drawRect(0, 0, 159, 89, HX8357_WHITE);
+  canvas.getTextBounds("Distance", 0, 12, &x1, &y1, &w, &h);
+  canvas.fillRect(x1, y1, w + 8, h + 3, HX8357_WHITE);
+  canvas.setCursor(0, 14);
+  canvas.setTextColor(HX8357_BLACK);
+  canvas.print("Distance");
+  tft.drawBitmap(321, 89, canvas.getBuffer(), 159, 89, HX8357_CYAN, HX8357_BLACK);
 }
 
-// New "Follow" box at the top of the third column: shows which source is
-// steering (None / OpenCPN / Garmin). Same lavender as the Destination box.
-void initialize_follow() {
+void initialize_waypoint() {
   int16_t x1, y1;
   uint16_t w, h;
-  GFXcanvas1 follow_canvas(159, 54);
-  follow_canvas.fillScreen(HX8357_BLACK);
-  follow_canvas.setFont(&FreeSans9pt7b);
-  follow_canvas.drawRect(0, 0, 159, 54, HX8357_WHITE);
-  follow_canvas.getTextBounds("Follow", 0, 12, &x1, &y1, &w, &h);
-  follow_canvas.fillRect(x1, y1, w + 8, h + 3, HX8357_WHITE);
-  follow_canvas.setCursor(0, 14);
-  follow_canvas.setTextColor(HX8357_BLACK);
-  follow_canvas.print("Follow");
-  tft.drawBitmap(321, 0, follow_canvas.getBuffer(), 159, 54, 0xF57F, HX8357_BLACK);
+  GFXcanvas1 canvas(159, 88);
+  canvas.fillScreen(HX8357_BLACK);
+  canvas.setFont(&FreeSans9pt7b);
+  canvas.drawRect(0, 0, 159, 88, HX8357_YELLOW);
+  canvas.getTextBounds("Waypoint", 0, 12, &x1, &y1, &w, &h);
+  canvas.fillRect(x1, y1, w + 8, h + 3, HX8357_YELLOW);
+  canvas.setCursor(0, 14);
+  canvas.setTextColor(HX8357_BLACK);
+  canvas.print("Waypoint");
+  tft.drawBitmap(321, 178, canvas.getBuffer(), 159, 88, 0x7FE8, HX8357_BLACK);
 }
 
-void initialize_course() {
+// Bottom bar (y 266-320, 54px - back to the original Volts/Date-Time height):
+// Volts is the left third (column 1's width), Date/Time + fix/satellites is
+// the right two-thirds (columns 2+3), unchanged content and font from before.
+void initialize_volts() {
   int16_t x1, y1;
   uint16_t w, h;
-  // Course box (shortened, lowered to sit just above Location)
-  GFXcanvas1 course_canvas(159, 67);
-  course_canvas.fillScreen(HX8357_BLACK);
-  course_canvas.setFont(&FreeSans9pt7b);
-  course_canvas.drawRect(0, 0, 159, 67, HX8357_WHITE);
-  course_canvas.getTextBounds("Course", 0, 12, &x1, &y1, &w, &h);
-  course_canvas.fillRect(x1, y1, w + 8, h + 3, HX8357_WHITE);
-  course_canvas.setCursor(0, 14);
-  course_canvas.setTextColor(HX8357_BLACK);
-  course_canvas.print("Course");
-  tft.drawBitmap(321, 122, course_canvas.getBuffer(), 159, 67, 0x7FE8, HX8357_BLACK);
-}
-
-void initialize_location() {
-  int16_t x1, y1;
-  uint16_t w, h;
-  // Location box (shortened; lat/lon are vertically centered by display_location_*)
-  GFXcanvas1 location_canvas(159, 80);
-  location_canvas.fillScreen(HX8357_BLACK);
-  location_canvas.setFont(&FreeSans9pt7b);
-  location_canvas.drawRect(0, 0, 159, 80, HX8357_YELLOW);
-  location_canvas.getTextBounds("Location", 0, 12, &x1, &y1, &w, &h);
-  location_canvas.fillRect(x1, y1, w + 8, h + 3, HX8357_YELLOW);
-  location_canvas.setCursor(0, 14);
-  location_canvas.setTextColor(HX8357_BLACK);
-  location_canvas.print("Location");
-  tft.drawBitmap(321, 189, location_canvas.getBuffer(), 159, 80, 0x7FE8, HX8357_BLACK);
+  GFXcanvas1 canvas(160, 54);
+  canvas.fillScreen(HX8357_BLACK);
+  canvas.drawRect(0, 0, 160, 54, HX8357_WHITE);
+  canvas.setFont(&FreeSans9pt7b);
+  canvas.getTextBounds("Volts", 0, 12, &x1, &y1, &w, &h);
+  canvas.fillRect(x1, y1, w + 8, h + 3, HX8357_WHITE);
+  canvas.setCursor(0, 14);
+  canvas.setTextColor(HX8357_BLACK);
+  canvas.print("Volts");
+  tft.drawBitmap(0, 266, canvas.getBuffer(), 160, 54, HX8357_WHITE, HX8357_BLACK);
 }
 
 void initialize_date_time() {
   int16_t x1, y1;
   uint16_t w, h;
-  // Canvas for Date and Time
-  GFXcanvas1 date_time_canvas(319, 50);
-  date_time_canvas.fillScreen(HX8357_BLACK);
-  date_time_canvas.setFont(&FreeSans9pt7b);
-  date_time_canvas.drawRect(0, 0, 319, 50, HX8357_WHITE);
-  date_time_canvas.getTextBounds("Date &Time", 0, 12, &x1, &y1, &w, &h);
-  date_time_canvas.fillRect(x1, y1, w + 8, h + 3, HX8357_WHITE);
-  date_time_canvas.setCursor(0, 14);
-  date_time_canvas.setTextColor(HX8357_BLACK);
-  date_time_canvas.print("Date & Time");
-  tft.drawBitmap(161, 270, date_time_canvas.getBuffer(), 319, 50, HX8357_WHITE, HX8357_BLACK);
+  GFXcanvas1 canvas(319, 54);
+  canvas.fillScreen(HX8357_BLACK);
+  canvas.setFont(&FreeSans9pt7b);
+  canvas.drawRect(0, 0, 319, 54, HX8357_WHITE);
+  canvas.getTextBounds("Date &Time", 0, 12, &x1, &y1, &w, &h);
+  canvas.fillRect(x1, y1, w + 8, h + 3, HX8357_WHITE);
+  canvas.setCursor(0, 14);
+  canvas.setTextColor(HX8357_BLACK);
+  canvas.print("Date & Time");
+  tft.drawBitmap(161, 266, canvas.getBuffer(), 319, 54, HX8357_WHITE, HX8357_BLACK);
 }
