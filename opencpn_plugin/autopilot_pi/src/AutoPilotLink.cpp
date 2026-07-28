@@ -550,9 +550,9 @@ void AutoPilotLink::ParseApdat(char* data) {
     s.wp_lon          = nextDouble();
     s.heading_desired = nextDouble();
     s.heading         = nextDouble();
-    s.pitch           = nextDouble();
-    s.roll            = nextDouble();
-    s.stability       = nextInt();
+    nextDouble();  // pitch — not displayed by this plugin, skip over
+    nextDouble();  // roll — not displayed by this plugin, skip over
+    nextInt();     // stability classification — not displayed by this plugin, skip over
     s.bearing         = nextDouble();
     s.bearing_correction = nextDouble();
     s.speed           = nextDouble();
@@ -560,8 +560,12 @@ void AutoPilotLink::ParseApdat(char* data) {
     s.course          = nextDouble();
     s.location_lat    = nextDouble();
     s.location_lon    = nextDouble();
-    // Phase B: nav_source is the last field; absent on pre-B firmware → nextInt returns 0 (NONE).
+    // Phase B: nav_source; absent on pre-B firmware → nextInt returns 0 (NONE).
     s.nav_source      = nextInt();
+    nextInt();  // autoTuneState — not used by this plugin, skip over
+    // Damped GPS track; absent on older firmware → 0.0/false (shown as "--").
+    s.cog_damped       = nextDouble();
+    s.cog_damped_valid = nextInt() != 0;
 
     // Preserve locally-commanded fields for LOCAL_SUPPRESS_MS after a button press,
     // matching the display unit's localCommandTime suppression in AutoPilot.cpp.

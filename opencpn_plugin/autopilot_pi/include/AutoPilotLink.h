@@ -20,12 +20,15 @@ struct AutoPilotState {
     double wp_lat, wp_lon;
     double heading_desired;
     double heading;
-    double pitch, roll;
-    int    stability;      // raw classification integer
     double bearing, bearing_correction;
     double speed, distance, course;
     double location_lat, location_lon;
     int    nav_source;  // 0=NONE, 1=GARMIN, 2=OPENCPN (Phase B)
+    // Damped/trust-gated GPS track (controller's gpstracktrim.ino), appended
+    // after autoTuneState (which this plugin has no use for and skips over
+    // during parsing). Only meaningful while cog_damped_valid is true.
+    double cog_damped;
+    bool   cog_damped_valid;
 };
 
 class AutoPilotPanel;

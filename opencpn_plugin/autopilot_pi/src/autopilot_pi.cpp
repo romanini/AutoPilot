@@ -226,6 +226,9 @@ void AutoPilotPlugin::ApplyDockLayout() {
     if (!rebuilt) return;
 
     if (mode == DockMode::FLOAT) {
+        // Undo Fixed() from a prior dock so the floating window stays
+        // user-resizable, same as before.
+        pane.Resizable();
         wxWindow* frame = m_panel->GetParent();
         while (frame && !frame->IsTopLevel())
             frame = frame->GetParent();
@@ -234,13 +237,31 @@ void AutoPilotPlugin::ApplyDockLayout() {
     } else if (mode == DockMode::RIGHT) {
         // Push the narrow width onto the pane so AUI actually resizes the dock.
         // Only done when layout was just rebuilt (rebuilt==true) to avoid looping.
+        // Detach + re-add (not just mutating BestSize/MinSize on the existing
+        // pane) because wxAUI's dock row keeps its *own* remembered size
+        // (wxAuiDockInfo::size) once one has been established — e.g. from an
+        // old, wider/taller build, or a manual drag — and a resizable pane's
+        // dock does not shrink to a smaller BestSize just because we ask for
+        // one. Re-adding the pane throws that stale dock size away so the new
+        // BestSize is what actually gets laid out. Fixed() on top keeps it
+        // from drifting again on the next manual drag.
         const int w = AutoPilotPanel::kRightDockW;
-        pane.BestSize(w, -1).MinSize(w, -1);
+        wxAuiPaneInfo info = pane;
+        info.BestSize(w, -1).MinSize(w, -1).Fixed();
+        m_aui_mgr->DetachPane(m_panel);
+        m_aui_mgr->AddPane(m_panel, info);
         m_aui_mgr->Update();
     } else if (mode == DockMode::TOP_BOTTOM) {
-        // Use the virtual size measured by FitInside() — exact content height.
-        const int h = m_panel->GetVirtualSize().y;
-        pane.BestSize(-1, h).MinSize(-1, h);
+        // Ask the sizer directly for its current minimum size rather than
+        // GetVirtualSize() — the latter can reflect a size cached from before
+        // this rebuild. See the RIGHT branch above for why detach + re-add
+        // (not just BestSize/MinSize) is needed to actually shrink the dock.
+        const int h = m_panel->GetSizer() ? m_panel->GetSizer()->GetMinSize().y
+                                           : m_panel->GetVirtualSize().y;
+        wxAuiPaneInfo info = pane;
+        info.BestSize(-1, h).MinSize(-1, h).Fixed();
+        m_aui_mgr->DetachPane(m_panel);
+        m_aui_mgr->AddPane(m_panel, info);
         m_aui_mgr->Update();
     }
 }

@@ -39,14 +39,22 @@ wxBEGIN_EVENT_TABLE(AutoPilotPanel, wxScrolledWindow)
 wxEND_EVENT_TABLE()
 
 // ---------------------------------------------------------------------------
-// TFT-matching color palette (RGB565 decoded to 24-bit)
+// TFT-matching color palette (RGB565 decoded to 24-bit). kLavender is the
+// display unit's single MAGENTA (0xF57F) constant. Colors are assigned by
+// data source, not by column or box, mirroring the scheme documented at the
+// top of Arduino/display/screen.ino:
+//   Yellow  - data from the compass (Heading)
+//   Cyan    - data straight from the GPS (Speed, Location, Date/Time)
+//   Lavender/magenta - data calculated on the controller (Mode, Target,
+//             Correction, Distance, Track)
+//   White   - general info / data sent in rather than measured or computed
+//             (fix/satellites, Waypoint - a commanded destination, not
+//             something read off a sensor)
 // ---------------------------------------------------------------------------
 static const wxColour kBlack   (  0,   0,   0);
 static const wxColour kCyan    (  0, 255, 255);
 static const wxColour kYellow  (255, 255,   0);
 static const wxColour kLavender(247, 174, 255);
-static const wxColour kOrange  (255, 130,  74);
-static const wxColour kGreen   (123, 255,  66);
 static const wxColour kWhite   (255, 255, 255);
 
 // ---------------------------------------------------------------------------
@@ -54,18 +62,26 @@ static const wxColour kWhite   (255, 255, 255);
 // ---------------------------------------------------------------------------
 static const int kColW = 160;
 
+// Left column: Heading / Track / Speed, all equal weight (matches the display
+// unit giving all three the same big font/box size). Their combined height
+// (150) is intentionally less than the middle/right columns (180): the
+// leftover 30px becomes the "notch" row (Set WP + Follow) below them.
+static const int kH_Hdg = 50;
 static const int kH_Spd = 50;
-static const int kH_Hdg = 37;
-static const int kH_Ptc = 37;
-static const int kH_Rol = 37;
-static const int kH_Stb = 37;
+static const int kH_Trk = 50;
+static const int kH_Notch = 30;
 
-static const int kH_Dst = 80;
-static const int kH_Brg = 80;
+// Middle column: Mode (compact) / Target+Correction / Time — Time sits right
+// under Target so its bottom edge lines up with Waypoint's in the right
+// column (45 + 90 + 45 = 180 = 65 + 50 + 65).
+static const int kH_Mode = 45;
+static const int kH_Tgt  = 90;
+static const int kH_TimeFloat = 45;
 
-static const int kH_Dis = 50;
-static const int kH_Crs = 45;
+// Right column: Location / Distance / Waypoint
 static const int kH_Loc = 65;
+static const int kH_Dis = 50;
+static const int kH_Way = 65;
 
 static const int kH_Bar = 38;
 
@@ -73,8 +89,11 @@ static const int kH_Bar = 38;
 static const int kColW_Right = 100;  // natural sizer floor; AUI enforces this via kRightDockW
 static const int kBtnH_Right = 38;   // taller than default for touch targets
 
-// Height for compact boxes in the top/bottom docked layout
-static const int kH_Compact = 71;
+// Height for compact boxes in the top/bottom docked layout. Kept low because
+// every value in this layout is a single line (lat/lon, target/correction,
+// and time/fix are each packed onto one row) to minimize vertical chart
+// coverage when docked to the top or bottom.
+static const int kH_Compact = 50;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -189,7 +208,11 @@ bool AutoPilotPanel::SetDockMode(DockMode mode) {
 }
 
 // ---------------------------------------------------------------------------
-// Floating layout — fixed 3-column 480px grid (unchanged from original)
+// Floating layout — fixed 3-column 480px grid, mirroring the display unit's
+// Heading/Track/Speed | Mode/Target+Correction/Time | Location/Distance/
+// Waypoint column arrangement (Arduino/display/screen.ino), plus the
+// plugin-only "notch" row (Set WP + Follow) and control row (Send Rte, Mode,
+// adjust, Enable/Disable) that don't exist on the physical display.
 // ---------------------------------------------------------------------------
 
 void AutoPilotPanel::BuildUI_Float()
@@ -203,8 +226,28 @@ void AutoPilotPanel::BuildUI_Float()
     // ── 3-column data grid ─────────────────────────────────────────────────
     auto* cols = new wxBoxSizer(wxHORIZONTAL);
 
-    // ── Left column ────────────────────────────────────────────────────────
+    // ── Left column: Heading / Track / Speed, then the "notch" row (Set WP +
+    // Follow) that exactly fills the 30px this column is shorter than the
+    // middle/right columns (150 vs. 180) — see kH_Notch.
     auto* left = new wxBoxSizer(wxVERTICAL);
+
+    MakeBox(this, "Heading", kYellow, outer, inner, kColW, kH_Hdg);
+    {   auto* s = new wxBoxSizer(wxVERTICAL);
+        inner->SetSizer(s);
+        m_heading_val = MakeVal(inner, kYellow, 17);
+        s->Add(m_heading_val, 1, wxEXPAND | wxALL, 2); }
+    left->Add(outer, 0, wxEXPAND);
+
+    // Track before Speed, matching the display unit's column 1 order.
+    // Damped/trust-gated GPS track (not raw course, which is noisy below
+    // ~1kn) — see AutoPilotLink::ParseApdat's cog_damped/cog_damped_valid.
+    // Lavender/magenta: it's a controller-computed value, not a raw GPS read.
+    MakeBox(this, "Track", kLavender, outer, inner, kColW, kH_Trk);
+    {   auto* s = new wxBoxSizer(wxVERTICAL);
+        inner->SetSizer(s);
+        m_track_val = MakeVal(inner, kLavender, 17);
+        s->Add(m_track_val, 1, wxEXPAND | wxALL, 2); }
+    left->Add(outer, 0, wxEXPAND);
 
     MakeBox(this, "Speed kn", kCyan, outer, inner, kColW, kH_Spd);
     {   auto* s = new wxBoxSizer(wxVERTICAL);
@@ -213,159 +256,137 @@ void AutoPilotPanel::BuildUI_Float()
         s->Add(m_speed_val, 1, wxEXPAND | wxALL, 2); }
     left->Add(outer, 0, wxEXPAND);
 
-    MakeBox(this, "Heading", kYellow, outer, inner, kColW, kH_Hdg);
-    {   auto* s = new wxBoxSizer(wxVERTICAL);
-        inner->SetSizer(s);
-        m_heading_val = MakeVal(inner, kYellow, 14);
-        s->AddStretchSpacer(1);
-        s->Add(m_heading_val, 0, wxEXPAND | wxLEFT | wxRIGHT, 2);
-        s->AddStretchSpacer(1); }
-    left->Add(outer, 0, wxEXPAND);
+    {   auto* notch = new wxPanel(this, wxID_ANY);
+        notch->SetBackgroundColour(kBlack);
+        notch->SetMinSize(wxSize(kColW, kH_Notch));
+        auto* s = new wxBoxSizer(wxHORIZONTAL);
+        notch->SetSizer(s);
 
-    MakeBox(this, "Pitch", kYellow, outer, inner, kColW, kH_Ptc);
-    {   auto* s = new wxBoxSizer(wxVERTICAL);
-        inner->SetSizer(s);
-        m_pitch_val = MakeVal(inner, kYellow, 14);
-        s->AddStretchSpacer(1);
-        s->Add(m_pitch_val, 0, wxEXPAND | wxLEFT | wxRIGHT, 2);
-        s->AddStretchSpacer(1); }
-    left->Add(outer, 0, wxEXPAND);
+        // Shorter than the notch itself (unlike the other control-row
+        // buttons, which just take their natural size) so a gap opens up
+        // between it and the Speed box above; bottom-aligned and capped
+        // under kH_Notch so the notch's own height — and this button's
+        // bottom edge — doesn't move. Same width as Send Rte (kBtnSz, 62px)
+        // below, with a 5px leading spacer so their left edges line up: the
+        // control row below starts at the root sizer's 3px left margin plus
+        // one (474-458)/8 = 2px stretch-spacer unit = 5px from the panel's
+        // left edge, and this "left"/"cols"/"notch" chain has no left
+        // padding of its own, so the two start from the same x origin.
+        s->AddSpacer(5);
+        m_btn_send_wp = new wxButton(notch, ID_BTN_SEND_WP, "Set WP");
+        m_btn_send_wp->SetMinSize(wxSize(62, 24));
+        m_btn_send_wp->Enable(false);
+        s->Add(m_btn_send_wp, 0, wxALIGN_BOTTOM | wxRIGHT, 3);
 
-    MakeBox(this, "Roll", kYellow, outer, inner, kColW, kH_Rol);
-    {   auto* s = new wxBoxSizer(wxVERTICAL);
-        inner->SetSizer(s);
-        m_roll_val = MakeVal(inner, kYellow, 14);
-        s->AddStretchSpacer(1);
-        s->Add(m_roll_val, 0, wxEXPAND | wxLEFT | wxRIGHT, 2);
-        s->AddStretchSpacer(1); }
-    left->Add(outer, 0, wxEXPAND);
+        // Matched to the button's height and also bottom-aligned (rather than
+        // centered in the whole 30px notch row) so the two share the same
+        // vertical band and end up centered on each other, not just on the
+        // taller row.
+        m_chk_follow = new wxCheckBox(notch, ID_CHK_FOLLOW, "Follow");
+        m_chk_follow->SetForegroundColour(kWhite);
+        m_chk_follow->SetBackgroundColour(kBlack);
+        m_chk_follow->SetMinSize(wxSize(-1, 24));
+        s->Add(m_chk_follow, 0, wxALIGN_BOTTOM);
 
-    MakeBox(this, "Stability", kYellow, outer, inner, kColW, kH_Stb);
-    {   auto* s = new wxBoxSizer(wxVERTICAL);
-        inner->SetSizer(s);
-        m_stability_val = MakeVal(inner, kYellow, 10);
-        s->AddStretchSpacer(1);
-        s->Add(m_stability_val, 0, wxEXPAND | wxLEFT | wxRIGHT, 1);
-        s->AddStretchSpacer(1); }
-    left->Add(outer, 0, wxEXPAND);
+        left->Add(notch, 0, wxEXPAND); }
 
     cols->Add(left, 0, wxEXPAND);
 
-    // ── Right block: mid + right columns stacked above date bar ───────────
-    auto* right_block = new wxBoxSizer(wxVERTICAL);
-    auto* mid_right   = new wxBoxSizer(wxHORIZONTAL);
-
-    // ── Middle column ──────────────────────────────────────────────────────
+    // ── Middle column: Mode / Target + Correction / Time ───────────────────
     auto* mid = new wxBoxSizer(wxVERTICAL);
 
-    MakeBox(this, "Destination", kLavender, outer, inner, kColW, kH_Dst);
+    // Folds in nav_source (who's steering) the same way display_mode() does,
+    // so there is no separate "Following" box any more.
+    MakeBox(this, "Mode", kLavender, outer, inner, kColW, kH_Mode);
     {   auto* s = new wxBoxSizer(wxVERTICAL);
         inner->SetSizer(s);
-        m_destination_val = MakeVal(inner, kLavender, 12);
-        s->Add(m_destination_val, 1, wxEXPAND | wxALL, 2); }
+        m_mode_val = MakeVal(inner, kLavender, 12);
+        s->AddStretchSpacer(1);
+        s->Add(m_mode_val, 0, wxEXPAND | wxLEFT | wxRIGHT, 2);
+        s->AddStretchSpacer(1); }
     mid->Add(outer, 0, wxEXPAND);
 
-    MakeBox(this, "Bearing", kOrange, outer, inner, kColW, kH_Brg);
+    MakeBox(this, "Target", kLavender, outer, inner, kColW, kH_Tgt);
     {   auto* s = new wxBoxSizer(wxVERTICAL);
         inner->SetSizer(s);
-        m_bearing_val = MakeVal(inner, kOrange, 17);
-        s->Add(m_bearing_val, 1, wxEXPAND | wxALL, 2);
-        m_bearing_corr_val = MakeVal(inner, kOrange, 17);
-        s->Add(m_bearing_corr_val, 1, wxEXPAND | wxALL, 2); }
+        m_target_val = MakeVal(inner, kLavender, 17);
+        s->Add(m_target_val, 1, wxEXPAND | wxALL, 2);
+        m_correction_val = MakeVal(inner, kLavender, 14);
+        s->Add(m_correction_val, 1, wxEXPAND | wxALL, 2); }
     mid->Add(outer, 0, wxEXPAND);
 
-    mid_right->Add(mid, 0, wxEXPAND);
-
-    // ── Right column ───────────────────────────────────────────────────────
-    auto* right = new wxBoxSizer(wxVERTICAL);
-
-    MakeBox(this, "Distance nm", kCyan, outer, inner, kColW, kH_Dis);
-    {   auto* s = new wxBoxSizer(wxVERTICAL);
-        inner->SetSizer(s);
-        m_distance_val = MakeVal(inner, kCyan, 17);
-        s->Add(m_distance_val, 1, wxEXPAND | wxALL, 2); }
-    right->Add(outer, 0, wxEXPAND);
-
-    MakeBox(this, "Course", kGreen, outer, inner, kColW, kH_Crs);
-    {   auto* s = new wxBoxSizer(wxVERTICAL);
-        inner->SetSizer(s);
-        m_course_val = MakeVal(inner, kGreen, 14);
-        s->Add(m_course_val, 1, wxEXPAND | wxALL, 2); }
-    right->Add(outer, 0, wxEXPAND);
-
-    MakeBox(this, "Location", kGreen, outer, inner, kColW, kH_Loc);
-    {   auto* s = new wxBoxSizer(wxVERTICAL);
-        inner->SetSizer(s);
-        m_location_val = MakeVal(inner, kGreen, 12, wxALIGN_CENTER);
-        s->Add(m_location_val, 1, wxEXPAND | wxALL, 2); }
-    right->Add(outer, 0, wxEXPAND);
-
-    mid_right->Add(right, 0, wxEXPAND);
-    right_block->Add(mid_right, 0, 0);
-
-    // ── Bottom of right_block: Time bar + Set WP + Send Rte ───────────────
-    // Follow moved to the controls row so the two buttons share the full space.
-    const int kTimeW  = kColW;
-    const int kBtnPad = 4;
-
-    auto* bottom_row = new wxBoxSizer(wxHORIZONTAL);
-
-    MakeBox(this, "Time", kWhite, outer, inner, kTimeW, kH_Bar);
+    // Sits right under Target so its bottom edge lines up with Waypoint's,
+    // in the right column below (kH_Mode + kH_Tgt + kH_TimeFloat = kH_Loc +
+    // kH_Dis + kH_Way = 180).
+    MakeBox(this, "Time", kCyan, outer, inner, kColW, kH_TimeFloat);
     {   auto* s = new wxBoxSizer(wxHORIZONTAL);
         inner->SetSizer(s);
-        m_datetime_val = MakeVal(inner, kWhite, 11);
-        m_gpsfix_val   = MakeVal(inner, kWhite, 10);
+        m_datetime_val = MakeVal(inner, kCyan, 11);
+        m_gpsfix_val   = MakeVal(inner, kCyan, 10);
         s->AddStretchSpacer(1);
         s->Add(m_datetime_val, 0, wxALL | wxALIGN_CENTER_VERTICAL, 1);
         s->Add(m_gpsfix_val,   0, wxALL | wxALIGN_CENTER_VERTICAL, 1);
         s->AddStretchSpacer(1); }
-    bottom_row->Add(outer, 0, wxEXPAND);
+    mid->Add(outer, 0, wxEXPAND);
 
-    bottom_row->AddSpacer(5);
+    cols->Add(mid, 0, wxEXPAND);
 
-    m_btn_send_wp = new wxButton(this, ID_BTN_SEND_WP, "Set WP");
-    m_btn_send_wp->SetMinSize(wxSize(-1, kH_Bar - 2 * kBtnPad));
-    m_btn_send_wp->Enable(false);
-    bottom_row->Add(m_btn_send_wp, 1, wxALL, kBtnPad);
+    // ── Right column: Location / Distance / Waypoint ───────────────────────
+    auto* right = new wxBoxSizer(wxVERTICAL);
 
-    m_btn_send_route = new wxButton(this, ID_BTN_SEND_ROUTE, "Send Rte");
-    m_btn_send_route->SetMinSize(wxSize(-1, kH_Bar - 2 * kBtnPad));
-    m_btn_send_route->Enable(false);
-    bottom_row->Add(m_btn_send_route, 1, wxALL, kBtnPad);
+    MakeBox(this, "Location", kCyan, outer, inner, kColW, kH_Loc);
+    {   auto* s = new wxBoxSizer(wxVERTICAL);
+        inner->SetSizer(s);
+        m_location_val = MakeVal(inner, kCyan, 12, wxALIGN_CENTER);
+        s->Add(m_location_val, 1, wxEXPAND | wxALL, 2); }
+    right->Add(outer, 0, wxEXPAND);
 
-    right_block->Add(bottom_row, 0, 0);
-    cols->Add(right_block, 0, wxEXPAND);
+    MakeBox(this, "Distance nm", kLavender, outer, inner, kColW, kH_Dis);
+    {   auto* s = new wxBoxSizer(wxVERTICAL);
+        inner->SetSizer(s);
+        m_distance_val = MakeVal(inner, kLavender, 17);
+        s->Add(m_distance_val, 1, wxEXPAND | wxALL, 2); }
+    right->Add(outer, 0, wxEXPAND);
+
+    // Commanded waypoint lat/lon — new box, mirrors display_waypoint_lat/lon.
+    MakeBox(this, "Waypoint", kWhite, outer, inner, kColW, kH_Way);
+    {   auto* s = new wxBoxSizer(wxVERTICAL);
+        inner->SetSizer(s);
+        m_waypoint_val = MakeVal(inner, kWhite, 12, wxALIGN_CENTER);
+        s->Add(m_waypoint_val, 1, wxEXPAND | wxALL, 2); }
+    right->Add(outer, 0, wxEXPAND);
+
+    cols->Add(right, 0, wxEXPAND);
     root->Add(cols, 0, 0);
 
-    // ── Controls ───────────────────────────────────────────────────────────
+    // ── Controls: Send Rte, then the mode/adjust/enable buttons ────────────
+    // Set WP and Follow now live in the notch above, so this row holds
+    // everything else, starting with Send Rte.
     root->Add(new wxStaticLine(this, wxID_ANY, wxDefaultPosition,
                                wxSize(kPanelW, 1)),
               0, wxTOP, 6);
     root->AddSpacer(4);
 
     const wxSize kBtnSz(62, -1);
+    m_btn_send_route = new wxButton(this, ID_BTN_SEND_ROUTE, "Send Rte");
     m_btn_mode       = new wxButton(this, ID_BTN_MODE,       "Mode");
     m_btn_port_long  = new wxButton(this, ID_BTN_PORT_LONG,  "<< 10");
     m_btn_port_short = new wxButton(this, ID_BTN_PORT_SHORT, "< 1");
     m_btn_stbd_short = new wxButton(this, ID_BTN_STBD_SHORT, "1 >");
     m_btn_stbd_long  = new wxButton(this, ID_BTN_STBD_LONG,  "10 >>");
     m_btn_nav_toggle = new wxButton(this, ID_BTN_NAV_TOGGLE, "Enable");
+    m_btn_send_route->SetMinSize(kBtnSz);
     m_btn_mode->SetMinSize(kBtnSz);
     m_btn_port_long->SetMinSize(kBtnSz);
     m_btn_port_short->SetMinSize(kBtnSz);
     m_btn_stbd_short->SetMinSize(kBtnSz);
     m_btn_stbd_long->SetMinSize(kBtnSz);
     m_btn_nav_toggle->SetMinSize(kBtnSz);
-
-    // Follow lives in the controls row (not in bottom_row) so the two WP/Rte
-    // buttons in bottom_row have full width.
-    m_chk_follow = new wxCheckBox(this, ID_CHK_FOLLOW, "Follow");
-    m_chk_follow->SetForegroundColour(kWhite);
-    m_chk_follow->SetBackgroundColour(kBlack);
+    m_btn_send_route->Enable(false);
 
     auto* btn_row = new wxBoxSizer(wxHORIZONTAL);
     btn_row->AddStretchSpacer(1);
-    btn_row->Add(m_chk_follow,     0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+    btn_row->Add(m_btn_send_route, 0, wxRIGHT, 4);
     btn_row->AddStretchSpacer(1);
     btn_row->Add(m_btn_mode,       0, wxRIGHT, 4);
     btn_row->AddStretchSpacer(1);
@@ -380,16 +401,6 @@ void AutoPilotPanel::BuildUI_Float()
     btn_row->Add(m_btn_nav_toggle, 0);
     btn_row->AddStretchSpacer(1);
     root->Add(btn_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 3);
-
-    // ── Following (nav_source from Phase B APDAT field) ────────────────────
-    MakeBox(this, "Following", kCyan, outer, inner, kPanelW, kH_Bar);
-    {   auto* s = new wxBoxSizer(wxVERTICAL);
-        inner->SetSizer(s);
-        m_nav_source_val = MakeVal(inner, kCyan, 11);
-        s->AddStretchSpacer(1);
-        s->Add(m_nav_source_val, 0, wxEXPAND | wxLEFT | wxRIGHT, 2);
-        s->AddStretchSpacer(1); }
-    root->Add(outer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 3);
 
     m_btn_undock = nullptr;  // no undock button in float mode
 
@@ -416,12 +427,14 @@ void AutoPilotPanel::BuildUI_Right()
     const int kBP  = 1;
 
     // Right-dock-specific box heights that differ from the float layout
-    const int kH_Spd_R = 38;   // speed: shorter single value
-    const int kH_Dis_R = 38;   // distance: shorter single value
-    const int kH_Crs_R = 34;   // course: shorter single value
-    const int kH_Dst_R = 70;   // destination: shorter
-    const int kH_Brg_R = 60;   // bearing: shorter + centered
+    const int kH_Hdg_R = 45;   // heading: tall enough the value isn't clipped
+    const int kH_Spd_R = 45;   // speed: tall enough the value isn't clipped
+    const int kH_Trk_R = 45;   // track: matches heading/speed
+    const int kH_Mode_R = 42;  // mode: shorter
+    const int kH_Tgt_R  = 59;  // target+correction: trimmed more than Track grew
     const int kH_Loc_R = 50;   // location: shorter
+    const int kH_Dis_R = 38;   // distance: shorter single value
+    const int kH_Way_R = 50;   // waypoint: shorter
     const int kH_Bar_R = 52;   // time: taller for two stacked lines
 
     // Width=1 overrides GTK's label-based button minimum so they shrink freely.
@@ -434,101 +447,86 @@ void AutoPilotPanel::BuildUI_Right()
         root->Add(r, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, kPad);
     };
 
-    // ── Col 1: Speed, Heading, Pitch, Roll, Stability ──────────────────────
-    MakeBox(this, "Speed kn", kCyan, outer, inner, 0, kH_Spd_R);
+    // ── Col 1: Heading, Track, Speed ────────────────────────────────────────
+    MakeBox(this, "Heading", kYellow, outer, inner, 0, kH_Hdg_R);
+    {   auto* s = new wxBoxSizer(wxVERTICAL);
+        inner->SetSizer(s);
+        m_heading_val = MakeVal(inner, kYellow, 13);
+        s->Add(m_heading_val, 1, wxEXPAND | wxALL, kBP); }
+    root->Add(outer, 0, wxEXPAND);
+
+    // Track before Speed, matching the display unit's column 1 order.
+    MakeBox(this, "Track", kLavender, outer, inner, 0, kH_Trk_R);
+    {   auto* s = new wxBoxSizer(wxVERTICAL);
+        inner->SetSizer(s);
+        m_track_val = MakeVal(inner, kLavender, 13);
+        s->Add(m_track_val, 1, wxEXPAND | wxALL, kBP); }
+    root->Add(outer, 0, wxEXPAND);
+
+    MakeBox(this, "Speed", kCyan, outer, inner, 0, kH_Spd_R);
     {   auto* s = new wxBoxSizer(wxVERTICAL);
         inner->SetSizer(s);
         m_speed_val = MakeVal(inner, kCyan, 13);
         s->Add(m_speed_val, 1, wxEXPAND | wxALL, kBP); }
     root->Add(outer, 0, wxEXPAND);
 
-    MakeBox(this, "Heading", kYellow, outer, inner, 0, kH_Hdg);
+    // ── Col 2: Mode, Target + Correction ────────────────────────────────────
+    MakeBox(this, "Mode", kLavender, outer, inner, 0, kH_Mode_R);
     {   auto* s = new wxBoxSizer(wxVERTICAL);
         inner->SetSizer(s);
-        m_heading_val = MakeVal(inner, kYellow, 11);
-        s->AddStretchSpacer(1);
-        s->Add(m_heading_val, 0, wxEXPAND | wxLEFT | wxRIGHT, kBP);
-        s->AddStretchSpacer(1); }
+        m_mode_val = MakeVal(inner, kLavender, 8);
+        s->Add(m_mode_val, 1, wxEXPAND | wxALL, kBP); }
     root->Add(outer, 0, wxEXPAND);
 
-    MakeBox(this, "Pitch", kYellow, outer, inner, 0, kH_Ptc);
+    // Target and correction share one wxStaticText (two lines, "\n"-joined —
+    // see the DockMode::RIGHT branch in UpdateFromState) instead of being two
+    // separate controls with a manually-tuned gap between them: two widgets
+    // each carry their own top/bottom padding on top of kH_Tgt_R, which kept
+    // clipping correction no matter how the spacers were tuned. One widget
+    // with an embedded newline gets the same tight, natural inter-line gap
+    // Location already uses for lat/lon.
+    MakeBox(this, "Target", kLavender, outer, inner, 0, kH_Tgt_R);
     {   auto* s = new wxBoxSizer(wxVERTICAL);
         inner->SetSizer(s);
-        m_pitch_val = MakeVal(inner, kYellow, 11);
-        s->AddStretchSpacer(1);
-        s->Add(m_pitch_val, 0, wxEXPAND | wxLEFT | wxRIGHT, kBP);
-        s->AddStretchSpacer(1); }
+        m_target_val = MakeVal(inner, kLavender, 11, wxALIGN_CENTER);
+        s->Add(m_target_val, 1, wxEXPAND | wxALL, kBP);
+        // Kept alive (UpdateFromState always writes to it) but unused in
+        // this layout — not added to the sizer, so it takes no space.
+        m_correction_val = MakeVal(inner, kLavender, 11);
+        m_correction_val->Hide(); }
     root->Add(outer, 0, wxEXPAND);
 
-    MakeBox(this, "Roll", kYellow, outer, inner, 0, kH_Rol);
+    // ── Col 3: Location, Distance, Waypoint ─────────────────────────────────
+    MakeBox(this, "Location", kCyan, outer, inner, 0, kH_Loc_R);
     {   auto* s = new wxBoxSizer(wxVERTICAL);
         inner->SetSizer(s);
-        m_roll_val = MakeVal(inner, kYellow, 11);
-        s->AddStretchSpacer(1);
-        s->Add(m_roll_val, 0, wxEXPAND | wxLEFT | wxRIGHT, kBP);
-        s->AddStretchSpacer(1); }
-    root->Add(outer, 0, wxEXPAND);
-
-    MakeBox(this, "Stability", kYellow, outer, inner, 0, kH_Stb);
-    {   auto* s = new wxBoxSizer(wxVERTICAL);
-        inner->SetSizer(s);
-        m_stability_val = MakeVal(inner, kYellow, 8);
-        s->AddStretchSpacer(1);
-        s->Add(m_stability_val, 0, wxEXPAND | wxLEFT | wxRIGHT, kBP);
-        s->AddStretchSpacer(1); }
-    root->Add(outer, 0, wxEXPAND);
-
-    // ── Col 2: Destination, Bearing ────────────────────────────────────────
-    MakeBox(this, "Destination", kLavender, outer, inner, 0, kH_Dst_R);
-    {   auto* s = new wxBoxSizer(wxVERTICAL);
-        inner->SetSizer(s);
-        m_destination_val = MakeVal(inner, kLavender, 8);
-        s->Add(m_destination_val, 1, wxEXPAND | wxALL, kBP); }
-    root->Add(outer, 0, wxEXPAND);
-
-    MakeBox(this, "Bearing", kOrange, outer, inner, 0, kH_Brg_R);
-    {   auto* s = new wxBoxSizer(wxVERTICAL);
-        inner->SetSizer(s);
-        m_bearing_val = MakeVal(inner, kOrange, 11);
-        m_bearing_corr_val = MakeVal(inner, kOrange, 11);
-        s->AddStretchSpacer(1);
-        s->Add(m_bearing_val,      0, wxEXPAND | wxLEFT | wxRIGHT, kBP);
-        s->AddStretchSpacer(1);
-        s->Add(m_bearing_corr_val, 0, wxEXPAND | wxLEFT | wxRIGHT, kBP);
-        s->AddStretchSpacer(1); }
-    root->Add(outer, 0, wxEXPAND);
-
-    // ── Col 3: Distance, Course, Location ──────────────────────────────────
-    MakeBox(this, "Distance", kCyan, outer, inner, 0, kH_Dis_R);
-    {   auto* s = new wxBoxSizer(wxVERTICAL);
-        inner->SetSizer(s);
-        m_distance_val = MakeVal(inner, kCyan, 11);
-        s->Add(m_distance_val, 1, wxEXPAND | wxALL, kBP); }
-    root->Add(outer, 0, wxEXPAND);
-
-    MakeBox(this, "Course", kGreen, outer, inner, 0, kH_Crs_R);
-    {   auto* s = new wxBoxSizer(wxVERTICAL);
-        inner->SetSizer(s);
-        m_course_val = MakeVal(inner, kGreen, 11);
-        s->Add(m_course_val, 1, wxEXPAND | wxALL, kBP); }
-    root->Add(outer, 0, wxEXPAND);
-
-    MakeBox(this, "Location", kGreen, outer, inner, 0, kH_Loc_R);
-    {   auto* s = new wxBoxSizer(wxVERTICAL);
-        inner->SetSizer(s);
-        m_location_val = MakeVal(inner, kGreen, 8, wxALIGN_CENTER);
+        m_location_val = MakeVal(inner, kCyan, 8, wxALIGN_CENTER);
         s->Add(m_location_val, 1, wxEXPAND | wxALL, kBP); }
     root->Add(outer, 0, wxEXPAND);
 
-    // ── Time bar ───────────────────────────────────────────────────────────
-    MakeBox(this, "Time", kWhite, outer, inner, 0, kH_Bar_R);
+    MakeBox(this, "Distance", kLavender, outer, inner, 0, kH_Dis_R);
     {   auto* s = new wxBoxSizer(wxVERTICAL);
         inner->SetSizer(s);
-        m_datetime_val = MakeVal(inner, kWhite, 9);
+        m_distance_val = MakeVal(inner, kLavender, 11);
+        s->Add(m_distance_val, 1, wxEXPAND | wxALL, kBP); }
+    root->Add(outer, 0, wxEXPAND);
+
+    MakeBox(this, "Waypoint", kWhite, outer, inner, 0, kH_Way_R);
+    {   auto* s = new wxBoxSizer(wxVERTICAL);
+        inner->SetSizer(s);
+        m_waypoint_val = MakeVal(inner, kWhite, 8, wxALIGN_CENTER);
+        s->Add(m_waypoint_val, 1, wxEXPAND | wxALL, kBP); }
+    root->Add(outer, 0, wxEXPAND);
+
+    // ── Time bar ───────────────────────────────────────────────────────────
+    MakeBox(this, "Time", kCyan, outer, inner, 0, kH_Bar_R);
+    {   auto* s = new wxBoxSizer(wxVERTICAL);
+        inner->SetSizer(s);
+        m_datetime_val = MakeVal(inner, kCyan, 9);
         s->AddStretchSpacer(1);
         s->Add(m_datetime_val, 0, wxEXPAND | wxLEFT | wxRIGHT, kBP);
         s->AddStretchSpacer(1);
-        m_gpsfix_val = MakeVal(inner, kWhite, 8);
+        m_gpsfix_val = MakeVal(inner, kCyan, 8);
         s->Add(m_gpsfix_val, 0, wxEXPAND | wxLEFT | wxRIGHT, kBP);
         s->AddStretchSpacer(1); }
     root->Add(outer, 0, wxEXPAND);
@@ -552,16 +550,6 @@ void AutoPilotPanel::BuildUI_Right()
     m_chk_follow->SetForegroundColour(kWhite);
     m_chk_follow->SetBackgroundColour(kBlack);
     root->Add(m_chk_follow, 0, wxALIGN_CENTER_HORIZONTAL | wxBOTTOM, kPad);
-
-    // ── Following (nav_source from Phase B APDAT field) ────────────────────
-    MakeBox(this, "Following", kCyan, outer, inner, 0, kH_Stb);
-    {   auto* s = new wxBoxSizer(wxVERTICAL);
-        inner->SetSizer(s);
-        m_nav_source_val = MakeVal(inner, kCyan, 8);
-        s->AddStretchSpacer(1);
-        s->Add(m_nav_source_val, 0, wxEXPAND | wxLEFT | wxRIGHT, kBP);
-        s->AddStretchSpacer(1); }
-    root->Add(outer, 0, wxEXPAND | wxBOTTOM, kPad);
 
     // ── <  |  > ────────────────────────────────────────────────────────────
     m_btn_port_short = new wxButton(this, ID_BTN_PORT_SHORT, "<");
@@ -605,97 +593,92 @@ void AutoPilotPanel::BuildUI_TopBottom()
     const int kBtnPad = 3;
 
     // ── Data row: all boxes in a single horizontal band ────────────────────
-    // proportion=1 for simple fields, proportion=2 for multi-line fields
-    // (Destination, Location) so they get a bit more horizontal space.
+    // proportion=2 for simple single-value fields, =4 for two-value fields
+    // (Location, Waypoint) that need more horizontal space. Target and Time
+    // are both two-value fields too, but sit at 3 (not 4): Target was too
+    // wide relative to Time, so one unit was moved from Target to Time.
     auto* data = new wxBoxSizer(wxHORIZONTAL);
 
-    MakeBox(this, "Spd kn", kCyan, outer, inner, 0, kH_Compact);
-    {   auto* s = new wxBoxSizer(wxVERTICAL);
-        inner->SetSizer(s);
-        m_speed_val = MakeVal(inner, kCyan, 13);
-        s->Add(m_speed_val, 1, wxEXPAND | wxALL, 2); }
-    data->Add(outer, 1, wxEXPAND);
+    // All values in this layout share one font size (kPt_Compact, matching
+    // Heading) so nothing looks emphasized/de-emphasized relative to the rest,
+    // and so paired values (Target/Correction, Time/Fix) share a baseline.
+    const int kPt_Compact = 13;
 
-    MakeBox(this, "Hdg", kYellow, outer, inner, 0, kH_Compact);
+    MakeBox(this, "Heading", kYellow, outer, inner, 0, kH_Compact);
     {   auto* s = new wxBoxSizer(wxVERTICAL);
         inner->SetSizer(s);
-        m_heading_val = MakeVal(inner, kYellow, 13);
+        m_heading_val = MakeVal(inner, kYellow, kPt_Compact);
         s->Add(m_heading_val, 1, wxEXPAND | wxALL, 2); }
-    data->Add(outer, 1, wxEXPAND);
-
-    MakeBox(this, "Pitch", kYellow, outer, inner, 0, kH_Compact);
-    {   auto* s = new wxBoxSizer(wxVERTICAL);
-        inner->SetSizer(s);
-        m_pitch_val = MakeVal(inner, kYellow, 13);
-        s->Add(m_pitch_val, 1, wxEXPAND | wxALL, 2); }
-    data->Add(outer, 1, wxEXPAND);
-
-    MakeBox(this, "Roll", kYellow, outer, inner, 0, kH_Compact);
-    {   auto* s = new wxBoxSizer(wxVERTICAL);
-        inner->SetSizer(s);
-        m_roll_val = MakeVal(inner, kYellow, 13);
-        s->Add(m_roll_val, 1, wxEXPAND | wxALL, 2); }
-    data->Add(outer, 1, wxEXPAND);
-
-    MakeBox(this, "Stab", kYellow, outer, inner, 0, kH_Compact);
-    {   auto* s = new wxBoxSizer(wxVERTICAL);
-        inner->SetSizer(s);
-        m_stability_val = MakeVal(inner, kYellow, 9);
-        s->Add(m_stability_val, 1, wxEXPAND | wxALL, 1); }
-    data->Add(outer, 1, wxEXPAND);
-
-    MakeBox(this, "Destination", kLavender, outer, inner, 0, kH_Compact);
-    {   auto* s = new wxBoxSizer(wxVERTICAL);
-        inner->SetSizer(s);
-        m_destination_val = MakeVal(inner, kLavender, 10);
-        s->Add(m_destination_val, 1, wxEXPAND | wxALL, 2); }
     data->Add(outer, 2, wxEXPAND);
 
-    MakeBox(this, "Brg", kOrange, outer, inner, 0, kH_Compact);
+    // Track before Speed here, matching the display unit's column 1 order
+    // (Heading / Track / Speed) after its latest layout change.
+    MakeBox(this, "Track", kLavender, outer, inner, 0, kH_Compact);
     {   auto* s = new wxBoxSizer(wxVERTICAL);
         inner->SetSizer(s);
-        m_bearing_val = MakeVal(inner, kOrange, 11);
-        s->Add(m_bearing_val, 1, wxEXPAND | wxALL, 2);
-        m_bearing_corr_val = MakeVal(inner, kOrange, 10);
-        s->Add(m_bearing_corr_val, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 2); }
-    data->Add(outer, 1, wxEXPAND);
+        m_track_val = MakeVal(inner, kLavender, kPt_Compact);
+        s->Add(m_track_val, 1, wxEXPAND | wxALL, 2); }
+    data->Add(outer, 2, wxEXPAND);
 
-    MakeBox(this, "Dist nm", kCyan, outer, inner, 0, kH_Compact);
+    MakeBox(this, "Speed", kCyan, outer, inner, 0, kH_Compact);
     {   auto* s = new wxBoxSizer(wxVERTICAL);
         inner->SetSizer(s);
-        m_distance_val = MakeVal(inner, kCyan, 13);
-        s->Add(m_distance_val, 1, wxEXPAND | wxALL, 2); }
-    data->Add(outer, 1, wxEXPAND);
+        m_speed_val = MakeVal(inner, kCyan, kPt_Compact);
+        s->Add(m_speed_val, 1, wxEXPAND | wxALL, 2); }
+    data->Add(outer, 2, wxEXPAND);
 
-    MakeBox(this, "Crs", kGreen, outer, inner, 0, kH_Compact);
+    MakeBox(this, "Mode", kLavender, outer, inner, 0, kH_Compact);
     {   auto* s = new wxBoxSizer(wxVERTICAL);
         inner->SetSizer(s);
-        m_course_val = MakeVal(inner, kGreen, 13);
-        s->Add(m_course_val, 1, wxEXPAND | wxALL, 2); }
-    data->Add(outer, 1, wxEXPAND);
+        m_mode_val = MakeVal(inner, kLavender, kPt_Compact);
+        s->Add(m_mode_val, 1, wxEXPAND | wxALL, 2); }
+    data->Add(outer, 2, wxEXPAND);
 
-    MakeBox(this, "Location", kGreen, outer, inner, 0, kH_Compact);
+    // Target + Correction side by side on one line (not stacked) so this box
+    // stays as short as everything else in this layout.
+    MakeBox(this, "Target", kLavender, outer, inner, 0, kH_Compact);
+    {   auto* s = new wxBoxSizer(wxHORIZONTAL);
+        inner->SetSizer(s);
+        m_target_val = MakeVal(inner, kLavender, kPt_Compact);
+        m_correction_val = MakeVal(inner, kLavender, kPt_Compact);
+        s->Add(m_target_val,     1, wxEXPAND | wxALL, 2);
+        s->Add(m_correction_val, 1, wxEXPAND | wxALL, 2); }
+    data->Add(outer, 3, wxEXPAND);
+
+    // Lat/lon on one line ("lat, lon") rather than stacked — see the
+    // dock-mode branch in UpdateFromState.
+    MakeBox(this, "Location", kCyan, outer, inner, 0, kH_Compact);
     {   auto* s = new wxBoxSizer(wxVERTICAL);
         inner->SetSizer(s);
-        m_location_val = MakeVal(inner, kGreen, 10, wxALIGN_CENTER);
+        m_location_val = MakeVal(inner, kCyan, kPt_Compact, wxALIGN_CENTER);
         s->Add(m_location_val, 1, wxEXPAND | wxALL, 2); }
+    data->Add(outer, 4, wxEXPAND);
+
+    MakeBox(this, "Distance", kLavender, outer, inner, 0, kH_Compact);
+    {   auto* s = new wxBoxSizer(wxVERTICAL);
+        inner->SetSizer(s);
+        m_distance_val = MakeVal(inner, kLavender, kPt_Compact);
+        s->Add(m_distance_val, 1, wxEXPAND | wxALL, 2); }
     data->Add(outer, 2, wxEXPAND);
 
-    MakeBox(this, "Time", kWhite, outer, inner, 0, kH_Compact);
+    MakeBox(this, "Waypoint", kWhite, outer, inner, 0, kH_Compact);
     {   auto* s = new wxBoxSizer(wxVERTICAL);
         inner->SetSizer(s);
-        m_datetime_val = MakeVal(inner, kWhite, 11);
-        s->Add(m_datetime_val, 0, wxEXPAND | wxALL, 1);
-        m_gpsfix_val = MakeVal(inner, kWhite, 9);
-        s->Add(m_gpsfix_val, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 1); }
-    data->Add(outer, 1, wxEXPAND);
+        m_waypoint_val = MakeVal(inner, kWhite, kPt_Compact, wxALIGN_CENTER);
+        s->Add(m_waypoint_val, 1, wxEXPAND | wxALL, 2); }
+    data->Add(outer, 4, wxEXPAND);
 
-    MakeBox(this, "Flw", kCyan, outer, inner, 0, kH_Compact);
-    {   auto* s = new wxBoxSizer(wxVERTICAL);
+    // Time + fix side by side on one line (not stacked). Same font/padding on
+    // both so they share a baseline instead of the fix text sitting a few
+    // pixels higher than the time.
+    MakeBox(this, "Time", kCyan, outer, inner, 0, kH_Compact);
+    {   auto* s = new wxBoxSizer(wxHORIZONTAL);
         inner->SetSizer(s);
-        m_nav_source_val = MakeVal(inner, kCyan, 10);
-        s->Add(m_nav_source_val, 1, wxEXPAND | wxALL, 2); }
-    data->Add(outer, 1, wxEXPAND);
+        m_datetime_val = MakeVal(inner, kCyan, kPt_Compact);
+        m_gpsfix_val = MakeVal(inner, kCyan, kPt_Compact);
+        s->Add(m_datetime_val, 1, wxEXPAND | wxALL, 1);
+        s->Add(m_gpsfix_val,   1, wxEXPAND | wxALL, 1); }
+    data->Add(outer, 3, wxEXPAND);
 
     root->Add(data, 0, wxEXPAND);
 
@@ -755,81 +738,60 @@ void AutoPilotPanel::BuildUI_TopBottom()
 
 void AutoPilotPanel::UpdateFromState(const AutoPilotState& s, bool connected)
 {
-    // Left column
+    // Left column: Heading / Speed / Track
+    m_heading_val->SetLabel(connected ? wxString::Format("%.1f\xc2\xb0", s.heading) : "--");
     m_speed_val->SetLabel(s.fix ? wxString::Format("%.2f", s.speed) : "--");
+    // Damped/trust-gated GPS track — blank until cog_damped_valid, matching
+    // display_track()'s treatment of raw course as noisy below ~1kn.
+    m_track_val->SetLabel(s.cog_damped_valid ? wxString::Format("%.1f\xc2\xb0", s.cog_damped) : "--");
 
-    if (connected) {
-        m_heading_val->SetLabel(wxString::Format("%.1f\xc2\xb0", s.heading));
-        m_pitch_val->SetLabel  (wxString::Format("%.1f\xc2\xb0", s.pitch));
-        m_roll_val->SetLabel   (wxString::Format("%.1f\xc2\xb0", s.roll));
-        wxString stab;
-        switch (s.stability) {
-            case 0: stab = "Unknown";    break;
-            case 1: stab = "On Table";   break;
-            case 2: stab = "Stationary"; break;
-            case 3: stab = "Stable";     break;
-            case 4: stab = "In Motion";  break;
-            default: stab = wxString::Format("%d", s.stability);
-        }
-        m_stability_val->SetLabel(stab);
-    } else {
-        m_heading_val->SetLabel("--");
-        m_pitch_val->SetLabel("--");
-        m_roll_val->SetLabel("--");
-        m_stability_val->SetLabel("--");
-    }
-
-    // Middle column
-    wxString dest;
+    // Middle column: Mode (folds in nav_source, mirrors display_mode()) /
+    // Target + Correction
+    wxString mode;
     if (!connected) {
-        dest = "No link";
+        mode = "No link";
     } else if (!s.nav_enabled) {
-        dest = "Disabled";
-    } else if (s.mode == 0) {
-        dest = "Off";
-    } else if (s.mode == 1) {
-        dest = wxString::Format("Compass\n%.1f\xc2\xb0", s.heading_desired);
-    } else if (s.mode == 2 && s.waypoint_set) {
-        dest = wxString::Format("Waypoint\n%.6f\n%.6f", s.wp_lat, s.wp_lon);
-    } else {
-        dest = wxString::Format("Mode %d", s.mode);
-    }
-    {
-        int dest_pt = (connected && s.nav_enabled && s.mode == 1) ? 17 : 12;
-        if (m_dock_mode != DockMode::FLOAT) dest_pt = (dest_pt > 12) ? 13 : 10;
-        wxFont f = m_destination_val->GetFont();
-        if (f.GetPointSize() != dest_pt) {
-            f.SetPointSize(dest_pt);
-            m_destination_val->SetFont(f);
+        mode = "Disabled";
+    } else if (s.mode == 2) {
+        switch (s.nav_source) {
+            case 1:  mode = "Garmin";   break;
+            case 2:  mode = "OpenCPN";  break;
+            default: mode = "Waypoint"; break;
         }
+    } else if (s.mode == 1) {
+        mode = "Compass";
+    } else {
+        mode = wxString::Format("Mode %d", s.mode);
     }
-    m_destination_val->SetLabel(dest);
+    m_mode_val->SetLabel(mode);
 
     if (connected && s.nav_enabled) {
-        m_bearing_val->SetLabel(wxString::Format("%.1f\xc2\xb0", s.bearing));
+        wxString tgt = wxString::Format("%.1f\xc2\xb0", s.heading_desired);
         double bc = s.bearing_correction;
-        m_bearing_corr_val->SetLabel(
-            wxString::Format("%.1f\xc2\xb0 %s", bc >= 0 ? bc : -bc, bc >= 0 ? "R" : "L"));
+        wxString corr = wxString::Format("%.1f\xc2\xb0 %s", bc >= 0 ? bc : -bc, bc >= 0 ? "R" : "L");
+        // Right-dock combines both into m_target_val (see BuildUI_Right —
+        // m_correction_val is hidden and unused there).
+        if (m_dock_mode == DockMode::RIGHT) {
+            m_target_val->SetLabel(tgt + "\n" + corr);
+        } else {
+            m_target_val->SetLabel(tgt);
+            m_correction_val->SetLabel(corr);
+        }
     } else {
-        m_bearing_val->SetLabel("--");
-        m_bearing_corr_val->SetLabel("--");
+        m_target_val->SetLabel(m_dock_mode == DockMode::RIGHT ? "--\n--" : "--");
+        m_correction_val->SetLabel("--");
     }
 
-    // Right column
+    // Right column: Location / Distance / Waypoint. Top/bottom-docked keeps
+    // lat/lon on one line ("lat, lon") to minimize vertical chart coverage;
+    // the other layouts have room to stack them.
+    const wxString latlon_sep = (m_dock_mode == DockMode::TOP_BOTTOM) ? ", " : "\n";
+    m_location_val->SetLabel(
+        s.fix ? wxString::Format("%.6f%s%.6f", s.location_lat, latlon_sep, s.location_lon) : "--");
     m_distance_val->SetLabel(
         (s.waypoint_set && s.fix) ? wxString::Format("%.2f", s.distance) : "--");
-    m_course_val->SetLabel(
-        s.fix ? wxString::Format("%.1f\xc2\xb0", s.course) : "--");
-    m_location_val->SetLabel(
-        s.fix ? wxString::Format("%.6f\n%.6f", s.location_lat, s.location_lon) : "--");
-
-    // Phase B: nav_source
-    {
-        static const char* kSrcLabel[] = {"NONE", "GARMIN", "OPENCPN"};
-        int ns = s.nav_source;
-        m_nav_source_val->SetLabel(
-            (ns >= 0 && ns <= 2) ? wxString(kSrcLabel[ns]) : wxString::Format("%d", ns));
-    }
+    m_waypoint_val->SetLabel(
+        s.waypoint_set ? wxString::Format("%.6f%s%.6f", s.wp_lat, latlon_sep, s.wp_lon) : "--");
 
     // Bottom bar
     if (s.fix) {

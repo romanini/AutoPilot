@@ -48,27 +48,25 @@ private:
     DockMode       m_dock_mode;
     std::function<void()> m_undock_cb;
 
-    // Left column: Speed + IMU
-    wxStaticText* m_speed_val;
+    // Left column: Heading / Speed / Track
     wxStaticText* m_heading_val;
-    wxStaticText* m_pitch_val;
-    wxStaticText* m_roll_val;
-    wxStaticText* m_stability_val;
+    wxStaticText* m_speed_val;
+    wxStaticText* m_track_val;
 
-    // Middle column: Destination + Bearing
-    wxStaticText* m_destination_val;
-    wxStaticText* m_bearing_val;
-    wxStaticText* m_bearing_corr_val;
+    // Middle column: Mode (folds in nav_source, mirroring the display unit's
+    // display_mode()) / Target + Correction (one box, no label on Correction)
+    wxStaticText* m_mode_val;
+    wxStaticText* m_target_val;
+    wxStaticText* m_correction_val;
 
-    // Right column: GPS data
-    wxStaticText* m_distance_val;
-    wxStaticText* m_course_val;
+    // Right column: Location / Distance / Waypoint
     wxStaticText* m_location_val;
+    wxStaticText* m_distance_val;
+    wxStaticText* m_waypoint_val;
 
     // Bottom bar
     wxStaticText* m_datetime_val;
     wxStaticText* m_gpsfix_val;
-    wxStaticText* m_nav_source_val;  // Phase B: "NONE" / "GARMIN" / "OPENCPN"
 
     // Controls
     wxButton*   m_btn_port_long;
