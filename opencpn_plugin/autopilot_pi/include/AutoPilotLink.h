@@ -29,6 +29,16 @@ struct AutoPilotState {
     // during parsing). Only meaningful while cog_damped_valid is true.
     double cog_damped;
     bool   cog_damped_valid;
+    // Rudder sensor board (Arduino/rudder/), relayed by the controller
+    // (controller/rudder.ino) and appended after the damped-track fields on
+    // ~APDAT. rudder_angle is degrees off the AS5600's dead-center calibration
+    // (180 = center, see the autopilot skill's rudder calibration section);
+    // rudder_ok mirrors the controller's isRudderOk() (magnet detected AND
+    // received within its 1s timeout), so a disconnected/powered-off rudder
+    // board reads as "no data" rather than a frozen stale value - same meaning
+    // as display/AutoPilot.cpp's isRudderOk().
+    double rudder_angle;
+    bool   rudder_ok;
 };
 
 class AutoPilotPanel;
@@ -51,6 +61,12 @@ public:
     void SendAdjust(float degrees);
     void SendWaypoint(double lat, double lon);
     void SendStopFollow();   // emits ~APCMD,X$ to clear OPENCPN source immediately
+    // Emits ~APCMD,z$ - relayed by the controller to the rudder sensor board,
+    // which takes a fresh raw reading and persists it as the new dead-center
+    // offset (see the autopilot skill's rudder calibration section, and
+    // controller/subscribe.ino's case 'z'). No ack; the caller confirms via
+    // the next ~APRUD-derived rudder_angle settling near 180.
+    void SendZeroRudder();
 
     // §1c — wrap a single NMEA sentence as ~APTX and unicast to controller
     void SendNmea(const wxString& nmea_line);

@@ -17,6 +17,7 @@ enum {
     ID_BTN_SEND_WP,
     ID_BTN_SEND_ROUTE,
     ID_BTN_UNDOCK,
+    ID_BTN_ZERO_RUDDER,
     ID_CHK_FOLLOW,
 };
 
@@ -34,6 +35,7 @@ wxBEGIN_EVENT_TABLE(AutoPilotPanel, wxScrolledWindow)
     EVT_BUTTON(ID_BTN_SEND_WP,    AutoPilotPanel::OnSendWP)
     EVT_BUTTON(ID_BTN_SEND_ROUTE, AutoPilotPanel::OnSendRoute)
     EVT_BUTTON(ID_BTN_UNDOCK,     AutoPilotPanel::OnUndock)
+    EVT_BUTTON(ID_BTN_ZERO_RUDDER, AutoPilotPanel::OnZeroRudder)
     EVT_CHECKBOX(ID_CHK_FOLLOW,   AutoPilotPanel::OnFollowChanged)
     EVT_TIMER(wxID_ANY,           AutoPilotPanel::OnHeartbeat)
 wxEND_EVENT_TABLE()
@@ -56,6 +58,10 @@ static const wxColour kCyan    (  0, 255, 255);
 static const wxColour kYellow  (255, 255,   0);
 static const wxColour kLavender(247, 174, 255);
 static const wxColour kWhite   (255, 255, 255);
+// Rudder sensor board reading - a new independent sensor source, not one of
+// the four categories above, so it gets its own color (matches the display
+// unit's HX8357_GREEN for the same box).
+static const wxColour kGreen   (  0, 255,   0);
 
 // ---------------------------------------------------------------------------
 // Pixel dimensions for the floating (3-column) layout
@@ -71,11 +77,16 @@ static const int kH_Spd = 50;
 static const int kH_Trk = 50;
 static const int kH_Notch = 30;
 
-// Middle column: Mode (compact) / Target+Correction / Time — Time sits right
-// under Target so its bottom edge lines up with Waypoint's in the right
-// column (45 + 90 + 45 = 180 = 65 + 50 + 65).
-static const int kH_Mode = 45;
-static const int kH_Tgt  = 90;
+// Middle column: Mode (compact) / Target+Correction / Rudder / Time — Time
+// sits at the bottom so its bottom edge lines up with Waypoint's in the right
+// column (34 + 64 + 37 + 45 = 180 = 65 + 50 + 65). Mode and Target were
+// shrunk from their original 45/90 (freeing 37px, in the same ratio the
+// display unit shrunk its Mode/Target boxes to make room for Rudder — see
+// screen.ino's initialize_mode/initialize_target/initialize_rudder comments)
+// to insert Rudder without disturbing the Time/Waypoint alignment.
+static const int kH_Mode = 34;
+static const int kH_Tgt  = 64;
+static const int kH_Rud  = 37;
 static const int kH_TimeFloat = 45;
 
 // Right column: Location / Distance / Waypoint
@@ -315,7 +326,16 @@ void AutoPilotPanel::BuildUI_Float()
         s->Add(m_correction_val, 1, wxEXPAND | wxALL, 2); }
     mid->Add(outer, 0, wxEXPAND);
 
-    // Sits right under Target so its bottom edge lines up with Waypoint's,
+    // Rudder sensor board reading, right after Target - mirrors the display
+    // unit's column stack (Mode / Target+Correction / Rudder).
+    MakeBox(this, "Rudder", kGreen, outer, inner, kColW, kH_Rud);
+    {   auto* s = new wxBoxSizer(wxVERTICAL);
+        inner->SetSizer(s);
+        m_rudder_val = MakeVal(inner, kGreen, 14);
+        s->Add(m_rudder_val, 1, wxEXPAND | wxALL, 2); }
+    mid->Add(outer, 0, wxEXPAND);
+
+    // Sits right under Rudder so its bottom edge lines up with Waypoint's,
     // in the right column below (kH_Mode + kH_Tgt + kH_TimeFloat = kH_Loc +
     // kH_Dis + kH_Way = 180).
     MakeBox(this, "Time", kCyan, outer, inner, kColW, kH_TimeFloat);
@@ -401,6 +421,17 @@ void AutoPilotPanel::BuildUI_Float()
     btn_row->Add(m_btn_nav_toggle, 0);
     btn_row->AddStretchSpacer(1);
     root->Add(btn_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 3);
+
+    // Zero Rudder sits on its own row - the row above is already tuned to
+    // exactly fill kPanelW (480px) with 7 fixed-width buttons and 8 stretch
+    // spacers; a longer, differently-sized label here would overflow it.
+    m_btn_zero_rudder = new wxButton(this, ID_BTN_ZERO_RUDDER, "Zero Rudder");
+    m_btn_zero_rudder->Enable(false);
+    auto* zero_row = new wxBoxSizer(wxHORIZONTAL);
+    zero_row->AddStretchSpacer(1);
+    zero_row->Add(m_btn_zero_rudder, 0);
+    zero_row->AddStretchSpacer(1);
+    root->Add(zero_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 3);
 
     m_btn_undock = nullptr;  // no undock button in float mode
 
@@ -496,6 +527,15 @@ void AutoPilotPanel::BuildUI_Right()
         m_correction_val->Hide(); }
     root->Add(outer, 0, wxEXPAND);
 
+    // Rudder sensor board reading, right after Target - single stacked
+    // column here, so no cross-column height budget to preserve.
+    MakeBox(this, "Rudder", kGreen, outer, inner, 0, kH_Mode_R);
+    {   auto* s = new wxBoxSizer(wxVERTICAL);
+        inner->SetSizer(s);
+        m_rudder_val = MakeVal(inner, kGreen, 11);
+        s->Add(m_rudder_val, 1, wxEXPAND | wxALL, kBP); }
+    root->Add(outer, 0, wxEXPAND);
+
     // ── Col 3: Location, Distance, Waypoint ─────────────────────────────────
     MakeBox(this, "Location", kCyan, outer, inner, 0, kH_Loc_R);
     {   auto* s = new wxBoxSizer(wxVERTICAL);
@@ -565,6 +605,12 @@ void AutoPilotPanel::BuildUI_Right()
     m_btn_mode       = new wxButton(this, ID_BTN_MODE,       "Mode");
     m_btn_nav_toggle = new wxButton(this, ID_BTN_NAV_TOGGLE, "Enable");
     BtnRow(m_btn_mode, m_btn_nav_toggle);
+
+    // ── Zero Rudder ────────────────────────────────────────────────────────
+    m_btn_zero_rudder = new wxButton(this, ID_BTN_ZERO_RUDDER, "Zero Rudder");
+    m_btn_zero_rudder->SetMinSize(wxSize(1, kBtnH_Right));
+    m_btn_zero_rudder->Enable(false);
+    root->Add(m_btn_zero_rudder, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, kPad);
 
     // ── Undock ─────────────────────────────────────────────────────────────
     m_btn_undock = new wxButton(this, ID_BTN_UNDOCK, "Undock");
@@ -645,6 +691,15 @@ void AutoPilotPanel::BuildUI_TopBottom()
         s->Add(m_correction_val, 1, wxEXPAND | wxALL, 2); }
     data->Add(outer, 3, wxEXPAND);
 
+    // Rudder sensor board reading, right after Target - single value, same
+    // proportion as the other simple fields (Heading, Track, Speed, Mode).
+    MakeBox(this, "Rudder", kGreen, outer, inner, 0, kH_Compact);
+    {   auto* s = new wxBoxSizer(wxVERTICAL);
+        inner->SetSizer(s);
+        m_rudder_val = MakeVal(inner, kGreen, kPt_Compact);
+        s->Add(m_rudder_val, 1, wxEXPAND | wxALL, 2); }
+    data->Add(outer, 2, wxEXPAND);
+
     // Lat/lon on one line ("lat, lon") rather than stacked — see the
     // dock-mode branch in UpdateFromState.
     MakeBox(this, "Location", kCyan, outer, inner, 0, kH_Compact);
@@ -718,6 +773,12 @@ void AutoPilotPanel::BuildUI_TopBottom()
 
     ctrl->AddStretchSpacer(1);
 
+    m_btn_zero_rudder = new wxButton(this, ID_BTN_ZERO_RUDDER, "Zero Rudder");
+    m_btn_zero_rudder->Enable(false);
+    ctrl->Add(m_btn_zero_rudder, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, kBtnPad);
+
+    ctrl->AddStretchSpacer(1);
+
     m_btn_undock = new wxButton(this, ID_BTN_UNDOCK, "Undock");
     ctrl->Add(m_btn_undock, 0, wxALL | wxALIGN_CENTER_VERTICAL, kBtnPad);
 
@@ -782,6 +843,20 @@ void AutoPilotPanel::UpdateFromState(const AutoPilotState& s, bool connected)
         m_correction_val->SetLabel("--");
     }
 
+    // Rudder sensor board reading - blank unless both the link is up and the
+    // controller's own isRudderOk() is true (mirrors display_rudder()'s
+    // treatment of a disconnected/powered-off rudder board as "no data"
+    // rather than a frozen stale value). Whole degrees only, off the AS5600's
+    // 180 = dead-center calibration, same rounding as the display unit.
+    if (connected && s.rudder_ok) {
+        double off_center = s.rudder_angle - 180.0;
+        wxString dir = (off_center > 0) ? "R" : (off_center < 0) ? "L" : "";
+        m_rudder_val->SetLabel(wxString::Format("%.0f\xc2\xb0 %s",
+            off_center >= 0 ? off_center : -off_center, dir));
+    } else {
+        m_rudder_val->SetLabel("--");
+    }
+
     // Right column: Location / Distance / Waypoint. Top/bottom-docked keeps
     // lat/lon on one line ("lat, lon") to minimize vertical chart coverage;
     // the other layouts have room to stack them.
@@ -818,6 +893,9 @@ void AutoPilotPanel::UpdateFromState(const AutoPilotState& s, bool connected)
     m_btn_stbd_long->Enable(nav_on);
     m_btn_send_wp->Enable(connected && m_navigate_available);
     m_btn_send_route->Enable(connected && !m_route_guid.IsEmpty());
+    // Only safe to zero while the controller isn't actively steering -
+    // recalibrating center out from under a live PID loop would yank the helm.
+    m_btn_zero_rudder->Enable(connected && !s.nav_enabled);
 
     Layout();
 }
@@ -946,6 +1024,26 @@ void AutoPilotPanel::OnSendRoute(wxCommandEvent&)
         if (!m_heartbeat_timer.IsRunning())
             m_heartbeat_timer.Start(HEARTBEAT_INTERVAL_MS);
     }
+}
+
+// Confirms before sending ~APCMD,z$ (relayed to the rudder sensor board,
+// see AutoPilotLink::SendZeroRudder) - this recalibrates the board's
+// dead-center offset from whatever position the rudder is physically in
+// right now, so a mis-timed press with the rudder off-center would silently
+// miscalibrate steering. The button is already disabled while nav_enabled
+// (see UpdateFromState), but re-check here too since IsConnected()/state can
+// change between the button being enabled and the dialog closing.
+void AutoPilotPanel::OnZeroRudder(wxCommandEvent&)
+{
+    if (!m_link || !m_link->IsConnected() || m_link->State().nav_enabled) return;
+
+    wxMessageDialog dlg(this,
+        "Center the rudder firmly amidships before continuing.\n\n"
+        "For best results, keep the boat stationary while doing this.",
+        "Zero Rudder", wxOK | wxCANCEL | wxICON_QUESTION);
+    dlg.SetOKCancelLabels("Zero", "Cancel");
+    if (dlg.ShowModal() == wxID_OK)
+        m_link->SendZeroRudder();
 }
 
 void AutoPilotPanel::OnUndock(wxCommandEvent&)

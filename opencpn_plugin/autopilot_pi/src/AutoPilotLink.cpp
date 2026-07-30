@@ -129,6 +129,10 @@ void AutoPilotLink::SendStopFollow() {
     SendCommand("X");
 }
 
+void AutoPilotLink::SendZeroRudder() {
+    SendCommand("z");
+}
+
 // ---------------------------------------------------------------------------
 // §1c — NMEA send path
 // ---------------------------------------------------------------------------
@@ -566,6 +570,10 @@ void AutoPilotLink::ParseApdat(char* data) {
     // Damped GPS track; absent on older firmware → 0.0/false (shown as "--").
     s.cog_damped       = nextDouble();
     s.cog_damped_valid = nextInt() != 0;
+    // Rudder sensor; absent on older firmware → nextDouble/nextInt return
+    // 0.0/false, which UpdateFromState treats the same as rudder_ok == false.
+    s.rudder_angle = nextDouble();
+    s.rudder_ok    = nextInt() != 0;
 
     // Preserve locally-commanded fields for LOCAL_SUPPRESS_MS after a button press,
     // matching the display unit's localCommandTime suppression in AutoPilot.cpp.

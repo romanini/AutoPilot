@@ -43,6 +43,7 @@ private:
     void OnUndock(wxCommandEvent& event);
     void OnFollowChanged(wxCommandEvent& event);
     void OnHeartbeat(wxTimerEvent& event);
+    void OnZeroRudder(wxCommandEvent& event);
 
     AutoPilotLink* m_link;
     DockMode       m_dock_mode;
@@ -58,6 +59,9 @@ private:
     wxStaticText* m_mode_val;
     wxStaticText* m_target_val;
     wxStaticText* m_correction_val;
+    // Rudder sensor board reading, boxed right after Target - mirrors the
+    // display unit's Mode/Target/Rudder column stack (Arduino/display/screen.ino).
+    wxStaticText* m_rudder_val;
 
     // Right column: Location / Distance / Waypoint
     wxStaticText* m_location_val;
@@ -78,6 +82,11 @@ private:
     wxButton*   m_btn_send_wp;
     wxButton*   m_btn_send_route;
     wxButton*   m_btn_undock;   // null in FLOAT mode
+    // Only enabled while connected AND navigation is disabled - zeroing while
+    // the controller is actively steering would recalibrate center out from
+    // under a live PID loop. Confirmed via a dialog (OnZeroRudder) before the
+    // ~APCMD,z$ command actually goes out.
+    wxButton*   m_btn_zero_rudder;
     wxCheckBox* m_chk_follow;
 
     bool     m_navigate_available;
