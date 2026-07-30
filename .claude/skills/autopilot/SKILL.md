@@ -30,10 +30,11 @@ system is split across boards that talk over Wi-Fi.
 | **Display** | Arduino Nano ESP32 + HX8357 TFT (one or more) | Cockpit head unit: shows live state on a colour LCD, has physical buttons | `Arduino/display/` |
 | **Navigation computer** | OrangePi Zero 2W, Ubuntu 22.04 + OpenCPN | Chart plotter: GPS + AIS + vector charts; also runs `autopilot_pi` | `navigator/` |
 | **OpenCPN plugin** | `autopilot_pi` C++/wxWidgets Flatpak extension | Software display unit inside OpenCPN — mirrors TFT layout, sends commands, pushes active waypoints to controller | `opencpn_plugin/autopilot_pi/` |
+| **Rudder sensor** | Arduino Nano ESP32 + AS5600 (I2C) | Standalone rudder angle sensor (boat is wheel-steered); joins SoberPilot as a station and reports angle to the controller over UDP | `Arduino/rudder/` |
 
-Supporting tooling: `monitor/` (a Python UDP sniffer for debugging the telemetry
-stream), `pid/` (offline PID tuning experiments in Python/matplotlib), `circuit/`
-(KiCad/hardware), `assets/` (images used in docs).
+Supporting tooling: `experiments/pid/` (offline PID tuning experiments in
+Python/matplotlib), `circuit/` (KiCad/hardware), `assets/` (images used in
+docs). There is no dedicated UDP monitor script — see Debugging below.
 
 **The Arduino firmware is the heart of the project and the usual subject of
 work.** For build/library/setup details start with `Arduino/README.md` — it is
@@ -55,6 +56,9 @@ framed with a leading `~` and trailing `$`:
 Because telemetry is broadcast, multiple displays can listen at once; commands
 are unicast back to the controller. `mode`: `0`=off, `1`=compass-hold,
 `2`=waypoint navigate.
+
+The rudder sensor (see below) speaks a separate pair of ports (8890/8891) to
+the controller — it isn't part of the 8888/8889 display protocol above.
 
 ### Optimistic UI
 
@@ -80,6 +84,147 @@ button code.
 update) · `command.ino` (`~APCMD` out) · `subscribe.ino` (`~APDAT` in) ·
 `volt_meter.ino` (battery/input voltage) · `wifi.ino` (joins SoberPilot) ·
 `AutoPilot.{h,cpp}` (local mirror + parser).
+
+**`rudder/`** (Wi-Fi station, own ports — see below): `rudder.ino` (setup +
+FreeRTOS tasks) · `angle.ino` (AS5600 read + calibration + the mutex) ·
+`publish.ino` (`~APRUD` out, 8890) · `subscribe.ino` (relayed `~APCMD,z$` in,
+8891) · `wifi.ino` (joins SoberPilot, auto-reconnect).
+
+## The rudder position sensor (`Arduino/rudder/`)
+
+A standalone Nano ESP32 reading an AS5600 magnetic angle sensor over I2C,
+mounted at the rudder stock/quadrant (boat is wheel-steered, so the sensor
+lives at the rudder itself, not the wheel — cable slack makes wheel position
+an unreliable proxy). It joins the SoberPilot Wi-Fi as a station (same as a
+display) and reports rudder angle to the controller over UDP — it does not
+talk to displays directly.
+
+**Wiring:** AS5600 module powered from the Nano's **3V3 pin, not 5V/VIN** — the
+module's onboard I2C pull-ups tie SDA/SCL to whatever powers it, and the ESP32's
+GPIOs are 3.3V-only (not 5V-tolerant). SDA/SCL to the Nano ESP32's dedicated
+SDA/SCL pins. DIR pin tied to GND (clockwise-increasing convention).
+
+**Protocol** (separate ports from the 8888/8889 display protocol above):
+- **UDP 8890**, rudder → controller, unicast to `10.20.1.1`:
+  `~APRUD,<angle_deg>,<magnet_ok>$`. This is the *only* way the controller
+  learns the rudder board's IP (there's no static assignment, no discovery
+  mechanism) — `controller/rudder.ino`'s listener remembers the source address
+  of every packet it receives and uses it as the relay target below. Until at
+  least one packet has arrived, there is nothing to relay `~APCMD,z$` to.
+- **UDP 8891**, controller → rudder, unicast to that remembered IP:
+  `~APCMD,z$` — "center now" (see calibration below), relayed verbatim from
+  whatever sent the original `~APCMD,z$` to the controller (telnet, a display,
+  or the OpenCPN plugin).
+
+**Why relay through the controller** rather than commanding the rudder board
+directly: telnet, every display, and the OpenCPN plugin already only know how
+to address the controller (`10.20.1.1`) — none of them know or need to know
+the rudder board's IP. Routing the center command through the controller means
+only the controller needs to know the rudder board exists; no new client-side
+plumbing is needed if a future UI (display menu, OpenCPN button) wants to
+trigger it.
+
+**Command verb `z`, not `t...`:** the controller's `dispatch_command()`
+(`controller/subscribe.ino`) switches on `buffer[0]` alone — `t` is already
+taken by autotune (`t0`/`t1`/`t2`). A two-letter verb like `tc` would hit the
+autotune case and silently abort any in-progress autotune. `z` (zero/center) is
+a free, bare one-letter action verb, same shape as the existing `X`.
+
+**Calibration:** the sensor can only be zeroed once it's installed (you can't
+know the AS5600's raw offset relative to "rudder dead center" beforehand), so
+zeroing is a runtime command, not a one-time build step. On `~APCMD,z$` the
+board takes a fresh raw reading and computes
+`offset = (2048 - raw) mod 4096` (in raw AS5600 counts, not degrees — avoids
+float rounding drift), then persists it via `Preferences` (namespace
+`"rudder"`, matching the existing pattern in `controller/pid.ino`) so it
+survives a reboot. Every subsequent reading reports
+`((raw + offset) mod 4096) * 360/4096`, so dead center always reads as exactly
+180° — chosen (instead of 0°) so the bow-at-0°/rudder-at-180° convention holds,
+and so the 0°/360° register wraparound lands on the far side of the sensor
+from center, safely outside the rudder's actual range of motion. There is no
+ack packet — same as every other `~APCMD` in this project, the sender confirms
+the change by watching the next `~APRUD` value rather than a reply.
+
+**Current status:** both sides are implemented. Rudder board: WiFi join,
+`~APRUD` publish (`Arduino/rudder/publish.ino`, 50 Hz — see below), `~APCMD,z$`
+listener, offset persistence (`angle.ino`). Controller
+(`controller/rudder.ino`): listens on 8890, remembers the rudder board's IP,
+stores the angle and the sensor's raw magnet-detected flag via
+`AutoPilot::setRudderAngle()` (mutex-protected, same pattern as
+`setPitch`/`setRoll`), and `case 'z':` in `dispatch_command()`
+(`subscribe.ino`) relays to it. `~APDAT` (`controller/publish.ino`) gained two
+trailing fields: `rudder_angle` (`%.2f`) and `isRudderOk()` (`%d` — old parsers
+ignore unknown trailing fields, same pattern as the damped-course fields
+already appended there).
+
+**`isRudderOk()` is computed, not the raw magnet flag:** `rudder.ino` tracks
+`lastRudderReceiveTime` (updated on every `~APRUD` packet, same pattern as
+`display/subscribe.ino`'s `lastReceiveTime`) and combines it with the sensor's
+own magnet-detected flag: `isRudderOk()` is true only if the rudder board has
+been heard from within the last 1s (`RUDDER_RECEIVE_TIMEOUT_MS`) *and* its
+last-reported magnet state was good. This is deliberate: publishing the raw
+magnet flag alone would leave the controller reporting the sensor's last
+value forever if the rudder board is powered off or loses Wi-Fi - the timeout
+is what makes a disconnected rudder board actually read as "no data" instead
+of a frozen stale reading. The display mirrors this as `AutoPilot::isRudderOk()`
+(`rudder_ok` field) - same combined meaning on both sides, not a raw magnet
+flag on either.
+
+**Rudder-board threading — don't collapse this back into one task or drop the
+mutex.** Two tasks pinned to separate cores, matching the controller/display
+split: `sensor_task` (CORE_0, priority 1) reads the AS5600 and publishes
+`~APRUD`; `command_task` (CORE_1, priority 2) runs `check_wifi()` and
+`check_calibration_request()`. Both of `command_task`'s jobs block for a long
+time — an association attempt can sit for `WIFI_ATTEMPT_TIMEOUT_MS`, and a
+calibration does an NVS flash write — which is exactly why they don't share a
+core with the 50 Hz sampling.
+
+Two non-obvious rules hold this together:
+
+1. **`angleMutex` (`angle.ino`) is mandatory, not defensive.** Both tasks touch
+   the AS5600 and `offsetCounts`. A single `getRawAngle()` is *two* Wire
+   transactions (register-address write, then data read), so a transaction
+   injected between them from the other core leaves the AS5600's internal
+   address pointer pointing elsewhere and the read returns a different
+   register's contents. Per-transaction locking inside `TwoWire` does not
+   prevent this; the lock has to span the pair.
+2. **The AsyncUDP callback only sets a flag.** `process_command()`
+   (`subscribe.ino`) calls `request_calibration()`, which sets a volatile flag
+   that `command_task` consumes. Calibrating inline in the callback would put an
+   I²C read and an NVS flash write on the network stack's own task. The flag is
+   cleared before the work runs, so a request arriving mid-calibration is
+   serviced next tick rather than swallowed, and repeat requests coalesce
+   (correct for an idempotent "make this position center").
+
+**Wi-Fi resilience (`rudder/wifi.ino`):** the board is headless at the rudder
+stock, so it must never need a power cycle to rejoin. `setup_wifi()` makes a few
+bounded attempts and then *falls through* rather than spinning — blocking in
+`setup()` until the AP appears would leave it wedged with the command listener
+never started (a real case: the whole boat powers up at once and the controller's
+AP isn't there yet). `check_wifi()`, polled from `loop()`, then handles both
+"never came up" and "came up, then dropped", throttled by
+`WIFI_RETRY_INTERVAL_MS`. **Gotcha:** every fresh link must re-call
+`setup_subscribe()` — the UDP listening socket doesn't survive the link going
+down, so without the rebind the board keeps publishing `~APRUD` happily but
+silently stops accepting relayed `~APCMD,z$`. `rudder/subscribe.ino`'s
+`setup_subscribe()` therefore does `commandUdp.close()` before `listen()` so it
+is safe to call repeatedly (same reason and same shape as
+`display/subscribe.ino`). Powersave is disabled (`WiFi.setSleep(false)`) for the
+same reason it is on the navigator's `wlan0`.
+
+**Not yet done:** the OpenCPN plugin rudder box + "Center now" button
+(`AutoPilotState`/`ParsePacket()` in `opencpn_plugin/autopilot_pi/AutoPilotLink.h`
+need the same two fields added to stay in sync with `~APDAT`).
+
+**Publish rate (50 Hz, not the original 1 Hz):** unlike the human-readable
+1 Hz `~APDAT` broadcast, rudder angle is meant to eventually feed a real
+control loop (a cascaded heading→rudder-angle→motor loop, see
+`.claude/docs/FutureUpgrades-WindAndRudder.md`), so it needs to keep pace with
+the controller's existing 100 Hz heading PID (`compass.ino`'s `control_task`,
+10 ms loop) rather than a display's refresh rate. 50 Hz was chosen as a
+practical middle ground — within the same order of magnitude as the 100 Hz
+loop it will eventually feed, without assuming Wi-Fi/UDP can sustain the full
+100 Hz reliably (untested on the actual boat network).
 
 ## The `AutoPilot` class — read this before "deduplicating" it
 
@@ -122,14 +267,16 @@ arduino-cli upload  --profile nano -p /dev/cu.usbmodemXXXX   # see `arduino-cli 
 Gotchas worth remembering:
 - Each sketch needs an `arduino_secrets.h` (copy the `.example`); the Wi-Fi
   password **must match** on controller and every display.
-- Libraries are declared only in the two `sketch.yaml` files and the README table
+- Libraries are declared only in each sketch's `sketch.yaml` and the README table
   — when adding a new `#include`, update those, don't vendor the library.
 
 ## Debugging
 
-- `monitor/monitorAutoPilot.py` — run on any machine on the `SoberPilot` network
-  to print the decoded `~APDAT` telemetry stream live. First reach for this when
-  diagnosing what the controller is actually sending.
+- No dedicated monitor script exists anymore (`monitor/monitorAutoPilot.py` was
+  removed in commit `7709125`, "cleaning up", 2026-06-20). For raw traffic on
+  any machine on the `SoberPilot` network, plain `nc -ul 8888` prints the
+  broadcast `~APDAT,...$` lines unparsed (plain text, comma-separated) — good
+  enough for "is the controller sending anything" but doesn't decode fields.
 - The controller also exposes a **telnet** console (`controller/telnet.ino`).
 
 ## The navigation computer (OrangePi Zero 2W)

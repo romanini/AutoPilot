@@ -1,9 +1,10 @@
 # AutoPilot (Arduino)
 
-A two-board marine autopilot built on the **Arduino Nano ESP32**. One board (the
-**controller**) reads the boat's sensors and drives the steering motor; the other
-(the **display**) is the cockpit head unit with an LCD and buttons. They talk to
-each other over Wi-Fi using UDP.
+A marine autopilot built on the **Arduino Nano ESP32**. One board (the
+**controller**) reads the boat's sensors and drives the steering motor; another
+(the **display**) is the cockpit head unit with an LCD and buttons; a third
+(the **rudder** sensor) reports rudder angle from an AS5600 magnetic sensor
+(boat is wheel-steered). They talk to each other over Wi-Fi using UDP.
 
 ```
    sensors                     Wi-Fi (SoftAP "SoberPilot", 10.20.1.x)
@@ -18,7 +19,7 @@ each other over Wi-Fi using UDP.
                 steering motor                                         HX8357 LCD + buttons
 ```
 
-## The two sketches
+## The three sketches
 
 ### `controller/` — sensors, navigation, and steering
 Acts as the Wi-Fi access point (`SoftAP` SSID **SoberPilot**, `10.20.1.x`). It
@@ -37,6 +38,7 @@ state to any displays on the network. Source files:
 | `subscribe.ino` | **Listens** on UDP 8889 for `~APCMD,...$` commands from displays |
 | `telnet.ino` | Telnet console for live debugging |
 | `wifi.ino` | Brings up the SoftAP |
+| `rudder.ino` | Listens for `~APRUD,...$` from the rudder sensor board on UDP 8890, remembers its IP, relays `~APCMD,z$` back to it on UDP 8891 |
 | `AutoPilot.{h,cpp}` | Thread-safe shared state model (mutex-guarded getters/setters) |
 
 ### `display/` — cockpit head unit
@@ -57,6 +59,25 @@ of the state immediately on a press, then transmits the change.
 | `wifi.ino` | Connects to the **SoberPilot** access point |
 | `AutoPilot.{h,cpp}` | Local mirror of the state model + the `~APDAT/~APCMD` parser |
 
+### `rudder/` — rudder angle sensor
+
+A standalone board, not part of the controller/display protocol. Joins the
+SoberPilot Wi-Fi as a station and reports rudder angle straight to the
+controller over its own pair of UDP ports (8890/8891) — see the `autopilot`
+skill for the full protocol and calibration design. Source files:
+
+| File | Responsibility |
+|------|----------------|
+| `rudder.ino` | `setup()`/`loop()`, top-level orchestration |
+| `angle.ino` | AS5600 read + calibration (offset persisted via `Preferences`) |
+| `publish.ino` | Sends `~APRUD,...$` to the controller on UDP 8890 |
+| `subscribe.ino` | Listens on UDP 8891 for the relayed `~APCMD,z$` "center now" |
+| `wifi.ino` | Connects to the **SoberPilot** access point |
+
+Wiring: AS5600 powered from the Nano ESP32's **3V3 pin** (not 5V — the
+module's I2C pull-ups would overvoltage the ESP32's 3.3V-only GPIOs), SDA/SCL
+to the Nano's dedicated SDA/SCL pins, DIR tied to GND.
+
 ## Communication protocol
 
 Plain-text UDP datagrams framed with a leading `~` and trailing `$`:
@@ -67,18 +88,29 @@ Plain-text UDP datagrams framed with a leading `~` and trailing `$`:
 - **Commands** — display → controller, unicast on **UDP 8889**:
   `~APCMD,<cmd>$` (mode changes, heading nudges, tack, etc.).
 - **Reset** — `~RESET,1$`.
+- **Rudder sensor** — its own pair of ports, separate from the pair above:
+  `~APRUD,<angle>,<magnet_ok>$` rudder → controller on **UDP 8890**, and
+  `~APCMD,z$` ("center now") controller → rudder on **UDP 8891**
+  (`controller/rudder.ino`). Rudder angle also rides along on `~APDAT` as two
+  trailing fields (`rudder_angle`, `isRudderOk`) for displays/plugin -
+  `isRudderOk` combines the sensor's magnet-detected flag with a 1s receive
+  timeout, so a disconnected rudder board reads as "no data," not a frozen
+  stale value. See the `autopilot` skill for the full design (relay rationale,
+  calibration math, timeout details).
 
 Because telemetry is broadcast, multiple displays can listen at once; commands
 are unicast to the controller's AP address.
 
 ## Before you build: `arduino_secrets.h`
 
-Each sketch needs an `arduino_secrets.h` that is not checked in. Copy the example
-and set the Wi-Fi password — **it must match on the controller and every display**:
+Each sketch needs an `arduino_secrets.h` with the Wi-Fi password — **it must
+match on the controller, every display, and the rudder sensor**. Copy the
+example to get started:
 
 ```bash
 cp controller/arduino_secrets.h.example controller/arduino_secrets.h
 cp display/arduino_secrets.h.example    display/arduino_secrets.h
+cp rudder/arduino_secrets.h.example     rudder/arduino_secrets.h
 # then edit each and set the password
 ```
 
@@ -99,16 +131,18 @@ the sketches `#include` (`WiFi`, `AsyncUDP`, `SPI`, `Wire`, `USB`,
 |--------------------------------|--------|---------|
 | Adafruit BNO08x | Adafruit | controller |
 | Adafruit GPS Library | Adafruit | controller |
-| ESPTelnet | Lennart Hennigs | controller |
+| ESP Telnet | Lennart Hennigs | controller |
 | PID | Brett Beauregard | controller |
-| Time | Michael Margolis | both |
+| Time | Michael Margolis | controller, display |
 | Timezone | Jack Christensen | controller |
 | Adafruit GFX Library | Adafruit | display |
 | Adafruit HX8357 Library | Adafruit | display |
+| Adafruit AS5600 Library | Adafruit | rudder |
 
-Installing the Adafruit libraries also pulls in **Adafruit BusIO** and **Adafruit
-Unified Sensor** as dependencies (the IDE offers to add them automatically; the
-`sketch.yaml` profiles list them explicitly).
+Installing the Adafruit libraries also pulls in **Adafruit BusIO** (all three
+sketches) and **Adafruit Unified Sensor** (controller) as dependencies (the IDE
+offers to add them automatically; the `sketch.yaml` profiles list them
+explicitly).
 
 ## Building with arduino-cli
 
@@ -129,7 +163,7 @@ arduino-cli core update-index
 profile — no `Arduino/libraries` folder required):
 
 ```bash
-cd Arduino/controller        # or Arduino/display
+cd Arduino/controller        # or Arduino/display, Arduino/rudder
 arduino-cli compile --profile nano
 ```
 

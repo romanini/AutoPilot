@@ -20,12 +20,12 @@ profiles:
     notes: Arduino Nano ESP32 - heading/GPS/Garmin autopilot controller
     fqbn: arduino:esp32:nano_nora
     platforms:
-      - platform: arduino:esp32 (2.0.18)
+      - platform: arduino:esp32 (2.0.18-arduino.5)
     libraries:
       - Adafruit BNO08x (1.2.5)        # IMU / fusion compass (Adafruit_BNO08x.h)
       - Adafruit GPS Library (1.7.5)   # GPS NMEA parser (Adafruit_GPS.h)
-      - ESPTelnet (2.2.1)              # telnet debug console (ESPTelnet.h)
-      - PID (1.2.1)                    # steering loop, Brett Beauregard (PID_v1.h)
+      - ESP Telnet (2.2.1)             # telnet debug console (ESPTelnet.h)
+      - PID (1.2.0)                    # steering loop, Brett Beauregard (PID_v1.h)
       - Time (1.6.1)                   # time_t helpers (TimeLib.h)
       - Timezone (1.2.4)              # local-time conversion (Timezone.h)
       - Adafruit BusIO (1.16.1)       # dependency of Adafruit BNO08x

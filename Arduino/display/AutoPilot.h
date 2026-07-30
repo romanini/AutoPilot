@@ -58,6 +58,9 @@ private:
   float cog_damped;         // trust-gated, vector-averaged GPS track (controller's gpstracktrim.ino) - stable, but only meaningful while valid below
   bool  cog_damped_valid;    // true once cog_damped has a real (speed-trusted) sample; false near-zero speed or before the first one
 
+  float rudder_angle;  // last angle from the rudder sensor board, 180 = dead center (see controller/rudder.ino)
+  bool  rudder_ok;     // controller's isRudderOk(): sensor magnet detected AND received within its 1s timeout - not just a raw magnet flag
+
   float location_lat;   // current latitude
   float location_lon;  // current longitude
   bool destinationChanged;
@@ -119,6 +122,8 @@ public:
   float getCourse();
   float getDampedCourse();
   bool  isDampedCourseValid();
+  float getRudderAngle();
+  bool  isRudderOk();
   float getLocationLat();
   float getLocationLon();
   bool hasDestinationChanged();

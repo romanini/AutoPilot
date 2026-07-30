@@ -53,6 +53,9 @@ private:
   int start_motor;
   bool motor_started;
 
+  float rudder_angle;      // last angle reported by the rudder sensor board (rudder.ino), 180 = dead center
+  bool rudder_magnet_ok;   // AS5600 magnet-detected flag from the same ~APRUD packet
+
   bool waypoint_set;   // flag indicating if the waypoint has been set
   float waypoint_lat;  // desired waypoint latitide
   float waypoint_lon;  // desired waypoint longitude
@@ -117,7 +120,10 @@ public:
   float getRoll();
   void setStabilityClassification(int value);
   int getStabilityClassification();
-  void setRoll(float roll);  
+  void setRoll(float roll);
+  float getRudderAngle();
+  bool isRudderMagnetOk();
+  void setRudderAngle(float angle, bool magnet_ok);
   bool isWaypointSet();
   float getWaypointLat();
   float getWaypointLon();

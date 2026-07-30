@@ -78,6 +78,9 @@ AutoPilot::AutoPilot(SerialType* ser) {
   start_motor = 0;
   motor_started = false;
 
+  rudder_angle = 0.0;
+  rudder_magnet_ok = false;
+
   waypoint_set = false;
   waypoint_lat = 0.0;
   waypoint_lon = 0.0;
@@ -402,6 +405,27 @@ float AutoPilot::getRoll() {
 void AutoPilot::setRoll(float roll) {
   this->lock();
   this->roll = roll;
+  this->unlock();
+}
+
+float AutoPilot::getRudderAngle() {
+  this->lock();
+  float value = this->rudder_angle;
+  this->unlock();
+  return value;
+}
+
+bool AutoPilot::isRudderMagnetOk() {
+  this->lock();
+  bool value = this->rudder_magnet_ok;
+  this->unlock();
+  return value;
+}
+
+void AutoPilot::setRudderAngle(float angle, bool magnet_ok) {
+  this->lock();
+  this->rudder_angle = angle;
+  this->rudder_magnet_ok = magnet_ok;
   this->unlock();
 }
 

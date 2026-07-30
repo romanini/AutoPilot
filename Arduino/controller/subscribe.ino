@@ -19,6 +19,7 @@ void dispatch_command(char buffer[]);
 void garmin_write_line(const char* nmea);             // defined in garmin.ino
 void navsource_opencpn_waypoint(double lat, double lon);  // defined in navsource.ino
 void navsource_opencpn_clear();                       // defined in navsource.ino
+void relay_rudder_command(const char* cmd);           // defined in rudder.ino
 
 void setup_subscribe() {
   if (udpCommandServer.listen(UDP_COMMAND_PORT)) {
@@ -135,6 +136,11 @@ void dispatch_command(char buffer[]) {
       }
       break;
     }
+    case 'z':
+      // "Center now": nothing for the controller itself to do - just forward
+      // to the rudder board so it can zero its own calibration. See rudder.ino.
+      relay_rudder_command(buffer);
+      break;
     default:
       break;
   }

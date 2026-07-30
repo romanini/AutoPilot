@@ -16,6 +16,8 @@ IPAddress broadcastIp(10, 20, 1, 255);
 
 AsyncUDP udpClient;
 
+bool isRudderOk();  // defined in rudder.ino
+
 uint32_t last_publish_time_mills = millis();
 char serialzied_data[DATA_SIZE];
 
@@ -27,7 +29,7 @@ void publish_APDAT() {
   if (millis() - last_publish_time_mills > PUBLISH_INTERVAL) {
     last_publish_time_mills = millis();
     time_t currentTime = autoPilot.getDateTime();
-    sprintf(serialzied_data, "~APDAT,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%f,%.2f,%.2f,%.2f,%.2f,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.6f,%.6f,%d,%d,%.2f,%d$",
+    sprintf(serialzied_data, "~APDAT,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%f,%.2f,%.2f,%.2f,%.2f,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.6f,%.6f,%d,%d,%.2f,%d,%.2f,%d$",
             year(currentTime) % 100,    // %d
             month(currentTime),         //%d
             day(currentTime),           //%d
@@ -75,7 +77,15 @@ void publish_APDAT() {
             // want a stable "Track" reading should use this + the validity
             // flag instead of raw course, which is known-noisy below ~1kn.
             autoPilot.getDampedCourse(),      // %.2f
-            autoPilot.isDampedCourseValid()   // %d
+            autoPilot.isDampedCourseValid(),  // %d
+
+            // Rudder sensor board (Arduino/rudder/), fed via ~APRUD on its own
+            // UDP port - see rudder.ino. isRudderOk() (not the raw magnet
+            // flag) combines the sensor's own magnet-detected flag with a 1s
+            // receive timeout, so a disconnected rudder board reads as "no
+            // data" here instead of freezing on its last value.
+            autoPilot.getRudderAngle(),  // %.2f
+            isRudderOk()                 // %d
     );
 
     //DEBUG_PRINTLN(serialzied_data);

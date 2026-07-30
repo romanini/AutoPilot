@@ -61,6 +61,8 @@ void AutoPilot::init() {
   course = 0.0;
   cog_damped = 0.0;
   cog_damped_valid = false;
+  rudder_angle = 0.0;
+  rudder_ok = false;
   location_lat = 0.0;
   location_lon = 0.0;
   destinationChanged = true;
@@ -256,6 +258,20 @@ float AutoPilot::getPitch() {
 float AutoPilot::getRoll() {
   this->lock();
   float value =this->roll;
+  this->unlock();
+  return value;
+}
+
+float AutoPilot::getRudderAngle() {
+  this->lock();
+  float value = this->rudder_angle;
+  this->unlock();
+  return value;
+}
+
+bool AutoPilot::isRudderOk() {
+  this->lock();
+  bool value = this->rudder_ok;
   this->unlock();
   return value;
 }
@@ -865,6 +881,25 @@ void AutoPilot::parseAPDAT(char *sentence) {
     this->cog_damped_valid = atoi(p) > 0;
   } else {
     this->cog_damped_valid = false;
+  }
+
+  // Rudder sensor board (controller/rudder.ino), relayed on ~APDAT alongside
+  // everything else. Tolerant of absence so an older controller (no trailing
+  // fields) parses as "no data" rather than showing a stale or fabricated angle.
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
+  if (!isEmpty(p)) {
+    this->rudder_angle = atof(p);
+  } else {
+    this->rudder_angle = 0.0;
+  }
+
+  // This is the controller's computed isRudderOk() (magnet detected AND
+  // received within its 1s timeout), not a raw magnet flag - see rudder.ino.
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
+  if (!isEmpty(p)) {
+    this->rudder_ok = atoi(p) > 0;
+  } else {
+    this->rudder_ok = false;
   }
 
   this->unlock();

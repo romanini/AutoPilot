@@ -71,6 +71,10 @@ struct {
   bool  correction_connected;
   bool  correction_navEnabled;
 
+  float rudder;
+  bool  rudder_connected;
+  bool  rudder_ok;
+
   float distance;
   bool  distance_waypointSet;
   bool  distance_hasFix;
@@ -108,6 +112,7 @@ void initialize_displayed_values() {
 
   disp.target = -999.0f;         disp.target_connected = false; disp.target_navEnabled = false;
   disp.correction = -999.0f;     disp.correction_connected = false; disp.correction_navEnabled = false;
+  disp.rudder = -999.0f;         disp.rudder_connected = false; disp.rudder_ok = false;
 
   disp.distance = -999.0f;       disp.distance_waypointSet = false; disp.distance_hasFix = false;
   disp.locationLat = -999.0f;    disp.lat_hasFix = false;
@@ -170,6 +175,7 @@ void display() {
   display_mode();
   display_target();
   display_correction();
+  display_rudder();
   display_distance();
   display_location_lat();
   display_location_lon();
@@ -290,7 +296,9 @@ void display_mode() {
   } else {
     canvas.print("Disabled");
   }
-  tft.drawBitmap(176, 38, canvas.getBuffer(), 135, 24, MAGENTA, backgroundColor);
+  // Box shrunk from 89px to 67px tall; re-centered in the space below the
+  // label (was y=38, now y=28 - see the initialize_mode() comment above).
+  tft.drawBitmap(176, 28, canvas.getBuffer(), 135, 24, MAGENTA, backgroundColor);
 }
 
 // Target = the live compass setpoint the autopilot is steering to: the held
@@ -315,7 +323,9 @@ void display_target() {
     canvas.setCursor(0, 37);
     canvas.print(cur_target, 1);
   }
-  tft.drawBitmap(181, 130, canvas.getBuffer(), 130, 44, MAGENTA, backgroundColor);
+  // Box moved up to y=67, now 126px tall; Target+Correction re-centered as a
+  // pair in the space below the label (was y=130, now y=95).
+  tft.drawBitmap(181, 95, canvas.getBuffer(), 130, 44, MAGENTA, backgroundColor);
 }
 
 // Correction lives in the same box as Target, right underneath it, with no
@@ -330,7 +340,7 @@ void display_correction() {
   disp.correction_connected  = cur_connected;
   disp.correction_navEnabled = cur_navEnabled;
 
-  GFXcanvas1 canvas(135, 32);
+  GFXcanvas1 canvas(120, 32);
   canvas.fillScreen(0);
   if (cur_connected && cur_navEnabled) {
     canvas.setTextColor(1);
@@ -339,7 +349,42 @@ void display_correction() {
     canvas.print((cur_correction > 0) ? cur_correction : cur_correction * -1.0, 1);
     canvas.println((cur_correction > 0) ? " R" : " L");
   }
-  tft.drawBitmap(182, 182, canvas.getBuffer(), 135, 32, MAGENTA, backgroundColor);
+  // See display_target() above - same box, re-centered the same way (was y=182, now y=147).
+  tft.drawBitmap(197, 147, canvas.getBuffer(), 120, 32, MAGENTA, backgroundColor);
+}
+
+// Rudder angle relative to 180 (dead center - see the calibration design in
+// the autopilot skill): "<degrees off center> R" or "...L", whole degrees only
+// (fractions are below the resolution anyone steers by, and the extra digits
+// just make the value harder to read at a glance in the cockpit). Blanks
+// unless both the controller link is up and the controller's own isRudderOk()
+// is true -
+// that combines the AS5600's magnet-detected flag with a 1s receive timeout
+// on the controller side, so a disconnected/powered-off rudder board reads as
+// "no data" here rather than freezing on its last value.
+void display_rudder() {
+  bool  cur_connected = autoPilot.isConnected();
+  bool  cur_rudderOk  = autoPilot.isRudderOk();
+  float cur_rudder    = autoPilot.getRudderAngle();
+  if (cur_rudder == disp.rudder && cur_connected == disp.rudder_connected &&
+      cur_rudderOk == disp.rudder_ok) return;
+  disp.rudder           = cur_rudder;
+  disp.rudder_connected = cur_connected;
+  disp.rudder_ok        = cur_rudderOk;
+
+  GFXcanvas1 canvas(115, 32);
+  canvas.fillScreen(0);
+  if (cur_connected && cur_rudderOk) {
+    float off_center = cur_rudder - 180.0;
+    canvas.setTextColor(1);
+    canvas.setFont(&FreeSansBold18pt7b);
+    canvas.setCursor(0, 29);
+    canvas.print((off_center >= 0) ? off_center : off_center * -1.0, 0);
+    canvas.println((off_center > 0) ? " R" : (off_center < 0) ? " L" : " ");
+  }
+  // Vertically centered in the box's content area (below the label), same
+  // sizing/positioning approach as display_correction() above.
+  tft.drawBitmap(202, 220, canvas.getBuffer(), 115, 32, HX8357_GREEN, backgroundColor);
 }
 
 void display_volts() {
@@ -534,6 +579,7 @@ void initialize_display() {
   initialize_track();
   initialize_mode();
   initialize_target();
+  initialize_rudder();
   initialize_location();
   initialize_distance();
   initialize_waypoint();
@@ -575,36 +621,55 @@ void initialize_track() {
   tft.drawBitmap(0, 89, canvas.getBuffer(), 160, 89, MAGENTA, HX8357_BLACK);
 }
 
-// Column 2 (x 161-320): Mode (top row), Target+Correction (spans the next two
-// rows and holds both values in one box, no label on Correction).
+// Column 2 (x 161-320): Mode (top row, 67px - shrunk from the original 89px
+// to make room for Rudder below), Target+Correction (126px - shrunk from 177),
+// Rudder (73px, new). All three stack to exactly fill 0-266, same as before.
 void initialize_mode() {
   int16_t x1, y1;
   uint16_t w, h;
-  GFXcanvas1 canvas(159, 89);
+  GFXcanvas1 canvas(159, 67);
   canvas.fillScreen(HX8357_BLACK);
   canvas.setFont(&FreeSans9pt7b);
-  canvas.drawRect(0, 0, 159, 89, HX8357_WHITE);
+  canvas.drawRect(0, 0, 159, 67, HX8357_WHITE);
   canvas.getTextBounds("Mode", 0, 12, &x1, &y1, &w, &h);
   canvas.fillRect(x1, y1, w + 8, h + 1, HX8357_WHITE);
   canvas.setCursor(0, 12);
   canvas.setTextColor(HX8357_BLACK);
   canvas.print("Mode");
-  tft.drawBitmap(161, 0, canvas.getBuffer(), 159, 89, MAGENTA, HX8357_BLACK);
+  tft.drawBitmap(161, 0, canvas.getBuffer(), 159, 67, MAGENTA, HX8357_BLACK);
 }
 
 void initialize_target() {
   int16_t x1, y1;
   uint16_t w, h;
-  GFXcanvas1 canvas(159, 177);
+  GFXcanvas1 canvas(159, 126);
   canvas.fillScreen(HX8357_BLACK);
   canvas.setFont(&FreeSans9pt7b);
-  canvas.drawRect(0, 0, 159, 177, HX8357_WHITE);
+  canvas.drawRect(0, 0, 159, 126, HX8357_WHITE);
   canvas.getTextBounds("Target", 0, 12, &x1, &y1, &w, &h);
   canvas.fillRect(x1, y1, w + 8, h + 1, HX8357_WHITE);
   canvas.setCursor(0, 12);
   canvas.setTextColor(HX8357_BLACK);
   canvas.print("Target");
-  tft.drawBitmap(161, 89, canvas.getBuffer(), 159, 177, MAGENTA, HX8357_BLACK);
+  tft.drawBitmap(161, 67, canvas.getBuffer(), 159, 126, MAGENTA, HX8357_BLACK);
+}
+
+// New box filling the space freed by shrinking Mode and Target: rudder angle
+// relative to 180 (dead center), reported by the rudder sensor board and
+// relayed on ~APDAT (controller/rudder.ino) - see display_rudder().
+void initialize_rudder() {
+  int16_t x1, y1;
+  uint16_t w, h;
+  GFXcanvas1 canvas(159, 73);
+  canvas.fillScreen(HX8357_BLACK);
+  canvas.setFont(&FreeSans9pt7b);
+  canvas.drawRect(0, 0, 159, 73, HX8357_GREEN);
+  canvas.getTextBounds("Rudder", 0, 12, &x1, &y1, &w, &h);
+  canvas.fillRect(x1, y1, w + 8, h + 1, HX8357_GREEN);
+  canvas.setCursor(0, 12);
+  canvas.setTextColor(HX8357_BLACK);
+  canvas.print("Rudder");
+  tft.drawBitmap(161, 193, canvas.getBuffer(), 159, 73, HX8357_GREEN, HX8357_BLACK);
 }
 
 // Column 3 (x 321-480): Location (top), Distance, Waypoint.
