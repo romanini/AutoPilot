@@ -784,6 +784,64 @@ rm ~/.var/app/org.opencpn.OpenCPN/config/opencpn/load_stamps/libautopilot_pi
 
 ---
 
+### OpenCPN autostart, maximized
+
+OpenCPN should come up on its own after every boot/login, filling the screen, with no
+manual clicking required — this is a helm display, not a desktop. OpenCPN itself
+remembers whether it was last closed maximized (`FrameMax=1` in `opencpn.conf`) and
+restores that, but that's fragile — anyone who closes it un-maximized breaks it on the
+next boot. So autostart runs it through a small wrapper that force-maximizes the window
+via `xdotool`/EWMH regardless of the saved state:
+
+```bash
+sudo apt install -y wmctrl
+sudo cp ~/dev/AutoPilot/navigator/usr/local/bin/opencpn-autostart.sh /usr/local/bin/
+sudo chmod +x /usr/local/bin/opencpn-autostart.sh
+mkdir -p ~/.config/autostart
+cp ~/dev/AutoPilot/navigator/home/navigator/.config/autostart/opencpn.desktop ~/.config/autostart/
+```
+
+`xdotool` ships by default on this image; if it's missing, `sudo apt install -y xdotool`.
+The wrapper polls for the OpenCPN window for up to 30 s (Flatpak cold start can take a
+few seconds), then `xdotool windowactivate`s it and hands it to `wmctrl -b
+add,maximized_vert,maximized_horz`, which sets `_NET_WM_STATE_MAXIMIZED_{HORZ,VERT}` — a
+real window-manager maximize (keeps decorations/panel), not a borderless fullscreen
+override. Maximizing is done via `wmctrl`, not `xdotool`, because `xdotool` has no
+`windowmaximize` subcommand — it never has, in any version; that's an easy one to assume
+exists and only notice is missing when the script silently fails. The window search also
+needs `--onlyvisible`: OpenCPN creates a couple of small hidden helper windows that also
+match `--name "^OpenCPN"` case-insensitively, and without that flag the wrapper can
+grab one of those instead of the real, visible main frame.
+
+---
+
+### Suppress the "did not shut down properly" dialog
+
+If the Pi is powered off without OpenCPN getting a chance to exit first, OpenCPN's
+own crash detection prompts on the next boot to start in normal vs. safe mode —
+not appropriate for an unattended helm display. OpenCPN clears its crash marker
+(`~/.var/app/org.opencpn.OpenCPN/config/opencpn/startcheck.dat`) only on a clean
+exit. Confirmed on this box: closing OpenCPN's window is **not** a clean exit — it
+leaves the process running headless with no window and the marker untouched;
+sending it `SIGTERM` is a clean exit and removes the marker. A stub systemd
+service hooks that `SIGTERM` into the shutdown sequence so it happens
+automatically, however shutdown is triggered:
+
+```bash
+sudo cp ~/dev/AutoPilot/navigator/usr/local/bin/opencpn-graceful-stop.sh /usr/local/bin/
+sudo chmod +x /usr/local/bin/opencpn-graceful-stop.sh
+sudo cp ~/dev/AutoPilot/navigator/etc/systemd/system/opencpn-shutdown.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable opencpn-shutdown.service
+```
+
+This only helps for an actual shutdown/reboot sequence (power button via
+`logind`, `sudo shutdown`, `sudo reboot`, GUI shutdown) — it can't save you from
+yanking power with no warning at all, since there's no OS shutdown sequence to
+hook into in that case.
+
+---
+
 ## Post-setup — manual GUI configuration
 
 These steps require the graphical desktop and cannot be automated by Claude Code.
