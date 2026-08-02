@@ -380,7 +380,7 @@ void display_rudder() {
     canvas.setFont(&FreeSansBold18pt7b);
     canvas.setCursor(0, 29);
     canvas.print((off_center >= 0) ? off_center : off_center * -1.0, 0);
-    canvas.println((off_center > 0) ? " R" : (off_center < 0) ? " L" : " ");
+    canvas.println((off_center >= 1) ? " R" : (off_center <= -1) ? " L" : " ");
   }
   // Vertically centered in the box's content area (below the label), same
   // sizing/positioning approach as display_correction() above.

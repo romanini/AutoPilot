@@ -1,3 +1,23 @@
+#define DEBUG_ENABLED 1
+#if DEBUG_ENABLED
+// Gate every debug write behind `if (Serial)` (USBCDC's operator bool = host
+// connected) so we never enter the USB CDC write path while unplugged - that
+// path can deadlock on a physical detach, parking the calling task until reset.
+// This board matters more than most: it runs permanently headless in a sealed
+// enclosure at the rudder stock, and publish_rudder() prints at 50 Hz.
+#define DEBUG_PRINT(x) do { if (Serial) Serial.print(x); } while (0)
+#define DEBUG_PRINT2(x, y) do { if (Serial) Serial.print(x, y); } while (0)
+#define DEBUG_PRINTLN(x) do { if (Serial) Serial.println(x); } while (0)
+#define DEBUG_PRINTLN2(x, y) do { if (Serial) Serial.println(x, y); } while (0)
+#define DEBUG_PRINTF(...) do { if (Serial) Serial.printf(__VA_ARGS__); } while (0)
+#else
+#define DEBUG_PRINT(x)
+#define DEBUG_PRINT2(x, y)
+#define DEBUG_PRINTLN(x)
+#define DEBUG_PRINTLN2(x, y)
+#define DEBUG_PRINTF(...)
+#endif
+
 // FreeRTOS task cores (the Nano ESP32 is dual-core), same split the controller
 // and display sketches use: sampling/output on one core, network housekeeping
 // and operator commands on the other.
@@ -9,9 +29,17 @@ void command_task(void *pvParameters);
 
 void setup() {
   Serial.begin(115200);
-  while (!Serial) delay(10);
+  // USB-CDC serial: never block on TX. Without this, once the TX buffer fills
+  // with no host draining it (USB unplugged), the next Serial.print() blocks
+  // and stalls the task that called it. With a 0ms timeout, prints are dropped
+  // while unplugged and resume cleanly when a laptop is reconnected.
+  //
+  // Note there is deliberately no `while (!Serial)` wait here: USBCDC's
+  // operator bool is "host connected", so waiting on it would hang setup()
+  // forever on a headless board - no Wi-Fi, no listener, no sampling.
+  Serial.setTxTimeoutMs(0);
 
-  Serial.println("Rudder position sensor");
+  DEBUG_PRINTLN("Rudder position sensor");
 
   // setup_angle() creates the mutex the two tasks lock through, so it must run
   // before either of them is started.
@@ -21,7 +49,12 @@ void setup() {
 
   xTaskCreatePinnedToCore(sensor_task, "Task Sensor", 10000, NULL, 1, NULL, CORE_0);
   xTaskCreatePinnedToCore(command_task, "Task Command", 10000, NULL, 2, NULL, CORE_1);
-  Serial.println("Multi-core setup");
+  DEBUG_PRINTLN("Multi-core setup");
+#if DEBUG_ENABLED
+  DEBUG_PRINTLN("Debug enabled");
+#else
+  DEBUG_PRINTLN("Debug disabled");
+#endif
 }
 
 void loop() {

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.autopilot.arduino-link</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>/Users/romanini/dev/AutoPilot/Arduino/scripts/arduino_link.py</string>
+        <string>sync</string>
+    </array>
+    <key>WatchPaths</key>
+    <array>
+        <string>/dev</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/Users/romanini/Library/Logs/arduino-link.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/romanini/Library/Logs/arduino-link.log</string>
+</dict>
+</plist>
