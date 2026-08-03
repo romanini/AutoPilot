@@ -31,6 +31,7 @@ system is split across boards that talk over Wi-Fi.
 | **Navigation computer** | OrangePi Zero 2W, Ubuntu 22.04 + OpenCPN | Chart plotter: GPS + AIS + vector charts; also runs `autopilot_pi` | `navigator/` |
 | **OpenCPN plugin** | `autopilot_pi` C++/wxWidgets Flatpak extension | Software display unit inside OpenCPN — mirrors TFT layout, sends commands, pushes active waypoints to controller | `opencpn_plugin/autopilot_pi/` |
 | **Rudder sensor** | Arduino Nano ESP32 + AS5600 (I2C) | Standalone rudder angle sensor (boat is wheel-steered); joins SoberPilot as a station and reports angle to the controller over UDP | `Arduino/rudder/` |
+| **Wind sensor** | Arduino Nano ESP32 + AS5600 vane + reed-switch cup anemometer + DS18B20 | Standalone masthead wind sensor (Yachta head); joins SoberPilot as a station and reports apparent wind to the controller over UDP | `Arduino/wind/` |
 
 Supporting tooling: `experiments/pid/` (offline PID tuning experiments in
 Python/matplotlib), `circuit/` (KiCad/hardware), `assets/` (images used in
@@ -89,6 +90,13 @@ update) · `command.ino` (`~APCMD` out) · `subscribe.ino` (`~APDAT` in) ·
 FreeRTOS tasks) · `angle.ino` (AS5600 read + calibration + the mutex) ·
 `publish.ino` (`~APRUD` out, 8890) · `subscribe.ino` (relayed `~APCMD,z$` in,
 8891) · `wifi.ino` (joins SoberPilot, auto-reconnect).
+
+**`wind/`** (Wi-Fi station, own ports — see below): `wind.ino` (setup +
+FreeRTOS tasks + sample cadence) · `Wind.{h,cpp}` (state model **and** the
+ported wind maths) · `vane.ino` (AS5600 read + bow calibration + the mutex) ·
+`anemometer.ino` (reed-switch ISR + rotation timing) · `temperature.ino`
+(DS18B20) · `publish.ino` (`~APWND` out, 8892) · `subscribe.ino` (relayed
+`~APCMD,v$` in, 8893) · `wifi.ino` (joins SoberPilot, auto-reconnect).
 
 ## The rudder position sensor (`Arduino/rudder/`)
 
@@ -225,6 +233,90 @@ the controller's existing 100 Hz heading PID (`compass.ino`'s `control_task`,
 practical middle ground — within the same order of magnitude as the 100 Hz
 loop it will eventually feed, without assuming Wi-Fi/UDP can sustain the full
 100 Hz reliably (untested on the actual boat network).
+
+## The masthead wind sensor (`Arduino/wind/`)
+
+A standalone Nano ESP32 at the masthead running a **port of Norbert Walter's
+Windsensor Yachta firmware** (https://github.com/norbert-walter/Windsensor_Yachta)
+from the ESP8266. Hardware is the "Yachta" (1.x) variant: **AS5600** vane
+encoder on I2C, reed-switch cup anemometer (2 pulses/rev), **DS18B20** air
+temperature on 1-Wire. It joins SoberPilot as a station, exactly like the
+rudder board, and unicasts to the controller — it does not talk to displays.
+
+**What was dropped from the original, and why it isn't coming back by accident:**
+the HTTP server, settings/gauge/JSON pages, OTA updater and the NMEA-0183 TCP
+server are all gone. Configuration that lived on the settings page is now
+either a `#define` or (for the one thing that genuinely can't be known before
+the head is on the mast) a runtime command. A phone-facing interface is planned
+over **Bluetooth**, not by restoring the web server.
+
+**Protocol** (a third pair of ports, separate from 8888/8889 and 8890/8891):
+- **UDP 8892**, wind → controller, unicast to `10.20.1.1`:
+  `~APWND,<direction>,<speed_kn>,<speed_mps>,<bft>,<temp_c>,<vane_ok>,<temp_ok>$`
+  at 5 Hz. `direction` is apparent wind angle 0–360° clockwise from the bow.
+  As with the rudder board this is also the only way the controller can learn
+  this board's IP.
+- **UDP 8893**, controller → wind: `~APCMD,v$` — "the vane is pointing dead
+  ahead, call this zero". Verb `v` because `dispatch_command()` switches on
+  `buffer[0]` alone and `a/m/n/w/X/t/z` are taken; same reasoning that picked
+  `z` for the rudder.
+
+**Two health flags, not one:** `vane_ok` (AS5600 magnet detected) and
+`temp_ok` (a DS18B20 answered) are separate because the failures are
+independent and mean different things — a dead vane costs direction while speed
+keeps working; a dead DS18B20 costs nothing that matters. Neither flag covers
+"this board stopped transmitting": that is a **receive timeout on the
+controller side**, the same distinction (and the same reason) as
+`isRudderOk()`.
+
+**Where the port deviates from the original — these are deliberate, don't
+"restore" them:**
+1. **Rate limiter is per-second, and wraps correctly.** The original clamps the
+   angle change between samples to 45° and disables the clamp entirely within
+   45° of the bow (its subtraction can't tell a small move across 0/360 from a
+   350° jump). This port clamps to 90°/s using the *signed shortest* difference,
+   so it scales with the faster calculate cadence and stays armed close-hauled —
+   the sector a future wind-vane mode would actually steer in.
+2. **A bad vane read holds the last angle** instead of substituting 0°, which
+   on the wire is indistinguishable from a real "wind dead ahead". `vane_ok`
+   carries the failure instead.
+3. **No ESP8266 tick counter.** The original ran a 100 µs hardware timer purely
+   to count ticks between reed pulses; `micros()` in the pulse ISR replaces the
+   timer, its ISR, the counters and the marker state machine. The ISR is
+   **integer-only on purpose** — touching a float from an ESP32 ISR can corrupt
+   the FPU context of whatever task was preempted.
+4. **Every pulse is sampled**, where the original recorded only every other one.
+   Same quantity, twice the samples.
+
+**Two things that look like arbitrary constants but aren't:**
+- **`TEMPERATURE_INTERVAL_MS` is 500 to match the original's poll rate**, not
+  because 2 Hz air temperature is useful. The `-6.0 °C` self-heating
+  compensation ported from the original was calibrated at that rate; polling
+  slower would make the constant wrong. That in turn forces **11-bit** DS18B20
+  resolution (375 ms conversion), because the default 12-bit takes 750 ms and
+  would not finish inside the poll interval.
+- **`ANEMOMETER_PERIOD_LIMIT_MS` is enforced in two places** — the ISR clamps
+  intervals to it, `Wind::calculate()` then refuses to convert a period that
+  reached it. It is defined once in `Wind.h` so the two layers can't drift.
+  Genuinely-stopped cups are caught by the separate 3 s zero-wind timeout.
+
+**Threading** is the rudder board's split, for the rudder board's reasons:
+`sensor_task` (CORE_0) samples/calculates/publishes; `command_task` (CORE_1)
+runs `check_wifi()` and `check_calibration_request()`, both of which block for
+a long time (an association attempt, an NVS write). `vaneMutex` is mandatory
+for the same two-Wire-transaction reason as `angleMutex`, and the AsyncUDP
+callback only sets a flag.
+
+**Pin naming:** this sketch uses `D2`/`D3` rather than bare integers, so it is
+correct under either Arduino IDE Pin Numbering setting — unlike the controller,
+which is why that README carries a warning about it.
+
+**Not yet done (controller and downstream side):** nothing on the controller
+receives `~APWND` yet. To close the loop it needs a `wind.ino` mirroring
+`controller/rudder.ino` (listen on 8892, remember the sender's IP, store into
+`AutoPilot`, add a `case 'v':` relay in `dispatch_command()`), then wind fields
+appended to `~APDAT` in `controller/publish.ino` with the display parser and
+`autopilot_pi`'s `AutoPilotState`/`ParsePacket()` updated **together**.
 
 ## The `AutoPilot` class — read this before "deduplicating" it
 

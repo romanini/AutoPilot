@@ -4,7 +4,8 @@ A marine autopilot built on the **Arduino Nano ESP32**. One board (the
 **controller**) reads the boat's sensors and drives the steering motor; another
 (the **display**) is the cockpit head unit with an LCD and buttons; a third
 (the **rudder** sensor) reports rudder angle from an AS5600 magnetic sensor
-(boat is wheel-steered). They talk to each other over Wi-Fi using UDP.
+(boat is wheel-steered); a fourth (the **wind** sensor) sits at the masthead and
+reports apparent wind. They talk to each other over Wi-Fi using UDP.
 
 ```
    sensors                     Wi-Fi (SoftAP "SoberPilot", 10.20.1.x)
@@ -19,7 +20,7 @@ A marine autopilot built on the **Arduino Nano ESP32**. One board (the
                 steering motor                                         HX8357 LCD + buttons
 ```
 
-## The three sketches
+## The four sketches
 
 ### `controller/` — sensors, navigation, and steering
 Acts as the Wi-Fi access point (`SoftAP` SSID **SoberPilot**, `10.20.1.x`). It
@@ -78,6 +79,40 @@ Wiring: AS5600 powered from the Nano ESP32's **3V3 pin** (not 5V — the
 module's I2C pull-ups would overvoltage the ESP32's 3.3V-only GPIOs), SDA/SCL
 to the Nano's dedicated SDA/SCL pins, DIR tied to GND.
 
+### `wind/` — masthead wind sensor
+
+A standalone board, like the rudder sensor: joins SoberPilot as a station and
+unicasts apparent wind to the controller on its own pair of UDP ports
+(8892/8893). The wind maths is a port of Norbert Walter's
+[Windsensor Yachta](https://github.com/norbert-walter/Windsensor_Yachta)
+firmware from the ESP8266, minus its HTTP server, settings pages, OTA updater
+and NMEA TCP server (a phone-facing interface will come back over Bluetooth).
+
+| File | Responsibility |
+|------|----------------|
+| `wind.ino` | `setup()`/`loop()`, FreeRTOS task wiring, sample cadence |
+| `Wind.{h,cpp}` | Thread-safe state model **plus all the wind maths** ported from the original's `Calculation.h` |
+| `vane.ino` | AS5600 vane angle + bow calibration (offset persisted via `Preferences`) |
+| `anemometer.ino` | Reed-switch pulse interrupt, rotation timing, zero-wind detection |
+| `temperature.ino` | DS18B20 air temperature on 1-Wire (non-blocking conversions) |
+| `publish.ino` | Sends `~APWND,...$` to the controller on UDP 8892 |
+| `subscribe.ino` | Listens on UDP 8893 for the relayed `~APCMD,v$` "vane is dead ahead" |
+| `wifi.ino` | Connects to the **SoberPilot** access point |
+
+Wiring (Yachta head): AS5600 vane encoder from **3V3** on the Nano's dedicated
+SDA/SCL pins (same constraints as the rudder board); reed switch between **D2**
+and GND (internal pull-up; the Yachta build also fits a 10k/100n snubber);
+DS18B20 data on **D3** with a 4k7 pull-up to 3V3. Board power is 12 V from the
+masthead light circuit. Unlike the controller, this sketch names its pins `D2`
+/`D3` rather than bare integers, so it builds correctly under **either** Pin
+Numbering setting.
+
+**Calibration:** the vane zero can only be set once the head is assembled and
+bolted to the mast, so it is a runtime command, not a build constant. Point the
+vane down the centreline and send `~APCMD,v$`; the offset is stored in NVS (raw
+AS5600 counts, so re-applying it never accumulates rounding error) and survives
+a reboot. Exactly the shape of the rudder board's `~APCMD,z$` centring.
+
 ## Communication protocol
 
 Plain-text UDP datagrams framed with a leading `~` and trailing `$`:
@@ -97,6 +132,14 @@ Plain-text UDP datagrams framed with a leading `~` and trailing `$`:
   timeout, so a disconnected rudder board reads as "no data," not a frozen
   stale value. See the `autopilot` skill for the full design (relay rationale,
   calibration math, timeout details).
+- **Wind sensor** — again its own pair of ports:
+  `~APWND,<direction>,<speed_kn>,<speed_mps>,<bft>,<temp_c>,<vane_ok>,<temp_ok>$`
+  wind → controller on **UDP 8892**, and `~APCMD,v$` ("the vane is dead ahead")
+  controller → wind on **UDP 8893**. `direction` is apparent wind angle,
+  0–360° clockwise from the bow. The two health flags are separate because the
+  failures are independent — a dead vane costs direction but not speed. Neither
+  covers "the board stopped transmitting"; that is a receive timeout on the
+  controller side, same as `isRudderOk`.
 
 Because telemetry is broadcast, multiple displays can listen at once; commands
 are unicast to the controller's AP address.
@@ -104,13 +147,14 @@ are unicast to the controller's AP address.
 ## Before you build: `arduino_secrets.h`
 
 Each sketch needs an `arduino_secrets.h` with the Wi-Fi password — **it must
-match on the controller, every display, and the rudder sensor**. Copy the
-example to get started:
+match on the controller, every display, the rudder sensor and the wind
+sensor**. Copy the example to get started:
 
 ```bash
 cp controller/arduino_secrets.h.example controller/arduino_secrets.h
 cp display/arduino_secrets.h.example    display/arduino_secrets.h
 cp rudder/arduino_secrets.h.example     rudder/arduino_secrets.h
+cp wind/arduino_secrets.h.example       wind/arduino_secrets.h
 # then edit each and set the password
 ```
 
@@ -137,12 +181,14 @@ the sketches `#include` (`WiFi`, `AsyncUDP`, `SPI`, `Wire`, `USB`,
 | Timezone | Jack Christensen | controller |
 | Adafruit GFX Library | Adafruit | display |
 | Adafruit HX8357 Library | Adafruit | display |
-| Adafruit AS5600 Library | Adafruit | rudder |
+| Adafruit AS5600 Library | Adafruit | rudder, wind |
+| OneWire | Paul Stoffregen | wind |
+| DallasTemperature | Miles Burton | wind |
 
-Installing the Adafruit libraries also pulls in **Adafruit BusIO** (all three
+Installing the Adafruit libraries also pulls in **Adafruit BusIO** (all four
 sketches) and **Adafruit Unified Sensor** (controller) as dependencies (the IDE
 offers to add them automatically; the `sketch.yaml` profiles list them
-explicitly).
+explicitly). Pin **DallasTemperature** to the 3.x line — 4.x changes the API.
 
 ## Building with arduino-cli
 
@@ -163,7 +209,7 @@ arduino-cli core update-index
 profile — no `Arduino/libraries` folder required):
 
 ```bash
-cd Arduino/controller        # or Arduino/display, Arduino/rudder
+cd Arduino/controller        # or Arduino/display, Arduino/rudder, Arduino/wind
 arduino-cli compile --profile nano
 ```
 
