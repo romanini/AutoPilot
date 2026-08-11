@@ -102,16 +102,39 @@ and NMEA TCP server (a phone-facing interface will come back over Bluetooth).
 Wiring (Yachta head): AS5600 vane encoder from **3V3** on the Nano's dedicated
 SDA/SCL pins (same constraints as the rudder board); reed switch between **D2**
 and GND (internal pull-up; the Yachta build also fits a 10k/100n snubber);
-DS18B20 data on **D3** with a 4k7 pull-up to 3V3. Board power is 12 V from the
+DS18B20 data on **D4** with a 4k7 pull-up to 3V3. Board power is 12 V from the
 masthead light circuit. Unlike the controller, this sketch names its pins `D2`
-/`D3` rather than bare integers, so it builds correctly under **either** Pin
-Numbering setting.
+/`D4` rather than bare integers, so it builds correctly under **either** Pin
+Numbering setting. The sensor board ([`../circuit/Sensor-Wind/`](../circuit/Sensor-Wind/))
+fits a **Hall switch** rather than a reed switch on D2 — same open-collector
+pulse per magnet pass, so the firmware does not care which is fitted.
 
-**Calibration:** the vane zero can only be set once the head is assembled and
-bolted to the mast, so it is a runtime command, not a build constant. Point the
-vane down the centreline and send `~APCMD,v$`; the offset is stored in NVS (raw
-AS5600 counts, so re-applying it never accumulates rounding error) and survives
-a reboot. Exactly the shape of the rudder board's `~APCMD,z$` centring.
+**Calibration.** Two things can only be determined once the head is built, so
+both are runtime commands persisted in NVS rather than build constants — you
+should never have to reflash a unit that is up a mast. Neither is relayed by
+the controller yet; for now send them straight to UDP 8893 on the board.
+
+*Vane zero* — `~APCMD,v$`, sent with the vane pointing down the centreline.
+Stores the offset in raw AS5600 counts (so re-applying never accumulates
+rounding error). Exactly the shape of the rudder board's `~APCMD,z$` centring.
+
+*Wind speed* — `~APCMD,k<slope>,<offset>$`, applying `speed[m/s] = raw *
+slope + offset`. The cup geometry in `Wind.h` is the **nominal** Yachta design,
+not a measurement of your head: `ANEMOMETER_RADIUS_M` is honest (measure the
+arm) but `ANEMOMETER_LAMBDA` is where cup shape and size hide and has no closed
+form, so the slope absorbs the difference. The offset absorbs what no slope
+can — bearing friction and start-up threshold make the real response `v = a +
+b·n`, not a line through the origin. Fit it off-board: log the sensor against
+a reference at several steady speeds and take the linear fit. The original
+project's documented method is a car on a windless day with a GPS speed app as
+reference, sensor on a pole clear of the car's pressure field. `speed_hz` on
+`~APWND` is the raw, uncorrected quantity to log — it stays re-fittable even
+once a calibration is in force. Values outside a sane band are rejected rather
+than written to flash. There is no ack: confirm by watching `speed_kn` move
+against an unchanged `speed_hz` in the next packet.
+
+Note the two "offsets" are unrelated despite the shared word — the vane offset
+is an angle in encoder counts, the speed offset is a scalar in m/s.
 
 ## Communication protocol
 
@@ -133,13 +156,14 @@ Plain-text UDP datagrams framed with a leading `~` and trailing `$`:
   stale value. See the `autopilot` skill for the full design (relay rationale,
   calibration math, timeout details).
 - **Wind sensor** — again its own pair of ports:
-  `~APWND,<direction>,<speed_kn>,<speed_mps>,<bft>,<temp_c>,<vane_ok>,<temp_ok>$`
-  wind → controller on **UDP 8892**, and `~APCMD,v$` ("the vane is dead ahead")
+  `~APWND,<direction>,<speed_kn>,<speed_mps>,<bft>,<temp_c>,<vane_ok>,<temp_ok>,<speed_hz>$`
+  wind → controller on **UDP 8892**, and `~APCMD,v$` / `~APCMD,k<slope>,<offset>$`
   controller → wind on **UDP 8893**. `direction` is apparent wind angle,
-  0–360° clockwise from the bow. The two health flags are separate because the
-  failures are independent — a dead vane costs direction but not speed. Neither
-  covers "the board stopped transmitting"; that is a receive timeout on the
-  controller side, same as `isRudderOk`.
+  0–360° clockwise from the bow; `speed_hz` is the raw anemometer rate, on the
+  wire for calibration rather than steering. The two health flags are separate
+  because the failures are independent — a dead vane costs direction but not
+  speed. Neither covers "the board stopped transmitting"; that is a receive
+  timeout on the controller side, same as `isRudderOk`.
 
 Because telemetry is broadcast, multiple displays can listen at once; commands
 are unicast to the controller's AP address.

@@ -23,7 +23,7 @@ static AsyncUDP telemetryUdp;
 //
 // Wire format:
 //
-//   ~APWND,<direction>,<speed_kn>,<speed_mps>,<bft>,<temp_c>,<vane_ok>,<temp_ok>$
+//   ~APWND,<direction>,<speed_kn>,<speed_mps>,<bft>,<temp_c>,<vane_ok>,<temp_ok>,<speed_hz>$
 //
 //   direction   apparent wind angle, 0..360 degrees clockwise from the bow
 //   speed_kn    apparent wind speed in knots
@@ -32,6 +32,19 @@ static AsyncUDP telemetryUdp;
 //   temp_c      masthead air temperature in degrees C
 //   vane_ok     1 when the AS5600 can see its magnet
 //   temp_ok     1 when a DS18B20 answered on the 1-Wire bus
+//   speed_hz    anemometer revolutions per second - the raw measurement
+//
+// speed_hz is on the wire for calibration, not for steering. Every other speed
+// field has the cup geometry (Wind.h) and the fitted slope/offset baked into
+// it; rev/s is upstream of all of that, so a calibration run can be logged
+// straight off the wire and re-fitted later even once a calibration is already
+// in force - which the corrected speeds alone would not allow, since you would
+// then be fitting against already-corrected data. It is also what you would
+// need to re-derive lambda if the head were ever re-cupped.
+//
+// It is appended rather than inserted so that adding it does not disturb a
+// parser written against the earlier field order - the same convention
+// ~APDAT follows in controller/publish.ino.
 //
 // The two health flags are separate rather than combined because the failures
 // are independent and mean different things: a dead vane costs direction while
@@ -45,15 +58,16 @@ void publish_wind() {
   }
   lastPublishTime = millis();
 
-  char packet[80];
-  snprintf(packet, sizeof(packet), "~APWND,%.1f,%.2f,%.2f,%d,%.1f,%d,%d$",
+  char packet[96];
+  snprintf(packet, sizeof(packet), "~APWND,%.1f,%.2f,%.2f,%d,%.1f,%d,%d,%.3f$",
            wind.getDirection(),
            wind.getSpeedKn(),
            wind.getSpeedMps(),
            wind.getSpeedBft(),
            wind.getTemperature(),
            wind.isVaneOk() ? 1 : 0,
-           wind.isTemperatureOk() ? 1 : 0);
+           wind.isTemperatureOk() ? 1 : 0,
+           wind.getSpeedHz());
   telemetryUdp.writeTo((const uint8_t*)packet, strlen(packet), controllerIp, TELEMETRY_PORT);
 
   DEBUG_PRINTLN(packet);

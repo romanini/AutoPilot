@@ -9,10 +9,12 @@
 //
 // What is deliberately NOT ported:
 //   - the HTTP server, settings pages, gauges, JSON endpoints and OTA updater.
-//     Configuration that used to live on a settings web page is either a
-//     #define here or, for the one thing that genuinely has to be set after
-//     the head is bolted to the mast, a runtime calibration command (see
-//     vane.ino). A phone-facing interface will come back over Bluetooth later.
+//     Configuration that used to live on a settings web page is a #define
+//     here, except for the two things that can only be determined once the
+//     head is built - the vane's zero (vane.ino) and the wind speed
+//     calibration (anemometer.ino) - which are runtime commands persisted in
+//     NVS, so neither needs a reflash of a unit that is up a mast. A
+//     phone-facing interface will come back over Bluetooth later.
 //   - the NMEA-0183 TCP server. This board is a station on SoberPilot and
 //     unicasts ~APWND to the controller over UDP, exactly like the rudder
 //     sensor board unicasts ~APRUD - see publish.ino.
@@ -120,15 +122,17 @@ void sensor_task(void *pvParameters) {
   }
 }
 
-// Network housekeeping plus the deferred vane re-zero, kept off sensor_task's
-// core. Both of these block for a while: check_wifi() can sit in an
-// association attempt for up to WIFI_ATTEMPT_TIMEOUT_MS, and a calibration
-// does an NVS flash write. On their own core, neither stalls sampling - and in
-// particular a reconnect attempt can't swallow the anemometer's pulse timing.
+// Network housekeeping plus the two deferred calibrations, kept off
+// sensor_task's core. All of these block for a while: check_wifi() can sit in
+// an association attempt for up to WIFI_ATTEMPT_TIMEOUT_MS, and either
+// calibration does an NVS flash write. On their own core, none of them stalls
+// sampling - and in particular a reconnect attempt can't swallow the
+// anemometer's pulse timing.
 void command_task(void *pvParameters) {
   for (;;) {  // A Task shall never return or exit.
     check_wifi();
-    check_calibration_request();
+    check_calibration_request();        // vane zero (vane.ino)
+    check_speed_calibration_request();  // speed slope/offset (anemometer.ino)
     vTaskDelay(10 / portTICK_PERIOD_MS);
   }
 }

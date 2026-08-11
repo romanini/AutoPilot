@@ -9,12 +9,6 @@
 // point where they happen.
 // ---------------------------------------------------------------------------
 
-// Wind speed calibration, applied to m/s: speed = raw * slope + offset.
-// The original exposes these on its settings web page; we have no web page, so
-// they are compile-time. Defaults are the original's (identity).
-#define WIND_CAL_SLOPE 1.0f
-#define WIND_CAL_OFFSET 0.0f
-
 // Anything above this many revolutions per second is nonsense - the original
 // uses it to swallow the huge first value produced right after a restart, when
 // the "previous pulse" timestamp is meaningless.
@@ -66,6 +60,12 @@ Wind::Wind(SerialType* ser) {
   downwind_mps = 0.0;
   downwind_kn = 0.0;
   last_calculation = 0;
+
+  // Identity until setup_anemometer() loads whatever is in NVS. Getting a
+  // sensible default in before any task runs matters: publish_wind() could
+  // otherwise multiply by an uninitialised slope on the first tick.
+  speed_cal_slope = WIND_CAL_SLOPE_DEFAULT;
+  speed_cal_offset = WIND_CAL_OFFSET_DEFAULT;
 }
 
 Wind::~Wind() {
@@ -135,6 +135,32 @@ void Wind::setTemperature(float celsius, bool ok) {
   unlock();
 }
 
+// Values are validated by the caller (anemometer.ino) before they get here -
+// this just installs them. Taking effect on the very next calculate() is the
+// whole point: there is no ack packet, so the way you confirm a calibration
+// landed is by watching speed_kn move against the unchanged speed_hz in the
+// next ~APWND.
+void Wind::setSpeedCalibration(float slope, float offset) {
+  lock();
+  speed_cal_slope = slope;
+  speed_cal_offset = offset;
+  unlock();
+}
+
+float Wind::getSpeedCalSlope() {
+  lock();
+  float value = speed_cal_slope;
+  unlock();
+  return value;
+}
+
+float Wind::getSpeedCalOffset() {
+  lock();
+  float value = speed_cal_offset;
+  unlock();
+  return value;
+}
+
 // ---------------------------------------------------------------------------
 // The maths
 // ---------------------------------------------------------------------------
@@ -197,7 +223,7 @@ void Wind::calculate() {
 
   // v[m/s] = (2 * pi * n[Hz] * r[m]) / lambda
   speed_mps = (2.0f * (float)PI * speed_hz * ANEMOMETER_RADIUS_M) / ANEMOMETER_LAMBDA;
-  speed_mps = speed_mps * WIND_CAL_SLOPE + WIND_CAL_OFFSET;
+  speed_mps = speed_mps * speed_cal_slope + speed_cal_offset;
   if (speed_mps < 0.0f) {
     speed_mps = 0.0f;
   }
@@ -339,8 +365,9 @@ void Wind::printWind() {
     return;
   }
   lock();
-  serial->printf("Wind dir %.1f (raw %.1f, side %.1f, mag %u, ok %d)  %.2f kn / %.2f m/s / %d bft  temp %.1f C (ok %d)\n",
+  serial->printf("Wind dir %.1f (raw %.1f, side %.1f, mag %u, ok %d)  %.3f rev/s -> %.2f kn / %.2f m/s / %d bft  [cal %.5f x + %.5f]  temp %.1f C (ok %d)\n",
                  direction, raw_direction, direction_side, vane_magnitude, vane_ok ? 1 : 0,
-                 speed_kn, speed_mps, speed_bft, temperature, temperature_ok ? 1 : 0);
+                 speed_hz, speed_kn, speed_mps, speed_bft, speed_cal_slope, speed_cal_offset,
+                 temperature, temperature_ok ? 1 : 0);
   unlock();
 }

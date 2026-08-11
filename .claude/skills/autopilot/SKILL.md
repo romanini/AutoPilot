@@ -252,14 +252,24 @@ over **Bluetooth**, not by restoring the web server.
 
 **Protocol** (a third pair of ports, separate from 8888/8889 and 8890/8891):
 - **UDP 8892**, wind → controller, unicast to `10.20.1.1`:
-  `~APWND,<direction>,<speed_kn>,<speed_mps>,<bft>,<temp_c>,<vane_ok>,<temp_ok>$`
+  `~APWND,<direction>,<speed_kn>,<speed_mps>,<bft>,<temp_c>,<vane_ok>,<temp_ok>,<speed_hz>$`
   at 5 Hz. `direction` is apparent wind angle 0–360° clockwise from the bow.
   As with the rudder board this is also the only way the controller can learn
   this board's IP.
-- **UDP 8893**, controller → wind: `~APCMD,v$` — "the vane is pointing dead
-  ahead, call this zero". Verb `v` because `dispatch_command()` switches on
-  `buffer[0]` alone and `a/m/n/w/X/t/z` are taken; same reasoning that picked
-  `z` for the rudder.
+- **UDP 8893**, controller → wind: `~APCMD,v$` (vane zero) and
+  `~APCMD,k<slope>,<offset>$` (speed calibration). Verbs `v`/`k` because
+  `dispatch_command()` switches on `buffer[0]` alone and `a/m/n/w/X/t/z` are
+  taken; same reasoning that picked `z` for the rudder. **Neither is relayed by
+  the controller yet** — a `case 'v':`/`case 'k':` pair needs adding alongside
+  the existing `case 'z':`.
+
+**`speed_hz` is on the wire for calibration, not steering.** Every other speed
+field has the cup geometry *and* the fitted slope/offset baked in; rev/s is
+upstream of all of it. Without it a calibration run could only be logged while
+the calibration was identity, because otherwise you'd be fitting against
+already-corrected data. It also allows re-deriving lambda if the head is ever
+re-cupped. It is *appended*, following the `~APDAT` convention, so field order
+stays stable for parsers.
 
 **Two health flags, not one:** `vane_ok` (AS5600 magnet detected) and
 `temp_ok` (a DS18B20 answered) are separate because the failures are
@@ -288,6 +298,22 @@ controller side**, the same distinction (and the same reason) as
 4. **Every pulse is sampled**, where the original recorded only every other one.
    Same quantity, twice the samples.
 
+**Two calibrations, both runtime + NVS, both for the same reason.** Neither the
+vane zero nor the wind speed fit can be known before the head is assembled, and
+reflashing a masthead unit is a genuinely bad afternoon — so both live in the
+`"wind"` NVS namespace (`voffset`; `calslope`/`caloffset`) rather than as build
+constants. **They are unrelated despite both involving an "offset":** the vane
+offset is an angle in AS5600 counts; the speed offset is a scalar in m/s that
+absorbs bearing friction and the cup wheel's start-up threshold, because the
+real response is `v = a + b·n`, not a line through the origin. Likewise the
+speed *slope* absorbs the difference between the nominal `ANEMOMETER_LAMBDA`
+(which encodes cup shape/size and has no closed form) and this head's real one.
+The speed fit is done off-board — log against a reference at several steady
+speeds, take the linear fit; the original project documents a car on a windless
+day with a GPS app. Incoming values are range-checked before they reach flash,
+using `!(x >= min && x <= max)` rather than the naive form **on purpose**, so a
+NaN parsed out of a malformed datagram is rejected too.
+
 **Two things that look like arbitrary constants but aren't:**
 - **`TEMPERATURE_INTERVAL_MS` is 500 to match the original's poll rate**, not
   because 2 Hz air temperature is useful. The `-6.0 °C` self-heating
@@ -314,7 +340,9 @@ which is why that README carries a warning about it.
 **Not yet done (controller and downstream side):** nothing on the controller
 receives `~APWND` yet. To close the loop it needs a `wind.ino` mirroring
 `controller/rudder.ino` (listen on 8892, remember the sender's IP, store into
-`AutoPilot`, add a `case 'v':` relay in `dispatch_command()`), then wind fields
+`AutoPilot`, add `case 'v':` and `case 'k':` relays in `dispatch_command()`
+— note `k` carries arguments, so relay the whole verb string verbatim the way
+`relay_rudder_command()` already does), then wind fields
 appended to `~APDAT` in `controller/publish.ino` with the display parser and
 `autopilot_pi`'s `AutoPilotState`/`ParsePacket()` updated **together**.
 

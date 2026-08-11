@@ -9,8 +9,9 @@
 #include <DallasTemperature.h>
 
 // 1-Wire data pin. Clear of the I2C pins the vane uses and the interrupt pin
-// the anemometer uses.
-#define ONE_WIRE_PIN D3
+// the anemometer uses. This is where the wind sensor board routes DQ - see
+// circuit/Sensor-Wind/.
+#define ONE_WIRE_PIN D4
 
 // How often a conversion is started. The original polls at 2 Hz and this
 // matters more than it looks - see the self-heating note below.

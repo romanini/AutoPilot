@@ -19,6 +19,8 @@
 // even though it was measuring a half-revolution gap. This version records
 // every pulse. Same quantity, twice as many samples, no downside.
 
+#include <Preferences.h>
+
 // Reed switch input. Any GPIO with interrupt capability works; D2 is chosen to
 // stay clear of the I2C pins the vane needs and the 1-Wire pin the DS18B20 uses.
 #define WIND_SPEED_PIN D2
@@ -41,6 +43,22 @@
 // roughly 0.3 m/s - below which this style of cup anemometer has stalled
 // anyway.
 #define WIND_ZERO_TIMEOUT_US 3000000UL
+
+// Accepted range for a speed calibration arriving over the wire. A slope
+// outside this is not a plausible fit - it would mean the nominal geometry in
+// Wind.h is wrong by an order of magnitude, which is a hardware problem, not a
+// calibration - and an offset outside it is larger than the start-up threshold
+// of any cup wheel. The check matters because the value goes to flash and
+// takes effect on every reading afterwards: a garbled datagram must not be
+// able to persistently poison the wind speed until someone notices and
+// reflashes a masthead unit.
+#define CAL_SLOPE_MIN 0.1f
+#define CAL_SLOPE_MAX 10.0f
+#define CAL_OFFSET_ABS_MAX 5.0f
+
+// Keys inside WIND_PREFS_NAMESPACE (Wind.h), which vane.ino also writes to.
+#define CAL_SLOPE_KEY "calslope"
+#define CAL_OFFSET_KEY "caloffset"
 
 // How many pulse intervals to average over. The original exposes this on its
 // settings page as 1..10 and notes "for high speed use 1, default use 2".
@@ -99,11 +117,123 @@ void IRAM_ATTR anemometer_isr() {
   portEXIT_CRITICAL_ISR(&anemometerMux);
 }
 
+// ---------------------------------------------------------------------------
+// Speed calibration
+//
+// Fitted, not derived. ANEMOMETER_LAMBDA in Wind.h is the nominal cup factor
+// for the Yachta design - it encodes the cup shape and size, and there is no
+// way to compute it for a given build - so the slope absorbs the difference
+// between that nominal value and this head's real one. The offset absorbs what
+// no slope can: bearing friction and the wheel's start-up threshold mean the
+// response is v = a + b*n, not a line through the origin.
+//
+// The fit itself is done off-board: log this sensor against a reference at
+// several steady speeds, plot uncorrected against reference, take the linear
+// fit's slope and intercept. The original project's documented method is a car
+// on a windless day with a GPS speed app as the reference, sensor on a pole
+// clear of the car's pressure field. Publishing raw rev/s on ~APWND
+// (publish.ino) is what makes that run loggable straight off the wire, and
+// keeps it re-fittable later even once a calibration is in force - rev/s is
+// upstream of everything, including radius and lambda, so a re-cupped head can
+// be re-fitted from the same data.
+// ---------------------------------------------------------------------------
+
+// Set from the AsyncUDP callback (subscribe.ino), consumed by command_task.
+// The callback deliberately does not persist inline: that would put an NVS
+// flash write on the network stack's own task. The mux is what makes the
+// three-value handoff atomic - unlike the vane's bare flag, this one carries
+// data, so a partially-visible update is a real hazard.
+static portMUX_TYPE calibrationMux = portMUX_INITIALIZER_UNLOCKED;
+static bool speedCalibrationPending = false;
+static float pendingCalSlope = WIND_CAL_SLOPE_DEFAULT;
+static float pendingCalOffset = WIND_CAL_OFFSET_DEFAULT;
+
+// Called from setup_anemometer(), before any task exists, so it needs no lock.
+static void load_speed_calibration() {
+  Preferences prefs;
+  prefs.begin(WIND_PREFS_NAMESPACE, true);  // read-only
+  float slope = prefs.getFloat(CAL_SLOPE_KEY, WIND_CAL_SLOPE_DEFAULT);
+  float offset = prefs.getFloat(CAL_OFFSET_KEY, WIND_CAL_OFFSET_DEFAULT);
+  prefs.end();
+
+  wind.setSpeedCalibration(slope, offset);
+  DEBUG_PRINT("Loaded speed calibration: slope=");
+  DEBUG_PRINT2(slope, 5);
+  DEBUG_PRINT(" offset=");
+  DEBUG_PRINTLN2(offset, 5);
+}
+
+// Accepts a calibration from ~APCMD,k<slope>,<offset>$ for command_task to
+// apply. Rejects anything outside the sane band - note the check is written as
+// !(in range) rather than (out of range) on purpose, so a NaN parsed out of a
+// malformed datagram is rejected too (every comparison against NaN is false,
+// so the naive form would let it through and poison flash).
+//
+// Returns false when the values are refused. There is no ack packet either
+// way; the log line is for someone watching over USB during a calibration run,
+// and the real confirmation is the next ~APWND, where speed_kn moves against
+// an unchanged speed_hz.
+bool request_speed_calibration(float slope, float offset) {
+  if (!(slope >= CAL_SLOPE_MIN && slope <= CAL_SLOPE_MAX) ||
+      !(offset >= -CAL_OFFSET_ABS_MAX && offset <= CAL_OFFSET_ABS_MAX)) {
+    DEBUG_PRINT("Rejected implausible speed calibration: slope=");
+    DEBUG_PRINT2(slope, 5);
+    DEBUG_PRINT(" offset=");
+    DEBUG_PRINTLN2(offset, 5);
+    return false;
+  }
+
+  portENTER_CRITICAL(&calibrationMux);
+  pendingCalSlope = slope;
+  pendingCalOffset = offset;
+  speedCalibrationPending = true;
+  portEXIT_CRITICAL(&calibrationMux);
+  return true;
+}
+
+// Polled from command_task. Clears the flag while holding the mux, together
+// with the values it guards, so a request arriving mid-write is serviced on
+// the next tick rather than being half-applied.
+void check_speed_calibration_request() {
+  bool pending;
+  float slope;
+  float offset;
+
+  portENTER_CRITICAL(&calibrationMux);
+  pending = speedCalibrationPending;
+  slope = pendingCalSlope;
+  offset = pendingCalOffset;
+  speedCalibrationPending = false;
+  portEXIT_CRITICAL(&calibrationMux);
+
+  if (!pending) {
+    return;
+  }
+
+  // Apply before persisting: the reading should change on the very next
+  // calculate(), and a flash write that fails should not also cost the
+  // operator the live effect they are trying to observe.
+  wind.setSpeedCalibration(slope, offset);
+
+  Preferences prefs;
+  prefs.begin(WIND_PREFS_NAMESPACE, false);  // read-write
+  prefs.putFloat(CAL_SLOPE_KEY, slope);
+  prefs.putFloat(CAL_OFFSET_KEY, offset);
+  prefs.end();
+
+  DEBUG_PRINT("Speed calibration set: slope=");
+  DEBUG_PRINT2(slope, 5);
+  DEBUG_PRINT(" offset=");
+  DEBUG_PRINTLN2(offset, 5);
+}
+
 void setup_anemometer() {
   pinMode(WIND_SPEED_PIN, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(WIND_SPEED_PIN), anemometer_isr, FALLING);
   DEBUG_PRINT("Anemometer interrupt attached to pin ");
   DEBUG_PRINTLN(WIND_SPEED_PIN);
+
+  load_speed_calibration();
 }
 
 // Averaged interval between pulses, in milliseconds. `validOut` is false while

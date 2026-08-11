@@ -13,15 +13,20 @@
 # though we never #include it directly; the GFX/HX8357 drivers need it).
 # Version pins are reasonable recent releases; bump with `arduino-cli lib search`.
 
+# The ST7365P driver is NOT listed here: no maintained Adafruit-GFX driver for
+# that controller exists, so Adafruit_ST7365.{h,cpp} are vendored into this
+# sketch folder alongside AutoPilot.{h,cpp}. That is not a violation of the
+# "libraries live in sketch.yaml" rule - the rule is about published libraries.
+
 profiles:
   nano:
-    notes: Arduino Nano ESP32 - HX8357 LCD display + button input head unit
+    notes: Arduino Nano ESP32 - head unit, auto-detects HX8357 or ST7365P LCD
     fqbn: arduino:esp32:nano_nora
     platforms:
       - platform: arduino:esp32 (2.0.18-arduino.5)
     libraries:
       - Adafruit GFX Library (1.11.11)   # graphics + Fonts/* (Adafruit_GFX.h)
-      - Adafruit HX8357 Library (1.1.20) # TFT LCD driver (Adafruit_HX8357.h)
+      - Adafruit HX8357 Library (1.1.20) # driver for the original TFT breakout
       - Time (1.6.1)                     # time_t helpers (TimeLib.h)
       - Adafruit BusIO (1.16.1)          # dependency of the Adafruit drivers
 

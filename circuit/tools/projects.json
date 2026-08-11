@@ -1,0 +1,51 @@
+[
+  {
+    "board": "Display",
+    "sch": "https://easyeda.com/editor#id=bc71b22d85c84b4ebb8e64f88f11348d",
+    "pcb": "https://easyeda.com/editor#id=627cfc4e368f44d3bea5406d963a2238",
+    "schTitle": "DIsplay",
+    "pcbTitle": "Display"
+  },
+  {
+    "board": "Display-LCD",
+    "sch": "https://easyeda.com/editor#id=91d03378f7be4349859f2483680f90bd",
+    "pcb": "https://easyeda.com/editor#id=69cd5917aab94324b926577565b91cee",
+    "schTitle": "LCD",
+    "pcbTitle": "LCD"
+  },
+  {
+    "board": "Display-Button",
+    "sch": "https://easyeda.com/editor#id=c2939ffdc6b3424783facd1cd40e0a25",
+    "pcb": "https://easyeda.com/editor#id=db48662306b445769661a56e3f54ccd4",
+    "schTitle": "Button",
+    "pcbTitle": "Button"
+  },
+  {
+    "board": "Controller-12-volt-power",
+    "sch": "https://easyeda.com/editor#id=35148afe19be4ac19d62dc50685f56c4",
+    "pcb": "https://easyeda.com/editor#id=9529b2836d4e4c809851005285fbb363",
+    "schTitle": "12 volt power",
+    "pcbTitle": "12 volt power"
+  },
+  {
+    "board": "Sensor-Rudder",
+    "sch": "https://easyeda.com/editor#id=4953feba110c45368479d8ae5398986a",
+    "pcb": "https://easyeda.com/editor#id=d30a343a4a5c4fcbb3faf232fe7f97ea",
+    "schTitle": "Rudder",
+    "pcbTitle": "Rudder"
+  },
+  {
+    "board": "Controller",
+    "sch": "https://easyeda.com/editor#id=e42dd089a74e450ca15e25c66c66beac",
+    "pcb": "https://easyeda.com/editor#id=9b8bc12f8f1f4f1fbe43bb7c854beb16",
+    "schTitle": "Controller",
+    "pcbTitle": "Controller"
+  },
+  {
+    "board": "Sensor-Wind",
+    "sch": "https://easyeda.com/editor#id=72033ffd7bd7446fac3d9cbddf69a84c",
+    "pcb": "https://easyeda.com/editor#id=f006787d252645e19da4ec7289d53668",
+    "schTitle": "Wind Sensor",
+    "pcbTitle": "Wind Sensor"
+  }
+]

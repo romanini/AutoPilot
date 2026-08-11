@@ -11,10 +11,10 @@
 #include <Preferences.h>
 #include <Adafruit_AS5600.h>
 
-// Namespace/key are only ever written by calibrate_bow() - nothing else
-// touches flash. Offset is in raw AS5600 counts (0-4095), not degrees, so
-// re-applying it never accumulates float rounding error.
-#define WIND_PREFS_NAMESPACE "wind"
+// The "voffset" key is only ever written by calibrate_bow(). It is in raw
+// AS5600 counts (0-4095), not degrees, so re-applying it never accumulates
+// float rounding error. The namespace it lives in is shared with the speed
+// calibration in anemometer.ino - see WIND_PREFS_NAMESPACE in Wind.h.
 #define BOW_COUNTS 0  // 0 degrees - vane pointing dead ahead
 
 // Set to 1 if the vane reads backwards, i.e. the angle decreases as the vane

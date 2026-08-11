@@ -1,6 +1,8 @@
 #include <SPI.h>
 #include "Adafruit_GFX.h"
 #include "Adafruit_HX8357.h"
+#include "Adafruit_ST7365.h"
+#include "tft.h"
 #include <Fonts/FreeSans9pt7b.h>
 #include <Fonts/FreeSansBold9pt7b.h>
 #include <Fonts/FreeSansBold12pt7b.h>
@@ -8,16 +10,15 @@
 #include <Fonts/FreeSansBold24pt7b.h>
 #include <TimeLib.h>
 
-// These are 'flexible' lines that can be changed
-#define TFT_CS D10
-#define TFT_DC D9
-#define TFT_RST -1  // RST can be set to -1 if you tie it to Arduino's reset
+// Pin assignments and the COLOR_* palette live in tft.h - they are shared
+// with the panel-detection code, which has to read the MISO strap before SPI
+// claims the pin.
 
-#define SPI_MISO D12
-#define SPI_MOSI D11
-#define SPI_SCLK D13
-
-static constexpr uint32_t TFT_SPI_HZ = 24000000; // try 40 MHz; drop to 24 MHz if unstable
+// Per-panel SPI clock.  The HX8357 has always run at 24 MHz here.  The ST7365P
+// is held to its datasheet TSCYCW limit of 66 ns (~15 MHz) even though the
+// bench rig ran clean past 20 MHz - see circuit/Display/LCD-Carrier/README.md.
+static constexpr uint32_t HX8357_SPI_HZ = 24000000;
+static constexpr uint32_t ST7365_SPI_HZ_ACTUAL = 15000000;
 
 // Box color coding is by data source, not by column or box:
 //   Yellow  - data from the compass (Heading)
@@ -35,9 +36,14 @@ static constexpr uint32_t TFT_SPI_HZ = 24000000; // try 40 MHz; drop to 24 MHz i
 // constant since the Target box now carries all of that meaning.
 static const uint16_t MAGENTA = 0xF57F;
 
-Adafruit_HX8357 tft = Adafruit_HX8357(&SPI, TFT_CS, TFT_DC, TFT_RST);
+// Held as a base-class pointer so the same drawing code drives either panel.
+// Both drivers are Adafruit_SPITFT subclasses, so everything below - all 26
+// drawBitmap() calls included - is identical for both; only construction and
+// the init sequence differ, and those live in the drivers.
+Adafruit_SPITFT *tft = nullptr;
+TftType fittedTft = TFT_AUTO;
 
-uint16_t backgroundColor = HX8357_BLACK;
+uint16_t backgroundColor = COLOR_BLACK;
 
 // Tracks the last value painted for each display item.
 // Initialized to sentinels in initialize_displayed_values() so everything
@@ -129,6 +135,10 @@ void initialize_displayed_values() {
 void setup_screen() {
   DEBUG_PRINTLN("Starting Setup Display");
 
+  // MUST come before SPI.begin(): detection samples SPI_MISO as a GPIO to read
+  // the panel-ID strap, and the SPI peripheral takes that pin over.
+  fittedTft = detect_tft();
+
   // Control lines defaults, then start hardware SPI (SCK, MISO, MOSI, SS)
   pinMode(TFT_CS, OUTPUT);
   digitalWrite(TFT_CS, HIGH);
@@ -136,30 +146,29 @@ void setup_screen() {
 
   SPI.begin(SPI_SCLK, SPI_MISO, SPI_MOSI, TFT_CS);
 
-  DEBUG_PRINTLN("Setting up Display");
-  tft.begin(TFT_SPI_HZ);
+  DEBUG_PRINT("Setting up Display: ");
+  DEBUG_PRINTLN(tft_name(fittedTft));
+
+  uint32_t freq;
+  if (fittedTft == TFT_ST7365) {
+    tft = new Adafruit_ST7365(&SPI, TFT_CS, TFT_DC, TFT_RST);
+    freq = ST7365_SPI_HZ_ACTUAL;
+  } else {
+    tft = new Adafruit_HX8357(&SPI, TFT_CS, TFT_DC, TFT_RST);
+    freq = HX8357_SPI_HZ;
+  }
+
+  tft->begin(freq);
   delay(20);
   DEBUG_PRINTLN("started");
 
-  // read diagnostics (optional but can help debug problems)
-  uint8_t x = tft.readcommand8(HX8357_RDPOWMODE);
-  DEBUG_PRINT("Display Power Mode: 0x");
-  DEBUG_PRINTLN2(x, HEX);
-  x = tft.readcommand8(HX8357_RDMADCTL);
-  DEBUG_PRINT("MADCTL Mode: 0x");
-  DEBUG_PRINTLN2(x, HEX);
-  x = tft.readcommand8(HX8357_RDCOLMOD);
-  DEBUG_PRINT("Pixel Format: 0x");
-  DEBUG_PRINTLN2(x, HEX);
-  x = tft.readcommand8(HX8357_RDDIM);
-  DEBUG_PRINT("Image Format: 0x");
-  DEBUG_PRINTLN2(x, HEX);
-  x = tft.readcommand8(HX8357_RDDSDR);
-  DEBUG_PRINT("Self Diagnostic: 0x");
-  DEBUG_PRINTLN2(x, HEX);
+  // The old readcommand8() diagnostics are gone.  They only ever worked on the
+  // HX8357: the ST7365P does not drive SDO for the status registers, and its
+  // reads are capped at 6.6 MHz anyway (TSCYCR 150 ns), so they would have
+  // needed a clock change to be attempted at all.
 
-  tft.setRotation(1);
-  tft.fillScreen(HX8357_BLACK);
+  tft->setRotation(1);
+  tft->fillScreen(COLOR_BLACK);
   initialize_display();
   initialize_displayed_values();
 }
@@ -194,7 +203,7 @@ void display_heading() {
   disp.heading_connected = cur_connected;
 
   GFXcanvas1 canvas(130, 44);
-  uint16_t foregroundColor = HX8357_YELLOW;
+  uint16_t foregroundColor = COLOR_YELLOW;
   canvas.fillScreen(0);
 
   if (cur_connected) {
@@ -203,7 +212,7 @@ void display_heading() {
     canvas.setCursor(0, 37);
     canvas.print(cur_heading);
   }
-  tft.drawBitmap(20, 30, canvas.getBuffer(), 130, 44, foregroundColor, backgroundColor);
+  tft->drawBitmap(20, 30, canvas.getBuffer(), 130, 44, foregroundColor, backgroundColor);
 }
 
 void display_speed() {
@@ -214,7 +223,7 @@ void display_speed() {
   disp.speed_hasFix = cur_hasFix;
 
   GFXcanvas1 canvas(130, 44);
-  uint16_t foregroundColor = HX8357_CYAN;
+  uint16_t foregroundColor = COLOR_CYAN;
   canvas.fillScreen(0);
 
   if (cur_hasFix) {
@@ -223,7 +232,7 @@ void display_speed() {
     canvas.setCursor(0, 37);
     canvas.print(cur_speed, 2);
   }
-  tft.drawBitmap(20, 208, canvas.getBuffer(), 130, 44, foregroundColor, backgroundColor);
+  tft->drawBitmap(20, 208, canvas.getBuffer(), 130, 44, foregroundColor, backgroundColor);
 }
 
 void display_track() {
@@ -246,7 +255,7 @@ void display_track() {
     canvas.setCursor(0, 37);
     canvas.print(cur_track, 1);
   }
-  tft.drawBitmap(20, 119, canvas.getBuffer(), 130, 44, foregroundColor, backgroundColor);
+  tft->drawBitmap(20, 119, canvas.getBuffer(), 130, 44, foregroundColor, backgroundColor);
 }
 
 // Polled every loop rather than gated on hasModeChanged(): nav_source can
@@ -298,7 +307,7 @@ void display_mode() {
   }
   // Box shrunk from 89px to 67px tall; re-centered in the space below the
   // label (was y=38, now y=28 - see the initialize_mode() comment above).
-  tft.drawBitmap(176, 28, canvas.getBuffer(), 135, 24, MAGENTA, backgroundColor);
+  tft->drawBitmap(176, 28, canvas.getBuffer(), 135, 24, MAGENTA, backgroundColor);
 }
 
 // Target = the live compass setpoint the autopilot is steering to: the held
@@ -325,7 +334,7 @@ void display_target() {
   }
   // Box moved up to y=67, now 126px tall; Target+Correction re-centered as a
   // pair in the space below the label (was y=130, now y=95).
-  tft.drawBitmap(181, 95, canvas.getBuffer(), 130, 44, MAGENTA, backgroundColor);
+  tft->drawBitmap(181, 95, canvas.getBuffer(), 130, 44, MAGENTA, backgroundColor);
 }
 
 // Correction lives in the same box as Target, right underneath it, with no
@@ -350,7 +359,7 @@ void display_correction() {
     canvas.println((cur_correction > 0) ? " R" : " L");
   }
   // See display_target() above - same box, re-centered the same way (was y=182, now y=147).
-  tft.drawBitmap(197, 147, canvas.getBuffer(), 120, 32, MAGENTA, backgroundColor);
+  tft->drawBitmap(197, 147, canvas.getBuffer(), 120, 32, MAGENTA, backgroundColor);
 }
 
 // Rudder angle relative to 180 (dead center - see the calibration design in
@@ -384,7 +393,7 @@ void display_rudder() {
   }
   // Vertically centered in the box's content area (below the label), same
   // sizing/positioning approach as display_correction() above.
-  tft.drawBitmap(202, 220, canvas.getBuffer(), 115, 32, HX8357_GREEN, backgroundColor);
+  tft->drawBitmap(202, 220, canvas.getBuffer(), 115, 32, COLOR_GREEN, backgroundColor);
 }
 
 void display_volts() {
@@ -395,7 +404,7 @@ void display_volts() {
   disp.inputVoltage   = cur_input;
 
   GFXcanvas1 canvas(120, 22);
-  uint16_t foregroundColor = HX8357_WHITE;
+  uint16_t foregroundColor = COLOR_WHITE;
   canvas.fillScreen(0);
 
   canvas.setTextColor(1);
@@ -404,7 +413,7 @@ void display_volts() {
   canvas.print(cur_batt, 2);
   canvas.print(" / ");
   canvas.println(cur_input, 1);
-  tft.drawBitmap(20, 289, canvas.getBuffer(), 120, 22, foregroundColor, backgroundColor);
+  tft->drawBitmap(20, 289, canvas.getBuffer(), 120, 22, foregroundColor, backgroundColor);
 }
 
 void display_distance() {
@@ -426,7 +435,7 @@ void display_distance() {
     canvas.setCursor(0, 37);
     canvas.print(cur_distance, 2);
   }
-  tft.drawBitmap(341, 119, canvas.getBuffer(), 130, 44, foregroundColor, backgroundColor);
+  tft->drawBitmap(341, 119, canvas.getBuffer(), 130, 44, foregroundColor, backgroundColor);
 }
 
 void display_location_lat() {
@@ -437,7 +446,7 @@ void display_location_lat() {
   disp.lat_hasFix  = cur_hasFix;
 
   GFXcanvas1 canvas(115, 22);
-  uint16_t foregroundColor = HX8357_CYAN;
+  uint16_t foregroundColor = COLOR_CYAN;
   canvas.fillScreen(0);
 
   if (cur_hasFix) {
@@ -446,7 +455,7 @@ void display_location_lat() {
     canvas.setCursor(0, 18);
     canvas.print(cur_lat, 6);
   }
-  tft.drawBitmap(341, 27, canvas.getBuffer(), 115, 22, foregroundColor, backgroundColor);
+  tft->drawBitmap(341, 27, canvas.getBuffer(), 115, 22, foregroundColor, backgroundColor);
 }
 
 void display_location_lon() {
@@ -457,7 +466,7 @@ void display_location_lon() {
   disp.lon_hasFix  = cur_hasFix;
 
   GFXcanvas1 canvas(139, 22);
-  uint16_t foregroundColor = HX8357_CYAN;
+  uint16_t foregroundColor = COLOR_CYAN;
   canvas.fillScreen(0);
 
   if (cur_hasFix) {
@@ -466,7 +475,7 @@ void display_location_lon() {
     canvas.setCursor(0, 18);
     canvas.print(cur_lon, 6);
   }
-  tft.drawBitmap(331, 51, canvas.getBuffer(), 139, 22, foregroundColor, backgroundColor);
+  tft->drawBitmap(331, 51, canvas.getBuffer(), 139, 22, foregroundColor, backgroundColor);
 }
 
 // Mirrors display_location_lat/lon exactly (same font, same two-line layout)
@@ -479,7 +488,7 @@ void display_waypoint_lat() {
   disp.waypointLat_set = cur_set;
 
   GFXcanvas1 canvas(115, 22);
-  uint16_t foregroundColor = HX8357_WHITE;
+  uint16_t foregroundColor = COLOR_WHITE;
   canvas.fillScreen(0);
 
   if (cur_set) {
@@ -488,7 +497,7 @@ void display_waypoint_lat() {
     canvas.setCursor(0, 18);
     canvas.print(cur_lat, 6);
   }
-  tft.drawBitmap(341, 205, canvas.getBuffer(), 115, 22, foregroundColor, backgroundColor);
+  tft->drawBitmap(341, 205, canvas.getBuffer(), 115, 22, foregroundColor, backgroundColor);
 }
 
 void display_waypoint_lon() {
@@ -499,7 +508,7 @@ void display_waypoint_lon() {
   disp.waypointLon_set = cur_set;
 
   GFXcanvas1 canvas(139, 22);
-  uint16_t foregroundColor = HX8357_WHITE;
+  uint16_t foregroundColor = COLOR_WHITE;
   canvas.fillScreen(0);
 
   if (cur_set) {
@@ -508,7 +517,7 @@ void display_waypoint_lon() {
     canvas.setCursor(0, 18);
     canvas.print(cur_lon, 6);
   }
-  tft.drawBitmap(331, 229, canvas.getBuffer(), 139, 22, foregroundColor, backgroundColor);
+  tft->drawBitmap(331, 229, canvas.getBuffer(), 139, 22, foregroundColor, backgroundColor);
 }
 
 void display_datetime() {
@@ -524,7 +533,7 @@ void display_datetime() {
   disp.dtHour   = cur_hour;  disp.dtMinute = cur_minute; disp.dt_hasFix = cur_hasFix;
 
   GFXcanvas1 canvas(165, 22);
-  uint16_t foregroundColor = HX8357_CYAN;
+  uint16_t foregroundColor = COLOR_CYAN;
   canvas.fillScreen(0);
 
   canvas.setTextColor(1);
@@ -535,7 +544,7 @@ void display_datetime() {
     sprintf(dateTimeString, "%d/%d/%02d %d:%02d", cur_month, cur_day, cur_year % 100, cur_hour, cur_minute);
     canvas.print(dateTimeString);
   }
-  tft.drawBitmap(181, 289, canvas.getBuffer(), 165, 22, foregroundColor, backgroundColor);
+  tft->drawBitmap(181, 289, canvas.getBuffer(), 165, 22, foregroundColor, backgroundColor);
 }
 
 void display_fix() {
@@ -548,7 +557,7 @@ void display_fix() {
   disp.fix_hasFix = cur_hasFix;
 
   GFXcanvas1 canvas(110, 22);
-  uint16_t foregroundColor = HX8357_CYAN;
+  uint16_t foregroundColor = COLOR_CYAN;
   canvas.fillScreen(0);
 
   canvas.setTextColor(1);
@@ -569,7 +578,7 @@ void display_fix() {
     canvas.print(cur_satellites);
     canvas.print(")");
   }
-  tft.drawBitmap(360, 289, canvas.getBuffer(), 110, 22, foregroundColor, backgroundColor);
+  tft->drawBitmap(360, 289, canvas.getBuffer(), 110, 22, foregroundColor, backgroundColor);
 }
 
 void initialize_display() {
@@ -595,30 +604,30 @@ void initialize_heading() {
   int16_t x1, y1;
   uint16_t w, h;
   GFXcanvas1 canvas(160, 89);
-  canvas.fillScreen(HX8357_BLACK);
+  canvas.fillScreen(COLOR_BLACK);
   canvas.setFont(&FreeSans9pt7b);
-  canvas.drawRect(0, 0, 160, 89, HX8357_YELLOW);
+  canvas.drawRect(0, 0, 160, 89, COLOR_YELLOW);
   canvas.getTextBounds("Heading", 0, 12, &x1, &y1, &w, &h);
-  canvas.fillRect(x1, y1, w + 8, h + 1, HX8357_YELLOW);
+  canvas.fillRect(x1, y1, w + 8, h + 1, COLOR_YELLOW);
   canvas.setCursor(0, 12);
-  canvas.setTextColor(HX8357_BLACK);
+  canvas.setTextColor(COLOR_BLACK);
   canvas.print("Heading");
-  tft.drawBitmap(0, 0, canvas.getBuffer(), 160, 89, HX8357_YELLOW, HX8357_BLACK);
+  tft->drawBitmap(0, 0, canvas.getBuffer(), 160, 89, COLOR_YELLOW, COLOR_BLACK);
 }
 
 void initialize_track() {
   int16_t x1, y1;
   uint16_t w, h;
   GFXcanvas1 canvas(160, 89);
-  canvas.fillScreen(HX8357_BLACK);
+  canvas.fillScreen(COLOR_BLACK);
   canvas.setFont(&FreeSans9pt7b);
   canvas.drawRect(0, 0, 160, 89, MAGENTA);
   canvas.getTextBounds("Track", 0, 12, &x1, &y1, &w, &h);
   canvas.fillRect(x1, y1, w + 8, h + 1, MAGENTA);
   canvas.setCursor(0, 12);
-  canvas.setTextColor(HX8357_BLACK);
+  canvas.setTextColor(COLOR_BLACK);
   canvas.print("Track");
-  tft.drawBitmap(0, 89, canvas.getBuffer(), 160, 89, MAGENTA, HX8357_BLACK);
+  tft->drawBitmap(0, 89, canvas.getBuffer(), 160, 89, MAGENTA, COLOR_BLACK);
 }
 
 // Column 2 (x 161-320): Mode (top row, 67px - shrunk from the original 89px
@@ -628,30 +637,30 @@ void initialize_mode() {
   int16_t x1, y1;
   uint16_t w, h;
   GFXcanvas1 canvas(159, 67);
-  canvas.fillScreen(HX8357_BLACK);
+  canvas.fillScreen(COLOR_BLACK);
   canvas.setFont(&FreeSans9pt7b);
-  canvas.drawRect(0, 0, 159, 67, HX8357_WHITE);
+  canvas.drawRect(0, 0, 159, 67, COLOR_WHITE);
   canvas.getTextBounds("Mode", 0, 12, &x1, &y1, &w, &h);
-  canvas.fillRect(x1, y1, w + 8, h + 1, HX8357_WHITE);
+  canvas.fillRect(x1, y1, w + 8, h + 1, COLOR_WHITE);
   canvas.setCursor(0, 12);
-  canvas.setTextColor(HX8357_BLACK);
+  canvas.setTextColor(COLOR_BLACK);
   canvas.print("Mode");
-  tft.drawBitmap(161, 0, canvas.getBuffer(), 159, 67, MAGENTA, HX8357_BLACK);
+  tft->drawBitmap(161, 0, canvas.getBuffer(), 159, 67, MAGENTA, COLOR_BLACK);
 }
 
 void initialize_target() {
   int16_t x1, y1;
   uint16_t w, h;
   GFXcanvas1 canvas(159, 126);
-  canvas.fillScreen(HX8357_BLACK);
+  canvas.fillScreen(COLOR_BLACK);
   canvas.setFont(&FreeSans9pt7b);
-  canvas.drawRect(0, 0, 159, 126, HX8357_WHITE);
+  canvas.drawRect(0, 0, 159, 126, COLOR_WHITE);
   canvas.getTextBounds("Target", 0, 12, &x1, &y1, &w, &h);
-  canvas.fillRect(x1, y1, w + 8, h + 1, HX8357_WHITE);
+  canvas.fillRect(x1, y1, w + 8, h + 1, COLOR_WHITE);
   canvas.setCursor(0, 12);
-  canvas.setTextColor(HX8357_BLACK);
+  canvas.setTextColor(COLOR_BLACK);
   canvas.print("Target");
-  tft.drawBitmap(161, 67, canvas.getBuffer(), 159, 126, MAGENTA, HX8357_BLACK);
+  tft->drawBitmap(161, 67, canvas.getBuffer(), 159, 126, MAGENTA, COLOR_BLACK);
 }
 
 // New box filling the space freed by shrinking Mode and Target: rudder angle
@@ -661,15 +670,15 @@ void initialize_rudder() {
   int16_t x1, y1;
   uint16_t w, h;
   GFXcanvas1 canvas(159, 73);
-  canvas.fillScreen(HX8357_BLACK);
+  canvas.fillScreen(COLOR_BLACK);
   canvas.setFont(&FreeSans9pt7b);
-  canvas.drawRect(0, 0, 159, 73, HX8357_GREEN);
+  canvas.drawRect(0, 0, 159, 73, COLOR_GREEN);
   canvas.getTextBounds("Rudder", 0, 12, &x1, &y1, &w, &h);
-  canvas.fillRect(x1, y1, w + 8, h + 1, HX8357_GREEN);
+  canvas.fillRect(x1, y1, w + 8, h + 1, COLOR_GREEN);
   canvas.setCursor(0, 12);
-  canvas.setTextColor(HX8357_BLACK);
+  canvas.setTextColor(COLOR_BLACK);
   canvas.print("Rudder");
-  tft.drawBitmap(161, 193, canvas.getBuffer(), 159, 73, HX8357_GREEN, HX8357_BLACK);
+  tft->drawBitmap(161, 193, canvas.getBuffer(), 159, 73, COLOR_GREEN, COLOR_BLACK);
 }
 
 // Column 3 (x 321-480): Location (top), Distance, Waypoint.
@@ -677,45 +686,45 @@ void initialize_location() {
   int16_t x1, y1;
   uint16_t w, h;
   GFXcanvas1 canvas(159, 89);
-  canvas.fillScreen(HX8357_BLACK);
+  canvas.fillScreen(COLOR_BLACK);
   canvas.setFont(&FreeSans9pt7b);
-  canvas.drawRect(0, 0, 159, 89, HX8357_CYAN);
+  canvas.drawRect(0, 0, 159, 89, COLOR_CYAN);
   canvas.getTextBounds("Location", 0, 12, &x1, &y1, &w, &h);
-  canvas.fillRect(x1, y1, w + 8, h + 3, HX8357_CYAN);
+  canvas.fillRect(x1, y1, w + 8, h + 3, COLOR_CYAN);
   canvas.setCursor(0, 14);
-  canvas.setTextColor(HX8357_BLACK);
+  canvas.setTextColor(COLOR_BLACK);
   canvas.print("Location");
-  tft.drawBitmap(321, 0, canvas.getBuffer(), 159, 89, HX8357_CYAN, HX8357_BLACK);
+  tft->drawBitmap(321, 0, canvas.getBuffer(), 159, 89, COLOR_CYAN, COLOR_BLACK);
 }
 
 void initialize_distance() {
   int16_t x1, y1;
   uint16_t w, h;
   GFXcanvas1 canvas(159, 89);
-  canvas.fillScreen(HX8357_BLACK);
+  canvas.fillScreen(COLOR_BLACK);
   canvas.setFont(&FreeSans9pt7b);
-  canvas.drawRect(0, 0, 159, 89, HX8357_WHITE);
+  canvas.drawRect(0, 0, 159, 89, COLOR_WHITE);
   canvas.getTextBounds("Distance", 0, 12, &x1, &y1, &w, &h);
-  canvas.fillRect(x1, y1, w + 8, h + 3, HX8357_WHITE);
+  canvas.fillRect(x1, y1, w + 8, h + 3, COLOR_WHITE);
   canvas.setCursor(0, 14);
-  canvas.setTextColor(HX8357_BLACK);
+  canvas.setTextColor(COLOR_BLACK);
   canvas.print("Distance");
-  tft.drawBitmap(321, 89, canvas.getBuffer(), 159, 89, MAGENTA, HX8357_BLACK);
+  tft->drawBitmap(321, 89, canvas.getBuffer(), 159, 89, MAGENTA, COLOR_BLACK);
 }
 
 void initialize_waypoint() {
   int16_t x1, y1;
   uint16_t w, h;
   GFXcanvas1 canvas(159, 88);
-  canvas.fillScreen(HX8357_BLACK);
+  canvas.fillScreen(COLOR_BLACK);
   canvas.setFont(&FreeSans9pt7b);
-  canvas.drawRect(0, 0, 159, 88, HX8357_WHITE);
+  canvas.drawRect(0, 0, 159, 88, COLOR_WHITE);
   canvas.getTextBounds("Waypoint", 0, 12, &x1, &y1, &w, &h);
-  canvas.fillRect(x1, y1, w + 8, h + 3, HX8357_WHITE);
+  canvas.fillRect(x1, y1, w + 8, h + 3, COLOR_WHITE);
   canvas.setCursor(0, 14);
-  canvas.setTextColor(HX8357_BLACK);
+  canvas.setTextColor(COLOR_BLACK);
   canvas.print("Waypoint");
-  tft.drawBitmap(321, 178, canvas.getBuffer(), 159, 88, HX8357_WHITE, HX8357_BLACK);
+  tft->drawBitmap(321, 178, canvas.getBuffer(), 159, 88, COLOR_WHITE, COLOR_BLACK);
 }
 
 // Column 1's third slot: Speed, now that Location has taken Speed's old slot
@@ -724,15 +733,15 @@ void initialize_speed() {
   int16_t x1, y1;
   uint16_t w, h;
   GFXcanvas1 canvas(160, 88);
-  canvas.fillScreen(HX8357_BLACK);
+  canvas.fillScreen(COLOR_BLACK);
   canvas.setFont(&FreeSans9pt7b);
-  canvas.drawRect(0, 0, 160, 88, HX8357_CYAN);
+  canvas.drawRect(0, 0, 160, 88, COLOR_CYAN);
   canvas.getTextBounds("Speed", 0, 12, &x1, &y1, &w, &h);
-  canvas.fillRect(x1, y1, w + 8, h + 1, HX8357_CYAN);
+  canvas.fillRect(x1, y1, w + 8, h + 1, COLOR_CYAN);
   canvas.setCursor(0, 12);
-  canvas.setTextColor(HX8357_BLACK);
+  canvas.setTextColor(COLOR_BLACK);
   canvas.print("Speed");
-  tft.drawBitmap(0, 178, canvas.getBuffer(), 160, 88, HX8357_CYAN, HX8357_BLACK);
+  tft->drawBitmap(0, 178, canvas.getBuffer(), 160, 88, COLOR_CYAN, COLOR_BLACK);
 }
 
 // Bottom bar (y 266-320, 54px - back to the original Volts/Date-Time height):
@@ -742,28 +751,28 @@ void initialize_volts() {
   int16_t x1, y1;
   uint16_t w, h;
   GFXcanvas1 canvas(160, 54);
-  canvas.fillScreen(HX8357_BLACK);
-  canvas.drawRect(0, 0, 160, 54, HX8357_WHITE);
+  canvas.fillScreen(COLOR_BLACK);
+  canvas.drawRect(0, 0, 160, 54, COLOR_WHITE);
   canvas.setFont(&FreeSans9pt7b);
   canvas.getTextBounds("Volts", 0, 12, &x1, &y1, &w, &h);
-  canvas.fillRect(x1, y1, w + 8, h + 3, HX8357_WHITE);
+  canvas.fillRect(x1, y1, w + 8, h + 3, COLOR_WHITE);
   canvas.setCursor(0, 14);
-  canvas.setTextColor(HX8357_BLACK);
+  canvas.setTextColor(COLOR_BLACK);
   canvas.print("Volts");
-  tft.drawBitmap(0, 266, canvas.getBuffer(), 160, 54, HX8357_WHITE, HX8357_BLACK);
+  tft->drawBitmap(0, 266, canvas.getBuffer(), 160, 54, COLOR_WHITE, COLOR_BLACK);
 }
 
 void initialize_date_time() {
   int16_t x1, y1;
   uint16_t w, h;
   GFXcanvas1 canvas(319, 54);
-  canvas.fillScreen(HX8357_BLACK);
+  canvas.fillScreen(COLOR_BLACK);
   canvas.setFont(&FreeSans9pt7b);
-  canvas.drawRect(0, 0, 319, 54, HX8357_CYAN);
+  canvas.drawRect(0, 0, 319, 54, COLOR_CYAN);
   canvas.getTextBounds("Date &Time", 0, 12, &x1, &y1, &w, &h);
-  canvas.fillRect(x1, y1, w + 8, h + 3, HX8357_CYAN);
+  canvas.fillRect(x1, y1, w + 8, h + 3, COLOR_CYAN);
   canvas.setCursor(0, 14);
-  canvas.setTextColor(HX8357_BLACK);
+  canvas.setTextColor(COLOR_BLACK);
   canvas.print("Date & Time");
-  tft.drawBitmap(161, 266, canvas.getBuffer(), 319, 54, HX8357_CYAN, HX8357_BLACK);
+  tft->drawBitmap(161, 266, canvas.getBuffer(), 319, 54, COLOR_CYAN, COLOR_BLACK);
 }

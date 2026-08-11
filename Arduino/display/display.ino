@@ -1,4 +1,9 @@
 #include "AutoPilot.h"
+// Must be included here, in the main sketch file, not just where it is used:
+// the Arduino build concatenates every .ino and emits generated prototypes at
+// the top, so TftType has to be visible before the prototype for any .ino
+// function that takes one. Same reason AutoPilot.h is included above.
+#include "tft.h"
 #include <WiFi.h>
 
 #define DEBUG_ENABLED 1

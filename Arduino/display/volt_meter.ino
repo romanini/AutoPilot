@@ -1,5 +1,11 @@
 #define CHECK_INTERVAL 1000
 
+// TODO (next hardware rev): these ratios are for the boards currently in
+// service. The rev 2.2 schematic in circuit/Display/ fits different dividers -
+// 10k/1.8k on v-in (0.1525) and 10k/12k on the battery (0.5455). Swap both
+// ratios over when the new boards go in, or the battery will read ~21% low and
+// v-in ~15% low, then re-measure and reset the correction factors.
+
 // Battery 4.2 max R1 = 10k, R2 = 22k ratio = 0.6875
 const int batteryVoltagePin = A0;
 const float batteryVoltageDividerRatio = .6875;  // Voltage divider ratio (R2/(R1+R2))

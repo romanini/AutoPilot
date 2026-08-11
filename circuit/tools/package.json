@@ -1,0 +1,17 @@
+{
+  "name": "autopilot-eda-export",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Automated EasyEDA export for the AutoPilot PCBs",
+  "scripts": {
+    "login": "node eda.mjs login",
+    "discover": "node eda.mjs discover",
+    "inspect": "node eda.mjs inspect",
+    "export": "node eda.mjs export",
+    "stale": "node eda.mjs stale"
+  },
+  "dependencies": {
+    "playwright": "^1.62.1"
+  }
+}

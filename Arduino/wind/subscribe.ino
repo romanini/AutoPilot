@@ -1,7 +1,7 @@
 #include <AsyncUDP.h>
 
-#define COMMAND_PORT 8893   // controller -> wind: ~APCMD,v$ (relayed "vane is dead ahead")
-#define CMD_BUFFER_SIZE 32  // only ever holds "~APCMD,v$"
+#define COMMAND_PORT 8893   // controller -> wind: ~APCMD,v$ / ~APCMD,k<slope>,<offset>$
+#define CMD_BUFFER_SIZE 48  // longest is "~APCMD,k1.05432,-0.12345$" at 25 - room to spare
 
 static AsyncUDP commandUdp;
 
@@ -9,7 +9,8 @@ static AsyncUDP commandUdp;
 // auto-prototype pass at the top of the combined sketch - same issue noted in
 // controller/subscribe.ino).
 void process_command(AsyncUDPPacket packet);
-void request_calibration();  // defined in vane.ino
+void request_calibration();                                     // defined in vane.ino
+bool request_speed_calibration(float slope, float offset);      // defined in anemometer.ino
 
 // close() first so this is safe to call again after a WiFi reconnect (see
 // check_wifi() in wifi.ino) - it rebinds the listening socket cleanly on the
@@ -25,19 +26,26 @@ void setup_subscribe() {
   }
 }
 
-// Handles "~APCMD,v$" - "the vane is pointing dead ahead right now, call this
-// zero". Any other verb is ignored; this listener only ever needs to
-// understand the one command meant for it.
+// Two commands, both calibration:
 //
-// 'v' rather than something longer because the controller's dispatch_command()
-// (controller/subscribe.ino) switches on the first character alone, so a
-// multi-letter verb would collide with whatever single letter it starts with.
-// It is free: a, m, n, w, X, t and z are taken, v is not.
+//   v                    the vane is pointing dead ahead right now, call this
+//                        zero (vane.ino)
+//   k<slope>,<offset>    install a wind speed calibration, speed[m/s] =
+//                        raw * slope + offset (anemometer.ino)
 //
-// Runs on the AsyncUDP task, so it only *flags* the re-zero rather than doing
-// it: calibrating here would perform an I2C read (racing sensor_task's own
-// reads) and an NVS flash write on the network stack's task. command_task
-// picks the flag up - see check_calibration_request() in vane.ino.
+// Anything else is ignored. Single-letter verbs because the controller's
+// dispatch_command() (controller/subscribe.ino) switches on the first
+// character alone, so a multi-letter verb would collide with whatever single
+// letter it starts with; both are free, since a, m, n, w, X, t and z are taken.
+// Neither is relayed by the controller yet - for now send them straight to this
+// board's port from the navigator.
+//
+// Runs on the AsyncUDP task, so both handlers only *flag* the work rather than
+// doing it: a vane re-zero is an I2C read racing sensor_task's own reads, and
+// both write NVS. Doing either here would put flash writes on the network
+// stack's task. command_task picks the flags up - see
+// check_calibration_request() (vane.ino) and check_speed_calibration_request()
+// (anemometer.ino).
 void process_command(AsyncUDPPacket packet) {
   size_t len = packet.length();
   if (len == 0 || len >= CMD_BUFFER_SIZE) {
@@ -57,7 +65,24 @@ void process_command(AsyncUDPPacket packet) {
   }
   *end = '\0';
 
-  if (cmd[0] == 'v') {
-    request_calibration();
+  switch (cmd[0]) {
+    case 'v':
+      request_calibration();
+      break;
+    case 'k': {
+      // strtok_r (not strtok): this runs in the AsyncUDP task, and a shared
+      // static strtok pointer would be corruptible by any other parse running
+      // concurrently. Same reasoning as the controller's 'w' handler.
+      // request_speed_calibration() validates before anything reaches flash.
+      char* saveptr = NULL;
+      char* slopeStr = strtok_r(&cmd[1], ",", &saveptr);
+      char* offsetStr = strtok_r(NULL, ",", &saveptr);
+      if (slopeStr != NULL && offsetStr != NULL) {
+        request_speed_calibration(atof(slopeStr), atof(offsetStr));
+      }
+      break;
+    }
+    default:
+      break;
   }
 }

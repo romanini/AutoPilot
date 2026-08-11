@@ -1,0 +1,37 @@
+[
+  {
+    "board": "AP-Controller",
+    "sch": "https://easyeda.com/editor#id=REPLACE-WITH-SCHEMATIC-DOC-UUID",
+    "pcb": "https://easyeda.com/editor#id=REPLACE-WITH-PCB-DOC-UUID"
+  },
+  {
+    "board": "12-volt-power",
+    "sch": "",
+    "pcb": ""
+  },
+  {
+    "board": "AP-Display-2.1",
+    "sch": "",
+    "pcb": ""
+  },
+  {
+    "board": "AP-Button-LED-V2",
+    "sch": "",
+    "pcb": ""
+  },
+  {
+    "board": "AP-LCD-Carrier-1.0",
+    "sch": "",
+    "pcb": ""
+  },
+  {
+    "board": "AP-Wind-Sensor",
+    "sch": "",
+    "pcb": ""
+  },
+  {
+    "board": "AP-Rudder",
+    "sch": "",
+    "pcb": ""
+  }
+]

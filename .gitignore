@@ -9,4 +9,9 @@ deps
 .idea/
 **/.DS_Store
 opencpn_plugin/autopilot_pi/.flatpak-builder/
+circuit/tools/node_modules/
+circuit/tools/.eda-profile/
+circuit/tools/*-dump.json
 
+circuit/tools/projects.draft.json
+circuit/tools/inspect-screenshot.png

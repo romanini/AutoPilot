@@ -36,6 +36,31 @@ typedef USBCDC SerialType;  // Define SerialType for ESP32
 // stopped is caught instead by the zero-wind timeout in anemometer.ino.
 #define ANEMOMETER_PERIOD_LIMIT_MS 1000.0f
 
+// Wind speed calibration, applied to m/s: speed = raw * slope + offset.
+//
+// The constants above are the *nominal* Yachta geometry, not a measurement of
+// this particular head. ANEMOMETER_RADIUS_M is honest (you can measure an arm
+// with calipers) but ANEMOMETER_LAMBDA is where the cup shape and size hide,
+// and there is no closed form for it - it has to be fitted. The offset exists
+// because a real cup wheel has bearing friction and a start-up threshold, so
+// its response is v = a + b*n rather than a line through the origin, which the
+// slope alone cannot represent.
+//
+// These are the defaults only. The live values are held in the Wind object and
+// persisted in NVS by anemometer.ino, because calibration necessarily happens
+// after the head is built and you do not want to reflash a masthead unit to
+// change them - the same argument that made the vane zero a runtime command.
+// Identity means "uncalibrated": raw geometry, straight through.
+#define WIND_CAL_SLOPE_DEFAULT 1.0f
+#define WIND_CAL_OFFSET_DEFAULT 0.0f
+
+// NVS namespace holding everything this board persists: the vane's bow offset
+// (vane.ino) and the speed calibration (anemometer.ino). It lives in this
+// header rather than in either .ino because both write to it and the sketch
+// has no other shared home for it - one definition, so the two files can't
+// end up writing to different namespaces.
+#define WIND_PREFS_NAMESPACE "wind"
+
 // Thread-safe state model for the masthead wind sensor, in the same shape as
 // AutoPilot.{h,cpp} in the controller and display sketches: private fields, a
 // recursive mutex, and locked getters/setters.
@@ -76,6 +101,10 @@ private:
   float downwind_kn;
   unsigned long last_calculation;  // millis() of the previous calculate(), for the rate limiter
 
+  // ---- speed calibration, loaded from NVS by anemometer.ino ---------------
+  float speed_cal_slope;
+  float speed_cal_offset;
+
   SerialType* serial;
 
   void lock();
@@ -92,6 +121,12 @@ public:
   void setVane(float degrees, uint16_t magnitude, bool ok);
   void setRotationPeriod(float period_ms, bool valid);
   void setTemperature(float celsius, bool ok);
+
+  // Speed calibration. Owned here because calculate() applies it; loaded,
+  // validated and persisted by anemometer.ino.
+  void setSpeedCalibration(float slope, float offset);
+  float getSpeedCalSlope();
+  float getSpeedCalOffset();
 
   // Turns the raw inputs above into every derived value below. Call at a
   // steady cadence - the direction rate limiter is expressed per second, so it
