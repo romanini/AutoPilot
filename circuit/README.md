@@ -322,36 +322,16 @@ reflashed to be calibrated — see [`../Arduino/README.md`](../Arduino/README.md
 
 ## How the boards fit together
 
-```
-        12 V boat supply ── Acc/Garmin fuses ──┐
-        Garmin NMEA ───────────────────────────┤
-        USB ───────────────────────────────────┤  12-volt-power board
-                                               │  (fuse + interconnect)
-                                               │
-                                 2×10 ribbon ──┘
-                                      │
-                               ┌──────▼───────┐        steering motor
-        BNO085 IMU ── I²C ─────│  CONTROLLER  │── 2×4 ──▶ (motor driver)
-        Adafruit GPS ── UART ──│  Nano ESP32  │
-        Kill switch ───────────│  + CD4010 ×2 │
-                               └──────┬───────┘
-                                      │  Wi-Fi  "SoberPilot"  (UDP)
-             ┌────────────────────────┼────────────────────────┐
-             │ 8890/8891              │ 8888/8889              │ 8892/8893
-      ┌──────▼───────┐         ┌──────▼───────┐         ┌──────▼───────┐
-      │RUDDER SENSOR │         │   DISPLAY    │         │ WIND SENSOR  │
-      │ Nano ESP32   │         │  Nano ESP32  │         │ Nano ESP32   │
-      │ + AS5600L    │         │  LiPo+TP5100 │         │ + AS5600L    │
-      └──────────────┘         │  +TPS61023   │         │ + SS40AF     │
-                               └──────┬───────┘         │ + DS18B20    │
-                                      │ 2×10 ribbon     └──────────────┘
-                               ┌──────▼───────┐
-                               │ BUTTON board │── SPI ──┬──▶ HX8357 module
-                               │  5 buttons   │         │
-                               └──────────────┘         └──▶ LCD CARRIER ──▶
-                                                            (40-pin FPC)
-                                                            ST7365P panel
-```
+The units talk to each other over Wi-Fi and nothing else. The controller hosts
+the **SoberPilot** access point; the display, the two sensors and the navigator
+(a Raspberry Pi 5 running OpenCPN) all join it as stations. Each sensor reports
+on its own port and is commanded back on the next one up, while the display and
+the navigator receive the telemetry broadcast and send commands to the
+controller.
+
+![How the boards fit together](../assets/circuit/system-overview.svg)
+
+What is inside the controller and the display units follows below.
 
 ### Inside the controller unit
 
@@ -360,35 +340,7 @@ fuses it and hands it to the **controller** over one ribbon. The controller's
 only outgoing connection is the motor header — the motor driver itself is a
 bought part and is not one of these boards.
 
-```
-    boat 12 V ──────────┐
-                        │   ┌───────────────────────────┐
-                        ├──▶│  12-VOLT-POWER board      │
-    Garmin NMEA-0183 ───┤   │                           │
-     (Tx/Rx A+B, alarm, │   │  Acc fuse  ─┐             │
-      12 V, GND)        │   │  Garmin fuse┴─▶ HDR 2×10  │
-                        │   │                           │
-    USB-C ──────────────┘   └────────────┬──────────────┘
-                                         │
-                                    2×10 ribbon
-                              (12 V + Garmin serial + USB)
-                                         │
-                            ┌────────────▼──────────────┐
-    BNO085 IMU ── I²C ─────▶│  CONTROLLER board         │
-    Adafruit GPS ── UART ──▶│                           │
-    Kill switch ───────────▶│  Nano ESP32               │
-                            │  CD4010 ×2  (serial buf)  │
-                            │  MPM3610    (12 V→5 V)    │
-                            └────────────┬──────────────┘
-                                         │
-                                    2×4 ribbon
-                                         │
-                                         ▼
-                              ┌──────────────────────┐
-                              │  motor driver        │  ← not in this repo
-                              │  (steering motor)    │
-                              └──────────────────────┘
-```
+![Inside the controller unit](../assets/circuit/controller-unit.svg)
 
 ### Inside the display unit
 
@@ -396,40 +348,7 @@ Note the power path: **12 V and USB charge the battery and nothing else.** The
 LiPo is the only thing that actually powers the display board, which then feeds
 the button board and the panel.
 
-```
-    boat 12 V ──▶│D1 (1N5817)│─┐
-                               ├──▶ V_in ──▶ TP5100 charger ──▶ ┌─────────┐
-    USB 5 V ────▶│D2 (1N5817)│─┘         (charging only)        │  LiPo   │
-                                                                └────┬────┘
-                                                                     │
-                                    ┌────────────────────────────────▼───┐
-                                    │  DISPLAY board                     │
-                                    │                                    │
-                                    │  TPS61023 boost ──▶ +5V switched   │
-                                    │  Nano ESP32                        │
-                                    │  V_in ÷ and V_LiPo ÷ ──▶ ADC       │
-                                    └───────────────┬────────────────────┘
-                                                    │
-                                             2×10 ribbon
-                                    (5 sw. buttons, SPI, 5 V, EN, LED)
-                                                    │
-                                    ┌───────────────▼────────────────────┐
-                                    │  BUTTON board                      │
-                                    │  5 buttons + backlight LEDs        │
-                                    └───────────────┬────────────────────┘
-                                                    │
-                                              1×8 JST-XH
-                                 (BL_PWM, D/C, CS, MOSI, MISO, CLK, Vin, GND)
-                                                    │
-                            ┌───────────────────────┴───────────────────────┐
-                            │                                               │
-                  ┌─────────▼──────────┐                    ┌───────────────▼────────────┐
-                  │  HX8357 module     │       ...or...     │  LCD CARRIER board         │
-                  │  (direct, no       │                    │  TPS7A0333 3V3 + backlight │
-                  │   carrier needed)  │                    │  FET, 40-pin FPC ──▶       │
-                  └────────────────────┘                    │  ST7365P panel             │
-                                                            └────────────────────────────┘
-```
+![Inside the display unit](../assets/circuit/display-unit.svg)
 
 For the firmware that runs on these boards, the pin assignments, and build
 instructions, see [`../Arduino/README.md`](../Arduino/README.md). For the

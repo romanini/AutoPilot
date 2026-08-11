@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 660" width="960" height="660" role="img" aria-label="Inside the controller unit: boat 12 V, Garmin NMEA-0183 and USB-C land on the 12-volt-power board, are fused there and handed to the controller board over one 2x10 ribbon; the controller's only outgoing connection is the 2x4 motor header.">
+  <defs>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+      .ttl  { font-size: 14px; font-weight: 700; fill: #0f172a; letter-spacing: .5px; }
+      .sub  { font-size: 12px; fill: #475569; }
+      .ext  { font-size: 12.5px; fill: #334155; }
+      .fine { font-size: 11px; fill: #64748b; }
+      .lbl  { font-size: 11.5px; fill: #64748b; }
+      .chip { font-size: 11.5px; font-weight: 600; fill: #334155; }
+      .ln   { stroke: #94a3b8; stroke-width: 1.6; fill: none; }
+      .arw  { stroke: #94a3b8; stroke-width: 1.6; fill: none; marker-end: url(#a); }
+    </style>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="960" height="660" fill="#f8fafc"/>
+  <rect x="0.5" y="0.5" width="959" height="659" fill="none" stroke="#e2e8f0"/>
+
+  <!-- outside world -->
+  <text class="ext"  x="300" y="76"  text-anchor="end">Boat 12 V</text>
+  <text class="ext"  x="300" y="112" text-anchor="end">Garmin NMEA-0183</text>
+  <text class="fine" x="300" y="130" text-anchor="end">Tx/Rx A+B · alarm · 12 V · GND</text>
+  <text class="ext"  x="300" y="166" text-anchor="end">USB-C</text>
+  <path class="arw" d="M310,72 H352"/>
+  <path class="arw" d="M310,108 H352"/>
+  <path class="arw" d="M310,162 H352"/>
+
+  <!-- power board -->
+  <rect x="354" y="46" width="470" height="150" rx="9" fill="#eef2f7" stroke="#64748b" stroke-width="1.8"/>
+  <text class="ttl" x="374" y="72">12-VOLT-POWER BOARD</text>
+
+  <rect x="376" y="90" width="150" height="34" rx="6" fill="#ffffff" stroke="#94a3b8" stroke-width="1.3"/>
+  <text class="chip" x="451" y="112" text-anchor="middle">ACC FUSE</text>
+  <rect x="376" y="134" width="150" height="34" rx="6" fill="#ffffff" stroke="#94a3b8" stroke-width="1.3"/>
+  <text class="chip" x="451" y="156" text-anchor="middle">GARMIN FUSE</text>
+
+  <path class="ln"  d="M526,107 H566 M526,151 H566 M566,107 V151"/>
+  <path class="arw" d="M566,129 H640"/>
+
+  <rect x="642" y="106" width="160" height="46" rx="6" fill="#ffffff" stroke="#94a3b8" stroke-width="1.3"/>
+  <text class="chip" x="722" y="127" text-anchor="middle">HDR-M 2×10</text>
+  <text class="fine" x="722" y="144" text-anchor="middle">Control Board header</text>
+
+  <!-- ribbon -->
+  <path class="arw" d="M589,196 V284"/>
+  <text class="lbl" x="601" y="228">2×10 ribbon</text>
+  <text class="lbl" x="601" y="246">12 V + Garmin serial + USB</text>
+
+  <!-- controller board -->
+  <rect x="354" y="286" width="470" height="168" rx="9" fill="#e8f0fe" stroke="#2563eb" stroke-width="1.8"/>
+  <text class="ttl" x="374" y="312">CONTROLLER BOARD</text>
+  <text class="sub" x="374" y="342">Arduino Nano ESP32 — PID loop + SoberPilot AP</text>
+  <text class="sub" x="374" y="366">CD4010 ×2 — receive / transmit serial buffers</text>
+  <text class="sub" x="374" y="390">MPM3610 — 12 V → 5 V buck</text>
+  <text class="sub" x="374" y="414">BNO085 (I²C) · GPS (UART) on board</text>
+  <text class="sub" x="374" y="438">Motor Control header — HDR-M 2×4</text>
+
+  <text class="ext" x="300" y="330" text-anchor="end">BNO085 IMU — I²C</text>
+  <text class="ext" x="300" y="368" text-anchor="end">Adafruit GPS — UART</text>
+  <text class="ext" x="300" y="406" text-anchor="end">Kill switch</text>
+  <path class="arw" d="M310,326 H352"/>
+  <path class="arw" d="M310,364 H352"/>
+  <path class="arw" d="M310,402 H352"/>
+
+  <!-- motor -->
+  <path class="arw" d="M589,454 V536"/>
+  <text class="lbl" x="601" y="500">2×4 ribbon</text>
+
+  <rect x="439" y="538" width="300" height="72" rx="9" fill="#ffffff" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="5 4"/>
+  <text class="ttl" x="589" y="568" text-anchor="middle">MOTOR DRIVER</text>
+  <text class="sub" x="589" y="590" text-anchor="middle">steering motor — not in this repo</text>
+</svg>
