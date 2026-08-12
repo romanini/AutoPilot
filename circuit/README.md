@@ -4,19 +4,14 @@ This directory holds the **EasyEDA exports** for every custom PCB in the
 AutoPilot project. There are seven boards, one directory each:
 
 ```
-circuit/                                                            unit
-├── Controller/                 SM AP Controller    rev 2.1  ─┐
-│                                 the autopilot brain          ├─ controller
-├── Controller-12-volt-power/   SM AP Power         rev 1.0  ─┘
-│                                 power + NMEA interconnect
-├── Display/                    SM AP Display       rev 2.2  ─┐
-│                                 cockpit head-unit mainboard  │
-├── Display-Button/             SM Button board V2  rev 1.0   ├─ display
-│                                 buttons + TFT pass-through   │
-├── Display-LCD/                AutoPilot LCD Carrier   v1.0  ─┘
-│                                 ST7365P panel carrier
-├── Sensor-Rudder/              SM AP Rudder Sensor rev 1.0  ─── rudder sensor
-├── Sensor-Wind/                SM AP Wind Sensor   rev 1.0  ─── wind sensor
+circuit/                                                                     unit
+├── Controller/                 The Autopilot brain          rev 2.1  ─┐
+├── Controller-12-volt-power/   power + NMEA interconnect    rev 1.0  ─┘─ controller
+├── Display/                    cockpit head-unit mainboard  rev 2.2  ─┐
+├── Display-Button/             buttons + TFT pass-through   rev 1.0   ├─ display
+├── Display-LCD/                ST7365P panel carrier        rev 1.0  ─┘
+├── Sensor-Rudder/              Inticator of rudder postion  rev 1.0  ─── rudder sensor
+├── Sensor-Wind/                Wind speed and direction     rev 1.0  ─── wind sensor
 └── tools/                      export automation (see tools/README.md)
 ```
 
