@@ -37,13 +37,8 @@ cad/wind/
 ├── README.md                       this file
 ├── Assembly.md                     build instructions
 ├── 3D-Parts/                       STLs — print from here
-├── Mechanics/
-│   ├── IGES/                       the original CAD masters (German names)
-│   ├── FreeCad/                    FreeCAD documents built from the IGES
-│   ├── Fusion360/                  upstream Fusion sources
-│   ├── BOM.txt                     upstream's original bill of materials
-│   ├── build_wind_sensor.py        regenerates FreeCad/ and the modified STLs
-│   └── check_rotation_clearance.py macro: does a rotating part clear a fixed one
+├── IGES/                       the original CAD masters (German names)
+└── FreeCad/                    FreeCAD documents built from the IGES
 ```
 
 The board lives in [`circuit/Wind/`](../../circuit/Wind/); build photos in
@@ -129,15 +124,6 @@ and re-run if the cups need to drop further.
 
 ## Shopping list
 
-Everything below is per sensor. Sizes are from
-[`Mechanics/BOM.txt`](Mechanics/BOM.txt) and the build photos.
-
-Almost everything is available from **Amazon**; **McMaster-Carr** is worth the
-separate order for the shaft screw and for genuine A4 stainless, where the exact
-spec matters. Links below are searches and category pages, not specific
-listings — stock and sellers change, so check the spec against the Notes column
-before you buy.
-
 ### Bearings, fasteners, magnets
 
 All stainless — **A4 (V2A/316)**, not A2. This lives at the masthead.
@@ -170,14 +156,10 @@ All stainless — **A4 (V2A/316)**, not A2. This lives at the masthead.
 > **Direction magnet — must be *diametrically* magnetised** (poles across the
 > diameter, not top to bottom). An axial magnet of identical size will not work
 > with an AS5600. Sources disagree on size: the build photo is annotated
-> **10 × 5 mm N45 disc**, while `BOM.txt` and the upstream page say **5 × 5 × 5 mm
-> square**. Either works if it is diametric; the 10×5 disc is easier to align
-> because you can see the pole boundary on the rim.
+> **10 × 5 mm N45 disc**.
 >
-> **Speed magnets — four small bars, fitted alternating N-S-N-S.** All four the
-> same way round makes every wind speed read exactly **double**. `BOM.txt` and the
-> photos say 5 × 1.5 × 1 mm; the upstream web page says Ø3 × 4 mm, which is a
-> different variant.
+> **Speed magnets — four small bars, fitted alternating N-S-N-S.** All four 5 × 1.5 × 1 mm the
+> same way round makes every wind speed read exactly **double**. 
 
 ### Consumables
 
