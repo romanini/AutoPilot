@@ -16,7 +16,7 @@ Original instructions, which these are derived from:
 >    single piece. Ours are **three separate `cup_round.stl` cups glued into
 >    `base_cup_wheel.stl`**, which together make the part shown in the photos.
 > 2. **The board.** The photos show the original ESP8266 board. Ours is the
->    Nano ESP32 board in `circuit/Wind/`, which is longer — hence the new
+>    Nano ESP32 board in `circuit/Sensor-Wind/`, which is longer — hence the new
 >    housing.
 > 3. **The housing.** `bot.stl` and `top_1.stl` have been extended with a nose
 >    to cover the longer board, and **the arm-tube socket has moved 47.8 mm
@@ -143,7 +143,7 @@ close.
 *Red/blue shows the pole split — across the diameter, not top-to-bottom.*
 
 > **Size discrepancy — pick one and note it.** The photo above is annotated
-> **10×5 mm N45**. The project's own [`Mechanics/BOM.txt`](Mechanics/BOM.txt)
+> **10×5 mm N45**. The project's own [`BOM.txt`](BOM.txt)
 > says **5×5×5 mm square**, and the upstream page says the same. Any of these
 > works *provided it is diametrically magnetised* and sits ~1 mm off the chip.
 > The 10×5 disc in the photo is the easier one to align, because the pole
@@ -271,7 +271,7 @@ once cured.
 
 ## Step 8 — Board and wiring
 
-The board is the one in [`circuit/Wind/`](../../circuit/Wind/) — see
+The board is the one in [`circuit/Sensor-Wind/`](../../circuit/Sensor-Wind/README.md) — see
 [README.md](README.md#electronics-you-will-need-to-buy) for its parts list.
 
 1. Route the 12 V pair through into the pocket **before** the board goes in.

@@ -37,12 +37,11 @@ cad/wind/
 ├── README.md                       this file
 ├── Assembly.md                     build instructions
 ├── 3D-Parts/                       STLs — print from here
-├── IGES/                       the original CAD masters (German names)
 └── FreeCad/                    FreeCAD documents built from the IGES
 ```
 
-The board lives in [`circuit/Wind/`](../../circuit/Wind/); build photos in
-[`assets/wind/`](../../assets/wind/).
+The board lives in [`circuit/Sensor-Wind/`](../../circuit/Sensor-Wind/README.md);
+build photos in [`assets/wind/`](../../assets/wind/).
 
 ### Printed parts
 
@@ -111,7 +110,7 @@ All three modified parts are generated from the IGES masters, not hand-edited.
 To regenerate `FreeCad/*.FCStd` and the STLs:
 
 ```bash
-/Applications/FreeCAD.app/Contents/Resources/bin/freecadcmd cad/wind/Mechanics/build_wind_sensor.py
+/Applications/FreeCAD.app/Contents/Resources/bin/freecadcmd cad/wind/build_wind_sensor.py
 ```
 
 It reads the board outline straight from the EasyEDA export, so if the PCB
@@ -178,7 +177,7 @@ All stainless — **A4 (V2A/316)**, not A2. This lives at the masthead.
 
 **You are fabricating your own board**, so this is the component list, not a
 finished module. Board files, schematic and Gerbers are in
-[`circuit/Wind/`](../../circuit/Wind/).
+[`circuit/Sensor-Wind/`](../../circuit/Sensor-Wind/README.md).
 
 | Ref | Part | Role | Buy |
 |---|---|---|---|
@@ -197,11 +196,11 @@ has a 14 mm well beneath it —
 [Amazon](https://www.amazon.com/s?k=15+pin+female+header+2.54mm).
 And the board itself: [PCBWay](https://www.pcbway.com/) or
 [JLCPCB](https://jlcpcb.com/) will take the Gerbers in
-[`circuit/Wind/`](../../circuit/Wind/) directly.
+[`circuit/Sensor-Wind/`](../../circuit/Sensor-Wind/README.md) directly.
 
 > The upstream project sells a populated ESP8266 board through Aisler. That board
 > is **not** compatible with this housing — the pocket, the well and the
-> connector positions are all cut for the Nano ESP32 board in `circuit/Wind/`.
+> connector positions are all cut for the Nano ESP32 board in `circuit/Sensor-Wind/`.
 
 ---
 
