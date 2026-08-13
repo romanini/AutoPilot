@@ -89,17 +89,38 @@ bool isRudderOk() {
   return autoPilot.isRudderMagnetOk();
 }
 
+// Milliseconds since the last ~APRUD, or -1 if we have never heard from the
+// rudder board at all. Same purpose and same caveat as wind_last_heard_ms() in
+// wind.ino: it exists so the telnet console can tell "nowhere to send this"
+// apart from "sent, but that board has gone quiet", which relay_rudder_command()
+// cannot distinguish because the remembered IP never expires.
+//
+// Deliberately not isRudderOk(): that folds in the magnet flag, and a board
+// with a failed magnet is still reachable for a re-centre. The question here is
+// only "is this board talking to us".
+long rudder_last_heard_ms() {
+  if (!rudderIpKnown) {
+    return -1;
+  }
+  return (long)(millis() - lastRudderReceiveTime);
+}
+
 // Forwards a command verbatim to the rudder board's last-known IP, e.g. "z"
 // (center now) from dispatch_command()'s 'z' case. No-op if we've never heard
 // from the rudder board yet - there is no address to relay to.
-void relay_rudder_command(const char* cmd) {
+//
+// Returns false in that case, so callers with somewhere to report it (telnet)
+// can say so rather than leaving the operator wondering why nothing happened.
+// The UDP path ignores the result: there is no client to reply to there.
+bool relay_rudder_command(const char* cmd) {
   if (!rudderIpKnown) {
     DEBUG_PRINTLN("No known rudder IP yet - dropping relay");
-    return;
+    return false;
   }
   char packet[32];
   snprintf(packet, sizeof(packet), "~APCMD,%s$", cmd);
   udpRudderRelay.writeTo((const uint8_t*)packet, strlen(packet), rudderIp, RUDDER_COMMAND_PORT);
   DEBUG_PRINT("relayed to rudder: ");
   DEBUG_PRINTLN(packet);
+  return true;
 }

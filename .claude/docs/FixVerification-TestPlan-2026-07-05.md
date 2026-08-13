@@ -21,7 +21,7 @@ the regression test and the flipped build is the feature test.
 
 - **Mac**: builds/flashes both boards over USB; serial monitor for the display
   (the Mac is not on SoberPilot — all telnet/UDP checks run from the Navigator).
-- **Navigator (OrangePi)**: `telnet 10.20.1.1` for controller commands and
+- **Navigator (Raspberry Pi 5)**: `telnet 10.20.1.1` for controller commands and
   `g`-injects; OpenCPN + autopilot_pi for the plugin checks.
 - **Display unit**: powered, joined to SoberPilot.
 - No GPS fix is needed except in T6 (which needs a fix with the boat/bench

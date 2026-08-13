@@ -40,6 +40,7 @@ state to any displays on the network. Source files:
 | `telnet.ino` | Telnet console for live debugging |
 | `wifi.ino` | Brings up the SoftAP |
 | `rudder.ino` | Listens for `~APRUD,...$` from the rudder sensor board on UDP 8890, remembers its IP, relays `~APCMD,z$` back to it on UDP 8891 |
+| `wind.ino` | Listens for `~APWND,...$` from the wind sensor board on UDP 8892, remembers its IP, relays `~APCMD,v$`/`,d`/`,k` back to it on UDP 8893 |
 | `AutoPilot.{h,cpp}` | Thread-safe shared state model (mutex-guarded getters/setters) |
 
 ### `display/` — cockpit head unit
@@ -92,7 +93,7 @@ and NMEA TCP server (a phone-facing interface will come back over Bluetooth).
 |------|----------------|
 | `wind.ino` | `setup()`/`loop()`, FreeRTOS task wiring, sample cadence |
 | `Wind.{h,cpp}` | Thread-safe state model **plus all the wind maths** ported from the original's `Calculation.h` |
-| `vane.ino` | AS5600 vane angle + bow calibration (offset persisted via `Preferences`) |
+| `vane.ino` | AS5600 vane angle + bow zero and trim (offset persisted via `Preferences`) |
 | `anemometer.ino` | Reed-switch pulse interrupt, rotation timing, zero-wind detection |
 | `temperature.ino` | DS18B20 air temperature on 1-Wire (non-blocking conversions) |
 | `publish.ino` | Sends `~APWND,...$` to the controller on UDP 8892 |
@@ -109,14 +110,44 @@ Numbering setting. The sensor board ([`../circuit/Sensor-Wind/`](../circuit/Sens
 fits a **Hall switch** rather than a reed switch on D2 — same open-collector
 pulse per magnet pass, so the firmware does not care which is fitted.
 
-**Calibration.** Two things can only be determined once the head is built, so
-both are runtime commands persisted in NVS rather than build constants — you
-should never have to reflash a unit that is up a mast. Neither is relayed by
+**Calibration.** Nothing here can be determined before the head is built, so
+all of it is runtime commands persisted in NVS rather than build constants —
+you should never have to reflash a unit that is up a mast. None is relayed by
 the controller yet; for now send them straight to UDP 8893 on the board.
 
 *Vane zero* — `~APCMD,v$`, sent with the vane pointing down the centreline.
 Stores the offset in raw AS5600 counts (so re-applying never accumulates
 rounding error). Exactly the shape of the rudder board's `~APCMD,z$` centring.
+Precise, but it needs a hand on the vane, so it's the **bench-time** form.
+
+*Vane trim* — `~APCMD,d<±degrees>$` shifts the reported angle without touching
+the vane, for once the head is up the mast. It also corrects what `v` **can't**:
+`v` only fixes the vane's alignment to the sensor body, while the error the boat
+actually experiences is that plus any rotation of the mast relative to the hull
+plus the aerodynamic bias of sitting in the mast/mainsail upwash — neither of
+which is visible from the masthead.
+
+Measure the total by **tacking**. A constant offset makes the two tacks
+disagree. Sail close-hauled on starboard in steady breeze and flat water,
+average the angle off the bow; tack; repeat on port with identical trim. The
+offset is *half* the difference (half, because the error shifts both readings
+the same way in absolute terms while the two tacks measure from opposite
+sides). Send its negation:
+
+| | Reading | Off the bow |
+|---|---|---|
+| Starboard | 35° | 35° |
+| Port | 335° | 25° |
+
+Spread 10° → offset +5° → `~APCMD,d-5$` → both tacks then read ~30°.
+
+It's *relative* because a difference is the only thing the measurement yields —
+the tack test never tells you an absolute encoder offset. Average over a minute
+or more (log the 5 Hz stream and take the mean); a single reading is noise. Two
+caveats: leeway, uneven trim, current or lumpy water on one board all
+masquerade as an offset, so don't bake a trim habit into the instrument; and a
+single constant can't represent upwash, which varies with wind speed and point
+of sail, so the correction is most accurate near the angle you calibrated at.
 
 *Wind speed* — `~APCMD,k<slope>,<offset>$`, applying `speed[m/s] = raw *
 slope + offset`. The cup geometry in `Wind.h` is the **nominal** Yachta design,
@@ -157,7 +188,8 @@ Plain-text UDP datagrams framed with a leading `~` and trailing `$`:
   calibration math, timeout details).
 - **Wind sensor** — again its own pair of ports:
   `~APWND,<direction>,<speed_kn>,<speed_mps>,<bft>,<temp_c>,<vane_ok>,<temp_ok>,<speed_hz>$`
-  wind → controller on **UDP 8892**, and `~APCMD,v$` / `~APCMD,k<slope>,<offset>$`
+  wind → controller on **UDP 8892**, and `~APCMD,v$` / `~APCMD,d<±degrees>$` /
+  `~APCMD,k<slope>,<offset>$`
   controller → wind on **UDP 8893**. `direction` is apparent wind angle,
   0–360° clockwise from the bow; `speed_hz` is the raw anemometer rate, on the
   wire for calibration rather than steering. The two health flags are separate
@@ -167,6 +199,18 @@ Plain-text UDP datagrams framed with a leading `~` and trailing `$`:
 
 Because telemetry is broadcast, multiple displays can listen at once; commands
 are unicast to the controller's AP address.
+
+### Two command surfaces
+
+`~APCMD` over UDP and the controller's **telnet console** are separate
+dispatchers with separate verb sets — adding a verb to one does not add it to
+the other. The sensor-board calibration verbs (`z` for the rudder, `v`/`d`/`k`
+for the wind) are on **both**; the OpenCPN plugin also sends `z`. The displays
+send only `a`, `m`, `n`, `t` — they have buttons, not a keyboard.
+
+Telnet is the practical place to calibrate: it echoes the full status after
+every state-changing command, so you can see what actually landed. `~APCMD` is
+fire-and-forget with no ack by design, so nothing on that path can tell you.
 
 ## Before you build: `arduino_secrets.h`
 

@@ -81,6 +81,15 @@ AutoPilot::AutoPilot(SerialType* ser) {
   rudder_angle = 0.0;
   rudder_magnet_ok = false;
 
+  wind_direction = 0.0;
+  wind_speed_kn = 0.0;
+  wind_speed_mps = 0.0;
+  wind_speed_bft = 0;
+  wind_speed_hz = 0.0;
+  wind_temperature = 0.0;
+  wind_vane_ok = false;
+  wind_temp_ok = false;
+
   waypoint_set = false;
   waypoint_lat = 0.0;
   waypoint_lon = 0.0;
@@ -427,6 +436,76 @@ void AutoPilot::setRudderAngle(float angle, bool magnet_ok) {
   this->rudder_angle = angle;
   this->rudder_magnet_ok = magnet_ok;
   this->unlock();
+}
+
+void AutoPilot::setWind(float direction, float speed_kn, float speed_mps, int speed_bft,
+                        float temperature, bool vane_ok, bool temp_ok, float speed_hz) {
+  this->lock();
+  this->wind_direction = direction;
+  this->wind_speed_kn = speed_kn;
+  this->wind_speed_mps = speed_mps;
+  this->wind_speed_bft = speed_bft;
+  this->wind_temperature = temperature;
+  this->wind_vane_ok = vane_ok;
+  this->wind_temp_ok = temp_ok;
+  this->wind_speed_hz = speed_hz;
+  this->unlock();
+}
+
+float AutoPilot::getWindDirection() {
+  this->lock();
+  float value = this->wind_direction;
+  this->unlock();
+  return value;
+}
+
+float AutoPilot::getWindSpeedKn() {
+  this->lock();
+  float value = this->wind_speed_kn;
+  this->unlock();
+  return value;
+}
+
+float AutoPilot::getWindSpeedMps() {
+  this->lock();
+  float value = this->wind_speed_mps;
+  this->unlock();
+  return value;
+}
+
+int AutoPilot::getWindSpeedBft() {
+  this->lock();
+  int value = this->wind_speed_bft;
+  this->unlock();
+  return value;
+}
+
+float AutoPilot::getWindSpeedHz() {
+  this->lock();
+  float value = this->wind_speed_hz;
+  this->unlock();
+  return value;
+}
+
+float AutoPilot::getWindTemperature() {
+  this->lock();
+  float value = this->wind_temperature;
+  this->unlock();
+  return value;
+}
+
+bool AutoPilot::isWindVaneOk() {
+  this->lock();
+  bool value = this->wind_vane_ok;
+  this->unlock();
+  return value;
+}
+
+bool AutoPilot::isWindTempOk() {
+  this->lock();
+  bool value = this->wind_temp_ok;
+  this->unlock();
+  return value;
 }
 
 int AutoPilot::getStabilityClassification() {

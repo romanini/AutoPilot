@@ -131,7 +131,7 @@ void sensor_task(void *pvParameters) {
 void command_task(void *pvParameters) {
   for (;;) {  // A Task shall never return or exit.
     check_wifi();
-    check_calibration_request();        // vane zero (vane.ino)
+    check_vane_calibration_request();   // vane zero + trim (vane.ino)
     check_speed_calibration_request();  // speed slope/offset (anemometer.ino)
     vTaskDelay(10 / portTICK_PERIOD_MS);
   }

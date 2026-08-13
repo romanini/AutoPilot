@@ -28,12 +28,12 @@ The directories are flat — one per EasyEDA project — but the boards are not
 independent. They stack up into **four physical units**, and only the four
 units talk to each other, over Wi-Fi:
 
-| Unit | Boards inside it | Interconnect | Power |
-|------|------------------|--------------|-------|
-| **Controller** | [`Controller`](Controller/README.md) + [`Controller-12-volt-power`](Controller-12-volt-power/README.md) | 2×10 ribbon, board to board | 12 V into the power board, fused there |
-| **Display** (cockpit head unit) | [`Display`](Display/README.md) + [`Display-Button`](Display-Button/README.md) + [`Display-LCD`](Display-LCD/README.md) | 2×10 ribbon mainboard→button board, then 8-pin JST-XH button board→panel | 12 V, or its own LiPo when 12 V is absent |
-| **Rudder sensor** | [`Sensor-Rudder`](Sensor-Rudder/README.md) | — (single board) | 12 V into its own terminal block |
-| **Wind sensor** | [`Sensor-Wind`](Sensor-Wind/README.md) | — (single board) | 12 V from the masthead light circuit |
+| Unit | Boards inside it | Enclosure | Interconnect | Power |
+|------|------------------|-----------|--------------|-------|
+| **Controller** | [`Controller`](Controller/README.md) + [`Controller-12-volt-power`](Controller-12-volt-power/README.md) | [`cad/controller/`](../cad/controller/README.md) | 2×10 ribbon, board to board | 12 V into the power board, fused there |
+| **Display** (cockpit head unit) | [`Display`](Display/README.md) + [`Display-Button`](Display-Button/README.md) + [`Display-LCD`](Display-LCD/README.md) | [`cad/display/`](../cad/display/README.md) | 2×10 ribbon mainboard→button board, then 8-pin JST-XH button board→panel | 12 V, or its own LiPo when 12 V is absent |
+| **Rudder sensor** | [`Sensor-Rudder`](Sensor-Rudder/README.md) | [`cad/rudder/`](../cad/rudder/README.md) | — (single board) | 12 V into its own terminal block |
+| **Wind sensor** | [`Sensor-Wind`](Sensor-Wind/README.md) | [`cad/wind/`](../cad/wind/README.md) | — (single board) | 12 V from the masthead light circuit |
 
 So the two controller boards share one case, the three display boards share
 another, and each sensor is a sealed one-board unit with nothing running to it
@@ -41,6 +41,11 @@ but a 12 V pair — which is the point of putting them on Wi-Fi rather than
 wiring them back to the controller. [`Display-LCD`](Display-LCD/README.md) is
 optional: it is only fitted when the ST7365P panel is used instead of an HX8357
 module.
+
+The case each unit lives in is designed in [`../cad/`](../cad/) — one directory
+per unit, linked in the table above. Only the
+[wind sensor](../cad/wind/README.md) is built; the other three are placeholders
+that so far only record the constraints.
 
 ## What's in each folder
 

@@ -43,3 +43,4 @@ reflashed to be calibrated — see [`../../Arduino/README.md`](../../Arduino/REA
 One of the [AutoPilot circuit boards](../README.md) — that README covers how the
 boards fit together and the open review items. This board is a sealed one-board
 unit on its own. Firmware: [`../../Arduino/README.md`](../../Arduino/README.md).
+Enclosure: [`../../cad/wind/`](../../cad/wind/README.md).

@@ -20,7 +20,7 @@ There are two Claude working environments, and the split is deliberate:
 | Machine | Owns | Toolchain present | Builds / tests |
 |---|---|---|---|
 | **Mac** (this repo checkout) | `Arduino/controller/*` firmware **and** the new Python Garmin emulator + test harness | `arduino-cli`, USB-serial to the ESP32, Python | compile + flash controller; **serial** debug over the ESP32 USB-CDC; run emulator over a USB-serial tap at the **Garmin connector (5 V side)** — see §4 |
-| **Navigator** (OrangePi, OpenCPN box) | `opencpn_plugin/autopilot_pi/*` | `flatpak-builder`, a real OpenCPN with the route API + chart picture | build + load the plugin; exercise route create/activate; **all telnet + UDP testing** (`~APTX`/`~APRX`/`~APDAT`, telnet `g` inject) — it is the SoberPilot Wi-Fi client |
+| **Navigator** (Raspberry Pi 5, OpenCPN box) | `opencpn_plugin/autopilot_pi/*` | `flatpak-builder`, a real OpenCPN with the route API + chart picture | build + load the plugin; exercise route create/activate; **all telnet + UDP testing** (`~APTX`/`~APRX`/`~APDAT`, telnet `g` inject) — it is the SoberPilot Wi-Fi client |
 
 > ⚠️ **Network topology (easy to get wrong):** the **Mac is NOT on the SoberPilot
 > Wi-Fi.** Its only links to the controller are (a) the ESP32 **USB-CDC serial**

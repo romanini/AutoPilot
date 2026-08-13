@@ -5,7 +5,7 @@ branch: stable
 # The OpenCPN Flatpak declares extension point org.opencpn.OpenCPN.Plugin with
 # merge-dirs=lib/opencpn, so our plugin .so ends up in that merged path.
 #
-# Pre-requisites on the OrangePi (run once):
+# Pre-requisites on the Raspberry Pi 5 (run once):
 #   sudo apt install flatpak-builder
 #   flatpak install flathub org.freedesktop.Sdk//25.08
 #

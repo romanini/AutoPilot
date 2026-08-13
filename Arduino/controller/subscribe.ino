@@ -19,7 +19,8 @@ void dispatch_command(char buffer[]);
 void garmin_write_line(const char* nmea);             // defined in garmin.ino
 void navsource_opencpn_waypoint(double lat, double lon);  // defined in navsource.ino
 void navsource_opencpn_clear();                       // defined in navsource.ino
-void relay_rudder_command(const char* cmd);           // defined in rudder.ino
+bool relay_rudder_command(const char* cmd);           // defined in rudder.ino
+bool relay_wind_command(const char* cmd);             // defined in wind.ino
 
 void setup_subscribe() {
   if (udpCommandServer.listen(UDP_COMMAND_PORT)) {
@@ -140,6 +141,18 @@ void dispatch_command(char buffer[]) {
       // "Center now": nothing for the controller itself to do - just forward
       // to the rudder board so it can zero its own calibration. See rudder.ino.
       relay_rudder_command(buffer);
+      break;
+    case 'v':  // vane zero
+    case 'd':  // vane trim, d<+-degrees>
+    case 'k':  // wind speed calibration, k<slope>,<offset>
+      // Same deal as 'z', for the masthead wind sensor: the controller has
+      // nothing to do with any of these, it just needs to be the address every
+      // client already knows. The whole verb string goes through verbatim -
+      // 'd' and 'k' carry arguments, and the controller deliberately does not
+      // parse or validate them. The wind board owns those bounds (they are
+      // what protect its flash), and duplicating them here would be a second
+      // copy to keep in step. See wind.ino.
+      relay_wind_command(buffer);
       break;
     default:
       break;

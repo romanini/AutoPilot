@@ -11,11 +11,18 @@
 #include <Preferences.h>
 #include <Adafruit_AS5600.h>
 
-// The "voffset" key is only ever written by calibrate_bow(). It is in raw
+// The "voffset" key is written by calibrate_bow() and nudge_bow(). It is in raw
 // AS5600 counts (0-4095), not degrees, so re-applying it never accumulates
 // float rounding error. The namespace it lives in is shared with the speed
 // calibration in anemometer.ino - see WIND_PREFS_NAMESPACE in Wind.h.
 #define BOW_COUNTS 0  // 0 degrees - vane pointing dead ahead
+
+// Largest single trim accepted from ~APCMD,d<degrees>$. The full half-circle is
+// allowed on purpose: 180 is exactly what you would send for a head that turned
+// out to be mounted back to front. As with the speed calibration the bound is
+// written as !(in range) at the check below, so a NaN out of a malformed
+// datagram is refused rather than written to flash.
+#define VANE_NUDGE_ABS_MAX 180.0f
 
 // Set to 1 if the vane reads backwards, i.e. the angle decreases as the vane
 // swings to starboard. Which way an AS5600 counts depends on which face of the
@@ -35,18 +42,29 @@ static uint16_t offsetCounts = 0;
 
 // Guards the AS5600 and offsetCounts, both of which are touched from two tasks:
 // sensor_task reads the angle every CALCULATE_INTERVAL_MS while command_task
-// re-zeros on a ~APCMD,v$ (see wind.ino). A mutex is genuinely required rather
-// than just careful ordering: one getRawAngle() is *two* Wire transactions
-// (register-address write, then data read), so a transaction injected between
-// them from the other core clobbers the AS5600's internal address pointer and
-// the read comes back holding some other register's value.
+// re-zeros or trims on a ~APCMD,v$ / ~APCMD,d$ (see wind.ino). A mutex is
+// genuinely required rather than just careful ordering: one getRawAngle() is
+// *two* Wire transactions (register-address write, then data read), so a
+// transaction injected between them from the other core clobbers the AS5600's
+// internal address pointer and the read comes back holding some other
+// register's value.
 // Recursive, matching the pattern in the controller/display AutoPilot classes.
 static SemaphoreHandle_t vaneMutex = NULL;
 
-// Set from the AsyncUDP callback (subscribe.ino), consumed by command_task.
-// The callback deliberately does not calibrate inline: that would put an I2C
-// read and an NVS flash write on the network stack's own task.
-static volatile bool calibrationRequested = false;
+// Pending requests, set from the AsyncUDP callback (subscribe.ino) and consumed
+// by command_task. The callback deliberately does not do the work inline: that
+// would put an I2C read and an NVS flash write on the network stack's own task.
+//
+// This is a *different* lock from vaneMutex above and guards a different thing:
+// vaneMutex is the sensor and the live offset, this is only the command
+// handoff. It is a spinlock rather than a bare volatile flag because the nudge
+// carries a value alongside its flag, and a half-visible update would apply a
+// trim of whatever happened to be in the variable last. Nothing that blocks is
+// ever called while holding it.
+static portMUX_TYPE vaneRequestMux = portMUX_INITIALIZER_UNLOCKED;
+static bool zeroRequested = false;
+static bool nudgeRequested = false;
+static float pendingNudgeDegrees = 0.0f;
 
 static void vane_lock() {
   if (vaneMutex != NULL) {
@@ -128,7 +146,31 @@ void setup_vane() {
 // task; repeated requests simply coalesce, which is the right behaviour for an
 // idempotent "the vane is pointing dead ahead right now" command.
 void request_calibration() {
-  calibrationRequested = true;
+  portENTER_CRITICAL(&vaneRequestMux);
+  zeroRequested = true;
+  portEXIT_CRITICAL(&vaneRequestMux);
+}
+
+// Flags a trim for command_task to pick up. Unlike the re-zero this one does
+// NOT coalesce - two requests are two trims - because it is relative. See the
+// note on why relative in nudge_bow() below. Returns false if the value is
+// refused.
+bool request_vane_nudge(float degrees) {
+  if (!(degrees >= -VANE_NUDGE_ABS_MAX && degrees <= VANE_NUDGE_ABS_MAX)) {
+    DEBUG_PRINT("Rejected implausible vane nudge: ");
+    DEBUG_PRINTLN2(degrees, 2);
+    return false;
+  }
+
+  portENTER_CRITICAL(&vaneRequestMux);
+  // Accumulate rather than overwrite: if two nudges arrive inside one
+  // command_task tick, applying only the second would silently drop the first.
+  // Adding them is what a relative trim means, and it keeps the outcome the
+  // same whether the two land in one tick or two.
+  pendingNudgeDegrees += degrees;
+  nudgeRequested = true;
+  portEXIT_CRITICAL(&vaneRequestMux);
+  return true;
 }
 
 // Takes a fresh raw reading and computes the offset that makes *this* vane
@@ -171,15 +213,85 @@ static void calibrate_bow() {
   DEBUG_PRINTLN(newOffset);
 }
 
-// Polled from command_task. Clears the flag *before* doing the work so a
-// request that lands during a calibration is serviced on the next tick rather
-// than being swallowed.
-void check_calibration_request() {
-  if (!calibrationRequested) {
-    return;
+// Shifts the stored offset by a number of degrees, without reading the vane.
+//
+// This is the calibration you use once the head is up the mast and out of
+// reach, where calibrate_bow() above is impossible. It also corrects errors
+// calibrate_bow() *cannot*: it only ever fixes the vane's alignment to the
+// sensor body, whereas the total error the boat experiences is that plus any
+// rotation of the mast relative to the hull, plus the aerodynamic bias of
+// sitting in the mast and mainsail's upwash. Neither of the latter two is
+// visible from the masthead.
+//
+// You measure the total by tacking. A constant offset makes the two tacks
+// disagree: sail close-hauled on starboard and average the reported angle off
+// the bow, tack, do the same on port with identical trim, and the offset is
+// *half* the difference - half because the error shifts both readings the same
+// way in absolute terms while the two tacks measure from opposite sides. Then
+// send the negation of it. Nothing about that procedure yields an absolute
+// encoder offset, only a correction, which is why this command is relative:
+// it maps one-to-one onto the number you actually measured.
+//
+// Working in whole counts (0.087 degrees) rather than storing degrees keeps
+// this consistent with calibrate_bow() and with what "voffset" means. Each
+// nudge rounds once, so a run of them can drift by up to 0.04 degrees apiece -
+// far under the precision the tack test itself can deliver.
+static void nudge_bow(float degrees) {
+  int32_t deltaCounts = lroundf(degrees * (float)VANE_COUNTS / 360.0f);
+
+  vane_lock();
+
+  // C's % keeps the sign of the dividend, so a negative trim needs the extra
+  // wrap to land back in 0..VANE_COUNTS-1.
+  int32_t updated = ((int32_t)offsetCounts + deltaCounts) % VANE_COUNTS;
+  if (updated < 0) {
+    updated += VANE_COUNTS;
   }
-  calibrationRequested = false;
-  calibrate_bow();
+  offsetCounts = (uint16_t)updated;
+
+  Preferences prefs;
+  prefs.begin(WIND_PREFS_NAMESPACE, false);  // read-write
+  prefs.putUShort("voffset", offsetCounts);
+  prefs.end();
+
+  uint16_t newOffset = offsetCounts;
+  vane_unlock();
+
+  DEBUG_PRINT("Vane nudged by ");
+  DEBUG_PRINT2(degrees, 2);
+  DEBUG_PRINT(" deg (");
+  DEBUG_PRINT(deltaCounts);
+  DEBUG_PRINT(" counts), new offset=");
+  DEBUG_PRINTLN(newOffset);
+}
+
+// Polled from command_task. Takes and clears both pending requests under the
+// spinlock *before* doing any of the work, so a request that lands mid-write is
+// serviced on the next tick rather than being swallowed - and so the blocking
+// parts (I2C, flash) never run inside a critical section.
+//
+// If both are pending, the absolute zero is applied first and the relative trim
+// on top of it, which is the only order that makes sense for the two of them.
+void check_vane_calibration_request() {
+  bool zero;
+  bool nudge;
+  float nudgeDegrees;
+
+  portENTER_CRITICAL(&vaneRequestMux);
+  zero = zeroRequested;
+  nudge = nudgeRequested;
+  nudgeDegrees = pendingNudgeDegrees;
+  zeroRequested = false;
+  nudgeRequested = false;
+  pendingNudgeDegrees = 0.0f;
+  portEXIT_CRITICAL(&vaneRequestMux);
+
+  if (zero) {
+    calibrate_bow();
+  }
+  if (nudge) {
+    nudge_bow(nudgeDegrees);
+  }
 }
 
 // Applies the calibration offset to a fresh raw reading. Called once per

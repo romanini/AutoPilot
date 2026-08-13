@@ -56,6 +56,18 @@ private:
   float rudder_angle;      // last angle reported by the rudder sensor board (rudder.ino), 180 = dead center
   bool rudder_magnet_ok;   // AS5600 magnet-detected flag from the same ~APRUD packet
 
+  // Masthead wind sensor board (Arduino/wind/), fed via ~APWND on its own UDP
+  // port - see wind.ino. Stored but not yet republished on ~APDAT; that change
+  // has to land across controller, display and plugin together.
+  float wind_direction;    // apparent wind angle, 0-360 degrees clockwise from the bow
+  float wind_speed_kn;
+  float wind_speed_mps;
+  int wind_speed_bft;      // Beaufort force, 0-12
+  float wind_speed_hz;     // raw anemometer revolutions per second, for calibration
+  float wind_temperature;  // masthead air temperature, degrees C
+  bool wind_vane_ok;       // AS5600 magnet-detected flag from the same ~APWND packet
+  bool wind_temp_ok;       // a DS18B20 answered on the wind board's 1-Wire bus
+
   bool waypoint_set;   // flag indicating if the waypoint has been set
   float waypoint_lat;  // desired waypoint latitide
   float waypoint_lon;  // desired waypoint longitude
@@ -124,6 +136,19 @@ public:
   float getRudderAngle();
   bool isRudderMagnetOk();
   void setRudderAngle(float angle, bool magnet_ok);
+  // One setter for the whole ~APWND payload rather than eight: the fields only
+  // ever arrive together, in one packet, and setting them under a single lock
+  // means a reader can never see half of an update.
+  void setWind(float direction, float speed_kn, float speed_mps, int speed_bft,
+               float temperature, bool vane_ok, bool temp_ok, float speed_hz);
+  float getWindDirection();
+  float getWindSpeedKn();
+  float getWindSpeedMps();
+  int getWindSpeedBft();
+  float getWindSpeedHz();
+  float getWindTemperature();
+  bool isWindVaneOk();
+  bool isWindTempOk();
   bool isWaypointSet();
   float getWaypointLat();
   float getWaypointLon();

@@ -25,7 +25,7 @@ and [Enable NVMe boot](#raspberry-pi-5--enable-nvme-boot) below.
 
 ## SD card backup and restore
 
-The OrangePi setup is not distributed as a disk image — it is too large for Git.
+The navigator setup is not distributed as a disk image — it is too large for Git.
 To set up a fresh card, follow the from-scratch setup below. Use the commands here
 to back up an existing working card or restore from a backup.
 

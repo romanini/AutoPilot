@@ -35,3 +35,4 @@ NVS — see [`../../Arduino/README.md`](../../Arduino/README.md).
 One of the [AutoPilot circuit boards](../README.md) — that README covers how the
 boards fit together and the open review items. This board is a sealed one-board
 unit on its own. Firmware: [`../../Arduino/README.md`](../../Arduino/README.md).
+Enclosure: [`../../cad/rudder/`](../../cad/rudder/README.md).

@@ -64,6 +64,7 @@ void setup() {
   setup_telnet();
   setup_subscribe();
   setup_rudder();
+  setup_wind();
   setup_motor();
   setup_compass();
   setup_gps();

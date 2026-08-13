@@ -15,7 +15,7 @@ controller or display firmware.
                               │
           ┌───────────────────┼────────────────────┐
           │                   │                    │
-   Controller (AP)     Display unit(s)     OrangePi / OpenCPN
+   Controller (AP)     Display unit(s)     RaspberryPi 5 / OpenCPN
    10.20.1.1           10.20.1.x           10.20.1.x
    broadcast ~APDAT    listen + buttons    listen + autopilot_pi
    on UDP 8888         send ~APCMD         sends ~APCMD
@@ -204,7 +204,7 @@ so all column tops and bottoms align horizontally.
 
 ## Building
 
-**Pre-requisites (once on the OrangePi):**
+**Pre-requisites (once on the Raspberry Pi 5):**
 
 ```bash
 sudo apt install flatpak-builder cmake g++
@@ -243,7 +243,7 @@ flatpak info org.opencpn.OpenCPN.Plugin.autopilot
 
 ## Live verification checklist
 
-With the OrangePi on the SoberPilot network and the controller running:
+With the Raspberry Pi 5 on the SoberPilot network and the controller running:
 
 1. Enable the plugin in OpenCPN → Options → Plugins.
 2. Click the **AP** toolbar button — floating panel appears, sized to content.

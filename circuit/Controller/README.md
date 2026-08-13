@@ -34,4 +34,4 @@ microcontroller.
 One of the [AutoPilot circuit boards](../README.md) — that README covers how the
 boards fit together and the open review items. It shares a case with the
 [12-volt power board](../Controller-12-volt-power/README.md). Firmware:
-[`../../Arduino/README.md`](../../Arduino/README.md).
+[`../../Arduino/README.md`](../../Arduino/README.md). Enclosure: [`../../cad/controller/`](../../cad/controller/README.md).

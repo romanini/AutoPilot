@@ -3,15 +3,17 @@ name: autopilot
 description: >-
   Project context for the AutoPilot repo — a DIY marine autopilot for a
   wheel-steered sailboat. Use this skill WHENEVER working anywhere in this
-  repository: the Arduino firmware (the `controller` and `display` sketches), the
-  UDP telemetry/command protocol between them, the OrangePi navigation computer,
-  the OpenCPN plugin (`autopilot_pi`), the PID tuning scripts, or the monitor
-  tool. Trigger it for any task that mentions the autopilot, the controller, the
-  display/head unit, the compass/IMU, GPS, Garmin/NMEA input, the steering motor,
-  the `~APDAT`/`~APCMD` UDP messages, the SoberPilot Wi-Fi network, building or
-  uploading either sketch, the shared `AutoPilot` state class, the OpenCPN plugin,
-  `autopilot_pi`, `AutoPilotLink`, `AutoPilotPanel`, or Flatpak — even if the user
-  doesn't spell out the architecture. Read it before editing firmware or plugin
+  repository: the Arduino firmware (the `controller`, `display`, `rudder` and
+  `wind` sketches), the UDP telemetry/command protocol between them, the
+  Raspberry Pi 5 navigation computer, the OpenCPN plugin (`autopilot_pi`), or
+  the PID tuning scripts. Trigger it for any task that mentions the autopilot,
+  the controller, the display/head unit, the rudder angle sensor, the masthead
+  wind sensor, the compass/IMU, GPS, Garmin/NMEA input, the steering motor, the
+  AS5600/AS5600L encoders, the `~APDAT`/`~APCMD`/`~APRUD`/`~APWND` UDP messages,
+  the SoberPilot Wi-Fi network, building or uploading any of the sketches, the
+  shared `AutoPilot` state class, the OpenCPN plugin, `autopilot_pi`,
+  `AutoPilotLink`, `AutoPilotPanel`, or Flatpak — even if the user doesn't spell
+  out the architecture. Read it before editing firmware or plugin
   code so you don't re-derive how the components talk or accidentally break their
   deliberately different behavior.
 ---
@@ -28,7 +30,7 @@ system is split across boards that talk over Wi-Fi.
 |------|----------|------|----------|
 | **Controller** | Arduino Nano ESP32 | The brain: reads IMU + GPS, runs PID steering, drives the motor, is the Wi-Fi access point | `Arduino/controller/` |
 | **Display** | Arduino Nano ESP32 + HX8357 TFT (one or more) | Cockpit head unit: shows live state on a colour LCD, has physical buttons | `Arduino/display/` |
-| **Navigation computer** | OrangePi Zero 2W, Ubuntu 22.04 + OpenCPN | Chart plotter: GPS + AIS + vector charts; also runs `autopilot_pi` | `navigator/` |
+| **Navigation computer** | Raspberry Pi 5 (8 GB), Ubuntu 24.04 + OpenCPN | Chart plotter: GPS + AIS + vector charts; also runs `autopilot_pi` | `navigator/` |
 | **OpenCPN plugin** | `autopilot_pi` C++/wxWidgets Flatpak extension | Software display unit inside OpenCPN — mirrors TFT layout, sends commands, pushes active waypoints to controller | `opencpn_plugin/autopilot_pi/` |
 | **Rudder sensor** | Arduino Nano ESP32 + AS5600 (I2C) | Standalone rudder angle sensor (boat is wheel-steered); joins SoberPilot as a station and reports angle to the controller over UDP | `Arduino/rudder/` |
 | **Wind sensor** | Arduino Nano ESP32 + AS5600 vane + reed-switch cup anemometer + DS18B20 | Standalone masthead wind sensor (Yachta head); joins SoberPilot as a station and reports apparent wind to the controller over UDP | `Arduino/wind/` |
@@ -58,8 +60,61 @@ Because telemetry is broadcast, multiple displays can listen at once; commands
 are unicast back to the controller. `mode`: `0`=off, `1`=compass-hold,
 `2`=waypoint navigate.
 
-The rudder sensor (see below) speaks a separate pair of ports (8890/8891) to
-the controller — it isn't part of the 8888/8889 display protocol above.
+The two sensor boards each speak their own pair of ports to the controller and
+are not part of the 8888/8889 display protocol above: rudder on 8890/8891, wind
+on 8892/8893.
+
+### Two command surfaces, not one — check both
+
+`~APCMD` over UDP (`dispatch_command()`, `controller/subscribe.ino`) and the
+**telnet console** (`process_telnet()`, `controller/telnet.ino`) are separate
+dispatchers with separate switches and separate verb sets. **Adding a verb to
+one does not add it to the other**, and they share no parser. This has bitten
+before: `~APCMD,z$` existed on the UDP side for months while telnet had no way
+to send it, so "center the rudder" was reachable only from the OpenCPN plugin.
+
+The split is deliberate — telnet is a human interface that can answer back,
+where `~APCMD` is fire-and-forget with no ack by design — but anything meant to
+be reachable from both has to be wired up twice. Who can send what today:
+
+| | UDP `~APCMD` | Telnet |
+|---|---|---|
+| `a` `m` `n` `w` | display, plugin | yes |
+| `t` (autotune) | display, plugin | `pat` (arm only) |
+| `X` | plugin | no |
+| `z` `v` `d` `k` (sensor calibration) | plugin sends `z` only | **yes, all four** |
+
+The displays send only `a`, `m`, `n`, `t` — they have buttons, not a keyboard,
+so the calibration verbs will never come from there.
+
+**What telnet can and cannot report about a relayed command.** No `~APCMD` has
+an ack, so telnet can never tell you a sensor board *received* a datagram,
+*accepted* a value, or wrote it to flash. But two failures are knowable purely
+locally, and `report_relay_reachability()` (telnet.ino) reports both:
+
+1. **Never heard from that board** → no address exists, the command is
+   definitively going nowhere, so it isn't even sent.
+2. **Address known but the board has gone quiet** (`>SENSOR_QUIET_MS`) → the
+   datagram still goes out, but the reply says so rather than "ok". This case
+   needs `rudder_last_heard_ms()`/`wind_last_heard_ms()` because
+   `rudderIpKnown`/`windIpKnown` **never expire once set** — a board that was
+   seen once and then lost power would otherwise report a cheerful "ok".
+
+Those helpers deliberately are *not* `isRudderOk()`/`isWindOk()`: those fold in
+the magnet/vane flag, and a board with a dead magnet is still perfectly
+reachable for a re-calibration. The question there is only "is it talking".
+
+Telnet also range-checks nothing on `d`/`k` — the sensor boards own those
+bounds — but it does check the arguments are *numbers*, which is syntax rather
+than policy. Without it `kfoo,bar` becomes a well-formed `0.0,0.0`, gets
+refused at the board, and looks from the console exactly like nothing happened.
+
+**Auto-prototype trap in `telnet.ino`:** any function taking a
+`CustomClientType&` must be explicitly forward-declared in the block after the
+`typedef`, or the build fails with "`CustomClientType` was not declared in this
+scope". Arduino's prototype generator emits its own declaration ahead of the
+typedef. **`static` does not exempt a function from this** — that is not
+obvious and it does cost a build.
 
 ### Optimistic UI
 
@@ -77,8 +132,10 @@ button code.
 `controller.ino` (setup/loop, FreeRTOS tasks) · `compass.ino` (BNO08x IMU) ·
 `gps.ino` (Adafruit GPS NMEA) · `garmin.ino` (Garmin NMEA-0183 in) ·
 `pid.ino` (heading-error → steering correction) · `motor.ino` (steering motor) ·
-`publish.ino` (`~APDAT` out) · `subscribe.ino` (`~APCMD` in) · `telnet.ino` ·
-`wifi.ino` (SoftAP) · `AutoPilot.{h,cpp}` (state model).
+`publish.ino` (`~APDAT` out) · `subscribe.ino` (`~APCMD` in) · `telnet.ino`
+(separate command surface — see above) · `wifi.ino` (SoftAP) ·
+`rudder.ino` (`~APRUD` in 8890, relay out 8891) · `wind.ino` (`~APWND` in 8892,
+relay out 8893) · `AutoPilot.{h,cpp}` (state model).
 
 **`display/`** (Wi-Fi station, listens on 8888, sends commands on 8889):
 `display.ino` · `screen.ino` (GFX + HX8357 LCD) · `button.ino` (input + optimistic
@@ -93,10 +150,11 @@ FreeRTOS tasks) · `angle.ino` (AS5600 read + calibration + the mutex) ·
 
 **`wind/`** (Wi-Fi station, own ports — see below): `wind.ino` (setup +
 FreeRTOS tasks + sample cadence) · `Wind.{h,cpp}` (state model **and** the
-ported wind maths) · `vane.ino` (AS5600 read + bow calibration + the mutex) ·
-`anemometer.ino` (reed-switch ISR + rotation timing) · `temperature.ino`
-(DS18B20) · `publish.ino` (`~APWND` out, 8892) · `subscribe.ino` (relayed
-`~APCMD,v$` in, 8893) · `wifi.ino` (joins SoberPilot, auto-reconnect).
+ported wind maths) · `vane.ino` (AS5600 read + bow zero/trim + the mutex) ·
+`anemometer.ino` (reed-switch ISR + rotation timing + speed calibration) ·
+`temperature.ino` (DS18B20) · `publish.ino` (`~APWND` out, 8892) ·
+`subscribe.ino` (relayed `~APCMD,v$`/`,d`/`,k` in, 8893) · `wifi.ino` (joins
+SoberPilot, auto-reconnect).
 
 ## The rudder position sensor (`Arduino/rudder/`)
 
@@ -121,8 +179,9 @@ SDA/SCL pins. DIR pin tied to GND (clockwise-increasing convention).
   least one packet has arrived, there is nothing to relay `~APCMD,z$` to.
 - **UDP 8891**, controller → rudder, unicast to that remembered IP:
   `~APCMD,z$` — "center now" (see calibration below), relayed verbatim from
-  whatever sent the original `~APCMD,z$` to the controller (telnet, a display,
-  or the OpenCPN plugin).
+  whatever asked the controller for it: the OpenCPN plugin
+  (`AutoPilotLink.cpp`, `SendCommand("z")`) or the telnet `z` command. Not the
+  displays — see the two-command-surfaces note above.
 
 **Why relay through the controller** rather than commanding the rudder board
 directly: telnet, every display, and the OpenCPN plugin already only know how
@@ -220,9 +279,9 @@ is safe to call repeatedly (same reason and same shape as
 `display/subscribe.ino`). Powersave is disabled (`WiFi.setSleep(false)`) for the
 same reason it is on the navigator's `wlan0`.
 
-**Not yet done:** the OpenCPN plugin rudder box + "Center now" button
-(`AutoPilotState`/`ParsePacket()` in `opencpn_plugin/autopilot_pi/AutoPilotLink.h`
-need the same two fields added to stay in sync with `~APDAT`).
+**Done since:** the OpenCPN plugin's rudder box and "Center now" button
+(`AutoPilotLink.cpp` sends `z`, `AutoPilotPanel.cpp` confirms first), and the
+telnet `z` command.
 
 **Publish rate (50 Hz, not the original 1 Hz):** unlike the human-readable
 1 Hz `~APDAT` broadcast, rudder angle is meant to eventually feed a real
@@ -256,12 +315,12 @@ over **Bluetooth**, not by restoring the web server.
   at 5 Hz. `direction` is apparent wind angle 0–360° clockwise from the bow.
   As with the rudder board this is also the only way the controller can learn
   this board's IP.
-- **UDP 8893**, controller → wind: `~APCMD,v$` (vane zero) and
-  `~APCMD,k<slope>,<offset>$` (speed calibration). Verbs `v`/`k` because
-  `dispatch_command()` switches on `buffer[0]` alone and `a/m/n/w/X/t/z` are
-  taken; same reasoning that picked `z` for the rudder. **Neither is relayed by
-  the controller yet** — a `case 'v':`/`case 'k':` pair needs adding alongside
-  the existing `case 'z':`.
+- **UDP 8893**, controller → wind: `~APCMD,v$` (vane zero),
+  `~APCMD,d<±degrees>$` (vane trim) and `~APCMD,k<slope>,<offset>$` (speed
+  calibration). Verbs `v`/`d`/`k` because `dispatch_command()` switches on
+  `buffer[0]` alone and `a/m/n/w/X/t/z` are taken; same reasoning that picked
+  `z` for the rudder. **None is relayed by the controller yet** — three cases
+  need adding alongside the existing `case 'z':`.
 
 **`speed_hz` is on the wire for calibration, not steering.** Every other speed
 field has the cup geometry *and* the fitted slope/offset baked in; rev/s is
@@ -298,21 +357,50 @@ controller side**, the same distinction (and the same reason) as
 4. **Every pulse is sampled**, where the original recorded only every other one.
    Same quantity, twice the samples.
 
-**Two calibrations, both runtime + NVS, both for the same reason.** Neither the
-vane zero nor the wind speed fit can be known before the head is assembled, and
-reflashing a masthead unit is a genuinely bad afternoon — so both live in the
-`"wind"` NVS namespace (`voffset`; `calslope`/`caloffset`) rather than as build
-constants. **They are unrelated despite both involving an "offset":** the vane
-offset is an angle in AS5600 counts; the speed offset is a scalar in m/s that
-absorbs bearing friction and the cup wheel's start-up threshold, because the
-real response is `v = a + b·n`, not a line through the origin. Likewise the
-speed *slope* absorbs the difference between the nominal `ANEMOMETER_LAMBDA`
+**All calibration is runtime + NVS, for one reason.** None of it can be known
+before the head is assembled, and reflashing a masthead unit is a genuinely bad
+afternoon — so it all lives in the `"wind"` NVS namespace (`voffset`;
+`calslope`/`caloffset`) rather than in build constants. Incoming values are
+range-checked before they reach flash, using `!(x >= min && x <= max)` rather
+than the naive form **on purpose**: every comparison against NaN is false, so
+the obvious `x < min || x > max` would let a NaN parsed out of a malformed
+datagram through and persistently poison the reading.
+
+**Direction: `v` and `d` are not redundant, don't collapse them.**
+- `v` (`calibrate_bow`) reads the vane and makes *its current position* zero.
+  Precise, but needs a hand on the vane — bench-time only.
+- `d` (`nudge_bow`) shifts the stored offset blind, in degrees. This is the
+  in-service form, and it corrects errors `v` structurally *cannot*: `v` only
+  ever fixes the vane's alignment to the sensor body, while the total error the
+  boat experiences is that plus mast rotation relative to the hull plus
+  aerodynamic bias in the mast/mainsail upwash. Neither of the latter is
+  visible from the masthead.
+
+`d` is **relative, not absolute**, because the measurement is a difference: you
+find the offset by tacking (a constant offset makes the two tacks disagree;
+the offset is *half* the spread in angle-off-the-bow between identically-trimmed
+close-hauled runs) and that never yields an absolute encoder offset, only a
+correction. Requests **accumulate** rather than coalesce in
+`request_vane_nudge()` — two nudges are two trims, so overwriting would silently
+drop one if both landed inside a `command_task` tick. Both work in whole AS5600
+counts, keeping `voffset`'s meaning consistent; each nudge rounds once, so a run
+of them drifts by at most ~0.04° apiece, far under what the tack test can
+resolve.
+
+**Speed: slope and offset are unrelated to the vane offset** despite the shared
+word. The speed offset is a scalar in m/s absorbing bearing friction and
+start-up threshold (real response is `v = a + b·n`, not a line through the
+origin); the slope absorbs the gap between the nominal `ANEMOMETER_LAMBDA`
 (which encodes cup shape/size and has no closed form) and this head's real one.
-The speed fit is done off-board — log against a reference at several steady
-speeds, take the linear fit; the original project documents a car on a windless
-day with a GPS app. Incoming values are range-checked before they reach flash,
-using `!(x >= min && x <= max)` rather than the naive form **on purpose**, so a
-NaN parsed out of a malformed datagram is rejected too.
+Fitted off-board — log against a reference at several steady speeds, take the
+linear fit; the original project documents a car on a windless day with a GPS
+app.
+
+**`vaneRequestMux` vs `vaneMutex` — two locks, two jobs.** `vaneMutex` is a
+recursive semaphore guarding the AS5600 and the live offset; `vaneRequestMux`
+is a spinlock guarding only the command handoff from the AsyncUDP task, needed
+because the nudge carries a value alongside its flag. Nothing blocking is ever
+called while holding the spinlock.
 
 **Two things that look like arbitrary constants but aren't:**
 - **`TEMPERATURE_INTERVAL_MS` is 500 to match the original's poll rate**, not
@@ -328,23 +416,43 @@ NaN parsed out of a malformed datagram is rejected too.
 
 **Threading** is the rudder board's split, for the rudder board's reasons:
 `sensor_task` (CORE_0) samples/calculates/publishes; `command_task` (CORE_1)
-runs `check_wifi()` and `check_calibration_request()`, both of which block for
-a long time (an association attempt, an NVS write). `vaneMutex` is mandatory
-for the same two-Wire-transaction reason as `angleMutex`, and the AsyncUDP
-callback only sets a flag.
+runs `check_wifi()`, `check_vane_calibration_request()` and
+`check_speed_calibration_request()`, all of which block for a long time (an
+association attempt, an NVS write). `vaneMutex` is mandatory for the same
+two-Wire-transaction reason as `angleMutex`, and the AsyncUDP callback only
+sets flags.
 
 **Pin naming:** this sketch uses `D2`/`D3` rather than bare integers, so it is
 correct under either Arduino IDE Pin Numbering setting — unlike the controller,
 which is why that README carries a warning about it.
 
-**Not yet done (controller and downstream side):** nothing on the controller
-receives `~APWND` yet. To close the loop it needs a `wind.ino` mirroring
-`controller/rudder.ino` (listen on 8892, remember the sender's IP, store into
-`AutoPilot`, add `case 'v':` and `case 'k':` relays in `dispatch_command()`
-— note `k` carries arguments, so relay the whole verb string verbatim the way
-`relay_rudder_command()` already does), then wind fields
-appended to `~APDAT` in `controller/publish.ino` with the display parser and
-`autopilot_pi`'s `AutoPilotState`/`ParsePacket()` updated **together**.
+**Controller side (done).** `controller/wind.ino` mirrors
+`controller/rudder.ino`: listens on 8892, remembers the sender's IP, stores the
+payload via `AutoPilot::setWind()`, and `relay_wind_command()` forwards `v`/`d`/
+`k` on 8893. `dispatch_command()` has the three cases; telnet has them too, plus
+`z`. **The controller deliberately does not parse or validate `d`/`k`
+arguments** — it passes the whole verb string through untouched. The wind board
+owns those bounds (they are what protect its flash) and a second copy here
+would be one more thing to keep in step.
+
+`AutoPilot::setWind()` takes all eight fields in **one** call, not eight
+setters: they only ever arrive together in one packet, and a single lock means
+no reader can see half an update. `isWindOk()` (wind.ino, not the class) is the
+combined flag — receive timeout AND vane flag — and deliberately does *not*
+fold in `temp_ok`, since a dead DS18B20 costs nothing while wind angle and
+speed keep working.
+
+**`speed_hz` is parsed as optional.** It was appended to `~APWND` after the
+first seven fields existed, so `process_wind_telemetry()` accepts a frame
+without it and stores 0. Keep that tolerance when adding further trailing
+fields — it is the same convention `~APDAT` follows.
+
+**Still to do (downstream):** wind fields appended to `~APDAT` in
+`controller/publish.ino`, with the display parser and `autopilot_pi`'s
+`AutoPilotState`/`ParsePacket()` updated **together**. Deliberately deferred
+until the head is built and reading sensibly — until then the telnet `p`
+command is the way to see wind state, and it prints the rudder line too (that
+line is the only confirmation a `z` landed).
 
 ## The `AutoPilot` class — read this before "deduplicating" it
 
@@ -399,7 +507,7 @@ Gotchas worth remembering:
   enough for "is the controller sending anything" but doesn't decode fields.
 - The controller also exposes a **telnet** console (`controller/telnet.ino`).
 
-## The navigation computer (OrangePi Zero 2W)
+## The navigation computer (Raspberry Pi 5)
 
 Full details and setup commands are in `navigator/README.md` — read it before
 touching networking, OpenCPN, or anything system-level on this box. Summary:

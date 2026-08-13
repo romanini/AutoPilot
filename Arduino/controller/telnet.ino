@@ -1,6 +1,16 @@
 // Interactive telnet server (port 23) for debugging / manual control.
 // Machine-to-machine commands from the displays / OpenCPN come in over UDP
 // instead - see subscribe.ino.
+//
+// NOTE: this is a *separate* command surface from dispatch_command() in
+// subscribe.ino, with its own switch and its own verb set. Adding a verb there
+// does not add it here, and the two do not share a parser. That is deliberate -
+// telnet is a human interface and can answer back, where UDP ~APCMD is
+// fire-and-forget with no ack by design - but it does mean a command meant to
+// be reachable from both has to be wired up twice. The sensor-board calibration
+// commands below are the case where that matters most: they are exactly the
+// sort of thing you do from a laptop, typing a number and wanting to see what
+// landed, which the UDP path structurally cannot tell you.
 
 #include <ESPTelnet.h>
 typedef ESPTelnet CustomClientType;
@@ -25,11 +35,23 @@ void process_print(CustomClientType& client);
 void process_quit(CustomClientType& client);
 void process_waypoint(CustomClientType& client, char buffer[]);
 void process_garmin_inject(CustomClientType& client, char buffer[]);
+void process_rudder_center(CustomClientType& client);
+void process_wind_calibration(CustomClientType& client, char buffer[]);
 void process_help(CustomClientType& client);
 void process_telnet(CustomClientType& client, char buffer[]);
+// Static helpers need declaring here for the same reason as the rest: the
+// auto-prototype pass would otherwise emit one ahead of the typedef above.
+// `static` does not exempt them.
+static bool report_relay_reachability(CustomClientType& client, const char* board, long lastHeardMs);
 
 int garmin_inject_line(const char* line);       // defined in garmin.ino
 const char* navsource_selected_name();          // defined in navsource.ino
+bool relay_rudder_command(const char* cmd);     // defined in rudder.ino
+bool relay_wind_command(const char* cmd);       // defined in wind.ino
+bool isRudderOk();                              // defined in rudder.ino
+bool isWindOk();                                // defined in wind.ino
+long rudder_last_heard_ms();                    // defined in rudder.ino
+long wind_last_heard_ms();                      // defined in wind.ino
 
 void setup_telnet() {
   telnet_server.onConnect(onTelnetConnect);
@@ -161,6 +183,45 @@ void process_print(CustomClientType& client) {
   client.print(",");
   client.print(autoPilot.getLocationLon(), 6);
   client.println("");
+
+  // Rudder sensor board (Arduino/rudder/). isRudderOk() rather than the raw
+  // magnet flag, so a board that is powered off or off the network reads as no
+  // data instead of a frozen last value. This line is also what confirms a 'z'
+  // landed - it should read 180.0 right after one.
+  client.print("Rudder: ");
+  if (isRudderOk()) {
+    client.print(autoPilot.getRudderAngle(), 1);
+    client.println(" (180 = centered)");
+  } else {
+    client.println("no data");
+  }
+
+  // Masthead wind sensor board (Arduino/wind/). Same isWindOk() reasoning.
+  // Temperature has its own flag because a dead DS18B20 costs nothing that
+  // matters, so it is reported separately rather than taking the whole line
+  // down with it. The raw rev/s is here because it is the uncorrected quantity
+  // a speed calibration is fitted against - see the 'k' command.
+  client.print("Wind: ");
+  if (isWindOk()) {
+    client.print(autoPilot.getWindDirection(), 1);
+    client.print(" deg  ");
+    client.print(autoPilot.getWindSpeedKn(), 2);
+    client.print(" kn / ");
+    client.print(autoPilot.getWindSpeedMps(), 2);
+    client.print(" m/s / ");
+    client.print(autoPilot.getWindSpeedBft());
+    client.print(" bft  (raw ");
+    client.print(autoPilot.getWindSpeedHz(), 3);
+    client.print(" rev/s)  Temp: ");
+    if (autoPilot.isWindTempOk()) {
+      client.print(autoPilot.getWindTemperature(), 1);
+      client.println(" C");
+    } else {
+      client.println("no data");
+    }
+  } else {
+    client.println("no data");
+  }
   client.println("");
 }
 
@@ -208,6 +269,126 @@ void process_garmin_inject(CustomClientType& client, char buffer[]) {
   }
 }
 
+// A sensor board heard from longer ago than this is reported as quiet. Both
+// boards publish continuously - the rudder at 50 Hz, the wind at 5 Hz - so
+// anything beyond a couple of seconds means it is powered off, off the network,
+// or wedged, not merely between packets.
+#define SENSOR_QUIET_MS 2000
+
+// Shared reporting for the relayed sensor-board commands.
+//
+// What telnet can and cannot tell you about a relay is worth being exact about.
+// It CANNOT tell you the board received the datagram, accepted the value, or
+// wrote it to flash: no ~APCMD in this project carries an ack, so nothing on
+// this path can report any of that. But two failures are entirely knowable
+// locally, without any reply, and both are worth catching before the operator
+// starts wondering why nothing happened:
+//
+//   1. We have never heard from that board, so there is no address to send to
+//      and the command is definitively going nowhere.
+//   2. We have an address, but the board has gone quiet - it was there and now
+//      is not. The datagram still goes out (the address may well still be
+//      right, and UDP costs nothing), but saying "ok" would be a lie.
+//
+// Returns true if the command should actually be relayed.
+static bool report_relay_reachability(CustomClientType& client, const char* board, long lastHeardMs) {
+  if (lastHeardMs < 0) {
+    client.print("no ");
+    client.print(board);
+    client.println(" board has ever been heard from - nothing to relay to");
+    return false;
+  }
+  if (lastHeardMs > SENSOR_QUIET_MS) {
+    client.print("warning: last heard from the ");
+    client.print(board);
+    client.print(" board ");
+    client.print(lastHeardMs / 1000);
+    client.println("s ago - sending anyway, but it may be off or off the network");
+  }
+  return true;
+}
+
+// "Center now" for the rudder sensor board. The controller has nothing to do
+// itself - it just relays, because it is the only address the plugin, the
+// displays and this console all already know.
+//
+// "ok" means sent, not applied - see report_relay_reachability() above. The
+// show_state echo after this command prints the rudder angle, which is the
+// actual confirmation: it should read 180.0 immediately afterwards.
+void process_rudder_center(CustomClientType& client) {
+  long age = rudder_last_heard_ms();
+  if (!report_relay_reachability(client, "rudder", age)) {
+    return;
+  }
+  relay_rudder_command("z");
+  if (age <= SENSOR_QUIET_MS) {
+    client.println("ok - sent center to the rudder board (watch the angle below)");
+  }
+}
+
+// Is this a complete number and nothing else? Syntax only.
+//
+// The controller deliberately does not know the wind board's accepted *ranges*
+// (see wind.ino - the board owns those, and a second copy here would be one
+// more thing to keep in step). But "that is not a number at all" is a different
+// question, and one telnet can answer without duplicating any policy. Worth
+// answering, because atof() turns "kfoo,bar" into a perfectly well-formed
+// 0.0,0.0 that the board then silently refuses - which from this end looks
+// identical to nothing having happened.
+static bool telnet_is_number(const char* text) {
+  if (text == NULL || *text == '\0') {
+    return false;
+  }
+  char* endptr = NULL;
+  strtod(text, &endptr);
+  return endptr != text && *endptr == '\0';
+}
+
+// The three masthead wind sensor calibrations: v (vane zero), d<+-degrees>
+// (vane trim) and k<slope>,<offset> (speed calibration). All three are relayed
+// verbatim; the controller neither parses nor validates the arguments, because
+// the wind board owns those bounds and a second copy here would be one more
+// thing to keep in step.
+//
+// Same caveat as the rudder: "ok" means sent, not applied. For 'd' and 'k' the
+// wind board may still refuse the value as out of range, and you would only
+// see that on its USB console. The wind block in the status echo is the
+// practical confirmation - the angle should shift by what you asked for, and
+// for a speed calibration the knots should move while the raw rev/s does not.
+void process_wind_calibration(CustomClientType& client, char buffer[]) {
+  // Validate on a copy: tokenising the real buffer would eat the comma, and
+  // what gets relayed has to be the operator's string exactly as typed.
+  char scratch[BUF_SIZE];
+  strncpy(scratch, buffer, sizeof(scratch) - 1);
+  scratch[sizeof(scratch) - 1] = '\0';
+
+  if (buffer[0] == 'd') {
+    if (!telnet_is_number(&scratch[1])) {
+      client.println("usage: d<+-degrees>  e.g. d-5  (shift reported wind angle)");
+      return;
+    }
+  } else if (buffer[0] == 'k') {
+    char* saveptr = NULL;
+    char* slope = strtok_r(&scratch[1], ",", &saveptr);
+    char* offset = strtok_r(NULL, ",", &saveptr);
+    if (!telnet_is_number(slope) || !telnet_is_number(offset)) {
+      client.println("usage: k<slope>,<offset>  e.g. k1.05,-0.12  (wind speed fit, m/s)");
+      return;
+    }
+  }
+
+  long age = wind_last_heard_ms();
+  if (!report_relay_reachability(client, "wind", age)) {
+    return;
+  }
+  relay_wind_command(buffer);
+  if (age <= SENSOR_QUIET_MS) {
+    client.print("ok - sent '");
+    client.print(buffer);
+    client.println("' to the wind board (watch the wind line below)");
+  }
+}
+
 void process_help(CustomClientType& client) {
   client.println("Possible commands:\n");
   client.println("\ta<heading offset> \t- Adjust heading to be <heading offset> from current heading.");
@@ -218,6 +399,18 @@ void process_help(CustomClientType& client) {
   client.println("\tq \t\t\t- Quit the current session.");
   client.println("\tw<lat,long> \t\t- Set the waypoint to <lat,long>.");
   client.println("\tpat \t\t\t- Arm relay auto-tune (only while navigation is disabled).");
+  client.println("");
+  client.println("Sensor board calibration (relayed - 'ok' means sent, not applied):");
+  client.println("\tz \t\t\t- Rudder: the rudder is centered now (should then read 180).");
+  client.println("\tv \t\t\t- Wind: the vane points dead ahead now (should then read 0).");
+  client.println("\td<+-degrees> \t\t- Wind: shift the reported angle, e.g. d-5.");
+  client.println("\t\t\t\t  Find the amount by tacking: sail close-hauled on each");
+  client.println("\t\t\t\t  tack with identical trim, and the error is HALF the");
+  client.println("\t\t\t\t  difference in angle off the bow. Send its negation.");
+  client.println("\tk<slope>,<offset> \t- Wind: speed fit in m/s, e.g. k1.05,-0.12.");
+  client.println("\t\t\t\t  Fit off-board against a reference; the raw rev/s in");
+  client.println("\t\t\t\t  the status line is the uncorrected value to log.");
+  client.println("");
   client.println("\t? \t\t\t- Print this help screen.");
 }
 
@@ -266,6 +459,16 @@ void process_telnet(CustomClientType& client, char buffer[]) {
       break;
     case 'g':
       process_garmin_inject(client, buffer);
+      break;
+    case 'z':
+      process_rudder_center(client);
+      show_state = true;  // the echoed rudder angle is the only confirmation
+      break;
+    case 'v':
+    case 'd':
+    case 'k':
+      process_wind_calibration(client, buffer);
+      show_state = true;  // likewise, the echoed wind line is the confirmation
       break;
     case '?':
       process_help(client);
