@@ -56,29 +56,16 @@ reference.
 
 ## Directories
 
-```
-firmware/               Everything that runs on a microcontroller, and its test tooling
-  Arduino/
-    controller/         Firmware — the autopilot brain
-    display/            Firmware — TFT head unit
-    rudder/             Firmware — rudder angle sensor
-    wind/               Firmware — masthead wind sensor
-    garmin/             Standalone sketch for bringing up the Garmin NMEA input
-    libraries/          Vendored Arduino libraries
-    scripts/            Serial-link and upload helpers (arduino_link.py, arduino_upload.py)
-    README.md           Pinouts, build + library instructions (authoritative)
-  emulator/             Garmin GPSMAP 276c emulator + the NMEA wire-contract test harness
-  experiments/
-    pid/                Offline PID tuning scripts (Python/matplotlib)
-navigator/              Everything that runs on the Raspberry Pi 5
-  README.md             Pi 5 setup: Ubuntu, Wi-Fi, OpenCPN Flatpak, NVMe boot
-  boot/ etc/ home/      Config files as deployed on the Pi (udev, systemd, XFCE)
-  opencpn_plugin/
-    autopilot_pi/       OpenCPN plugin source + Flatpak build, with its own README
-circuit/                EasyEDA exports — seven PCBs, one directory each, README per board
-cad/                    Enclosures — one directory per unit (only the wind sensor is built)
-assets/                 Images and diagrams used in documentation
-```
+Five top-level directories, split by where the thing runs or what it is made of.
+Each has its own README with the detail — start there rather than here.
+
+| Directory | What's in it |
+|---|---|
+| [`firmware/`](firmware/README.md) | Everything that runs on a microcontroller: the four Arduino sketches, the Garmin emulator and NMEA test harness, and the offline PID experiments |
+| [`navigator/`](navigator/README.md) | Everything that runs on the Raspberry Pi 5: its setup, the config files as deployed, and the `autopilot_pi` OpenCPN plugin |
+| [`circuit/`](circuit/README.md) | EasyEDA exports for the seven PCBs, and how they stack into the four units |
+| [`cad/`](cad/README.md) | Enclosures, one directory per unit |
+| [`assets/`](assets/) | Images and diagrams used in documentation — no README, just files |
 
 ## Quick-start by component
 

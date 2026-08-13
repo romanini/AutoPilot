@@ -64,3 +64,8 @@ cad/display/
 ├── FreeCad/      FreeCAD sources        (empty)
 └── 3D-Parts/     STLs — print from here (empty)
 ```
+
+---
+
+One of the [AutoPilot enclosures](../README.md) — that README covers the layout
+convention and the constraints every case shares.

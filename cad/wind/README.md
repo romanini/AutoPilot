@@ -220,3 +220,8 @@ And the board itself: [PCBWay](https://www.pcbway.com/) or
 Original design by **Norbert Walter**, [Open Boat Projects](https://open-boat-projects.org/).
 Hardware and documentation **CC-BY-NC-SA**; firmware **GPL-3.0**.
 Upstream: <https://github.com/norbert-walter/Windsensor_Yachta>
+
+---
+
+One of the [AutoPilot enclosures](../README.md) — that README covers the layout
+convention and the constraints every case shares.
