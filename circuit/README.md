@@ -15,7 +15,7 @@ circuit/                                                                     uni
 └── tools/                      export automation (see tools/README.md)
 ```
 
-These PCBs implement the hardware described in [`../Arduino/README.md`](../Arduino/README.md):
+These PCBs implement the hardware described in [`../firmware/Arduino/README.md`](../firmware/Arduino/README.md):
 the **controller** reads the sensors and drives the steering motor, the
 **display** is the cockpit head unit with an LCD and buttons, and the **rudder**
 and **wind** sensors are standalone boards that report to the controller. All
@@ -123,7 +123,7 @@ the button board and the panel.
 ![Inside the display unit](../assets/circuit/display-unit.svg)
 
 For the firmware that runs on these boards, the pin assignments, and build
-instructions, see [`../Arduino/README.md`](../Arduino/README.md). For the
+instructions, see [`../firmware/Arduino/README.md`](../firmware/Arduino/README.md). For the
 overall system architecture and the UDP protocol, see the
 [top-level README](../README.md). For re-exporting these files from EasyEDA,
 see [`tools/README.md`](tools/README.md).

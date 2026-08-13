@@ -55,7 +55,7 @@ needs to grow a connector for an external antenna.
 
 Placeholder only — no FreeCAD documents and no STLs yet. The
 [wind sensor](../wind/README.md) is the one enclosure that is finished, and its
-directory is the pattern to follow: IGES/FreeCAD sources, printable STLs, and a
+directory is the pattern to follow: FreeCAD sources, printable STLs, and a
 build write-up.
 
 ```

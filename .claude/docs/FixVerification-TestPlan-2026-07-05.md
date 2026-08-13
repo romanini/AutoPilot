@@ -36,8 +36,8 @@ g$GPXTE,A,A,0.10,L,N*6F
 g$GPBOD,180.0,T,,M,WPT02,WPT01*63
 ```
 
-(Checksums generated with `emulator/nmea.py`; to build new lines:
-`python3 -c "import nmea; print(nmea.frame('GPRMB,A,...'))"` from `emulator/`.)
+(Checksums generated with `firmware/emulator/nmea.py`; to build new lines:
+`python3 -c "import nmea; print(nmea.frame('GPRMB,A,...'))"` from `firmware/emulator/`.)
 
 ---
 

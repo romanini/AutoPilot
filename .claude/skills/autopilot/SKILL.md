@@ -28,19 +28,19 @@ system is split across boards that talk over Wi-Fi.
 
 | Part | Hardware | Role | Location |
 |------|----------|------|----------|
-| **Controller** | Arduino Nano ESP32 | The brain: reads IMU + GPS, runs PID steering, drives the motor, is the Wi-Fi access point | `Arduino/controller/` |
-| **Display** | Arduino Nano ESP32 + HX8357 TFT (one or more) | Cockpit head unit: shows live state on a colour LCD, has physical buttons | `Arduino/display/` |
+| **Controller** | Arduino Nano ESP32 | The brain: reads IMU + GPS, runs PID steering, drives the motor, is the Wi-Fi access point | `firmware/Arduino/controller/` |
+| **Display** | Arduino Nano ESP32 + HX8357 TFT (one or more) | Cockpit head unit: shows live state on a colour LCD, has physical buttons | `firmware/Arduino/display/` |
 | **Navigation computer** | Raspberry Pi 5 (8 GB), Ubuntu 24.04 + OpenCPN | Chart plotter: GPS + AIS + vector charts; also runs `autopilot_pi` | `navigator/` |
-| **OpenCPN plugin** | `autopilot_pi` C++/wxWidgets Flatpak extension | Software display unit inside OpenCPN — mirrors TFT layout, sends commands, pushes active waypoints to controller | `opencpn_plugin/autopilot_pi/` |
-| **Rudder sensor** | Arduino Nano ESP32 + AS5600 (I2C) | Standalone rudder angle sensor (boat is wheel-steered); joins SoberPilot as a station and reports angle to the controller over UDP | `Arduino/rudder/` |
-| **Wind sensor** | Arduino Nano ESP32 + AS5600 vane + reed-switch cup anemometer + DS18B20 | Standalone masthead wind sensor (Yachta head); joins SoberPilot as a station and reports apparent wind to the controller over UDP | `Arduino/wind/` |
+| **OpenCPN plugin** | `autopilot_pi` C++/wxWidgets Flatpak extension | Software display unit inside OpenCPN — mirrors TFT layout, sends commands, pushes active waypoints to controller | `navigator/opencpn_plugin/autopilot_pi/` |
+| **Rudder sensor** | Arduino Nano ESP32 + AS5600 (I2C) | Standalone rudder angle sensor (boat is wheel-steered); joins SoberPilot as a station and reports angle to the controller over UDP | `firmware/Arduino/rudder/` |
+| **Wind sensor** | Arduino Nano ESP32 + AS5600 vane + reed-switch cup anemometer + DS18B20 | Standalone masthead wind sensor (Yachta head); joins SoberPilot as a station and reports apparent wind to the controller over UDP | `firmware/Arduino/wind/` |
 
-Supporting tooling: `experiments/pid/` (offline PID tuning experiments in
+Supporting tooling: `firmware/experiments/pid/` (offline PID tuning experiments in
 Python/matplotlib), `circuit/` (KiCad/hardware), `assets/` (images used in
 docs). There is no dedicated UDP monitor script — see Debugging below.
 
 **The Arduino firmware is the heart of the project and the usual subject of
-work.** For build/library/setup details start with `Arduino/README.md` — it is
+work.** For build/library/setup details start with `firmware/Arduino/README.md` — it is
 authoritative and kept current; don't duplicate it, read it.
 
 ## How the two boards talk (the protocol)
@@ -156,7 +156,7 @@ ported wind maths) · `vane.ino` (AS5600 read + bow zero/trim + the mutex) ·
 `subscribe.ino` (relayed `~APCMD,v$`/`,d`/`,k` in, 8893) · `wifi.ino` (joins
 SoberPilot, auto-reconnect).
 
-## The rudder position sensor (`Arduino/rudder/`)
+## The rudder position sensor (`firmware/Arduino/rudder/`)
 
 A standalone Nano ESP32 reading an AS5600 magnetic angle sensor over I2C,
 mounted at the rudder stock/quadrant (boat is wheel-steered, so the sensor
@@ -213,7 +213,7 @@ ack packet — same as every other `~APCMD` in this project, the sender confirms
 the change by watching the next `~APRUD` value rather than a reply.
 
 **Current status:** both sides are implemented. Rudder board: WiFi join,
-`~APRUD` publish (`Arduino/rudder/publish.ino`, 50 Hz — see below), `~APCMD,z$`
+`~APRUD` publish (`firmware/Arduino/rudder/publish.ino`, 50 Hz — see below), `~APCMD,z$`
 listener, offset persistence (`angle.ino`). Controller
 (`controller/rudder.ino`): listens on 8890, remembers the rudder board's IP,
 stores the angle and the sensor's raw magnet-detected flag via
@@ -293,7 +293,7 @@ practical middle ground — within the same order of magnitude as the 100 Hz
 loop it will eventually feed, without assuming Wi-Fi/UDP can sustain the full
 100 Hz reliably (untested on the actual boat network).
 
-## The masthead wind sensor (`Arduino/wind/`)
+## The masthead wind sensor (`firmware/Arduino/wind/`)
 
 A standalone Nano ESP32 at the masthead running a **port of Norbert Walter's
 Windsensor Yachta firmware** (https://github.com/norbert-walter/Windsensor_Yachta)
@@ -481,13 +481,13 @@ one board's behavior.
 
 ## Building & uploading
 
-Full instructions live in `Arduino/README.md`. The short version: each sketch has
+Full instructions live in `firmware/Arduino/README.md`. The short version: each sketch has
 a `sketch.yaml` defining a `nano` profile (board `arduino:esp32:nano_nora` + pinned
 libraries), so `arduino-cli` installs everything itself — there is intentionally
-**no** `Arduino/libraries/` folder.
+**no** `firmware/Arduino/libraries/` folder.
 
 ```bash
-cd Arduino/controller        # or Arduino/display
+cd firmware/Arduino/controller        # or firmware/Arduino/display
 arduino-cli compile --profile nano
 arduino-cli upload  --profile nano -p /dev/cu.usbmodemXXXX   # see `arduino-cli board list`
 ```
@@ -537,8 +537,8 @@ touching networking, OpenCPN, or anything system-level on this box. Summary:
 
 ## The OpenCPN plugin (`autopilot_pi`)
 
-Source lives at `opencpn_plugin/autopilot_pi/`.  Full details in
-`opencpn_plugin/autopilot_pi/README.md` — read it before touching plugin code.
+Source lives at `navigator/opencpn_plugin/autopilot_pi/`.  Full details in
+`navigator/opencpn_plugin/autopilot_pi/README.md` — read it before touching plugin code.
 
 ### What it is
 
@@ -600,7 +600,7 @@ without changing mode — user controls mode separately.
 ### Build
 
 ```bash
-cd opencpn_plugin/autopilot_pi
+cd navigator/opencpn_plugin/autopilot_pi
 flatpak-builder --user --install --force-clean \
     build-dir flatpak/org.opencpn.OpenCPN.Plugin.autopilot.yaml
 ```

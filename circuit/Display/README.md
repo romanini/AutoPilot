@@ -45,4 +45,4 @@ One of the [AutoPilot circuit boards](../README.md) — that README covers how t
 boards fit together and the open review items. It shares a case with the
 [button board](../Display-Button/README.md) and, optionally, the
 [LCD carrier](../Display-LCD/README.md). Firmware:
-[`../../Arduino/README.md`](../../Arduino/README.md). Enclosure: [`../../cad/display/`](../../cad/display/README.md).
+[`../../firmware/Arduino/README.md`](../../firmware/Arduino/README.md). Enclosure: [`../../cad/display/`](../../cad/display/README.md).

@@ -58,10 +58,10 @@ tag; v2 carries **26**, the new one last:
 
 | File | Edit |
 |---|---|
-| `Arduino/controller/publish.ino` | add `,%d` to the format string before `$`; add `autoPilot.getNavSource()` as the last arg (after `getLocationLon()`) |
-| `opencpn_plugin/.../include/AutoPilotLink.h` | add `int nav_source;` to `AutoPilotState` |
-| `opencpn_plugin/.../src/AutoPilotLink.cpp` `ParsePacket()` | add `s.nav_source = nextInt();` after `s.location_lon = nextDouble();` |
-| `Arduino/display/AutoPilot.cpp` `parseAPDAT()` | add one more `advance_field` block after `location_lon`, storing `nav_source` (an `int`) |
+| `firmware/Arduino/controller/publish.ino` | add `,%d` to the format string before `$`; add `autoPilot.getNavSource()` as the last arg (after `getLocationLon()`) |
+| `navigator/opencpn_plugin/.../include/AutoPilotLink.h` | add `int nav_source;` to `AutoPilotState` |
+| `navigator/opencpn_plugin/.../src/AutoPilotLink.cpp` `ParsePacket()` | add `s.nav_source = nextInt();` after `s.location_lon = nextDouble();` |
+| `firmware/Arduino/display/AutoPilot.cpp` `parseAPDAT()` | add one more `advance_field` block after `location_lon`, storing `nav_source` (an `int`) |
 
 Encoding note: `nav_source` is the controller's authoritative view of **who is
 currently steering** (the arbitration selector, plan §2.4), not merely which
@@ -155,7 +155,7 @@ the OpenCPN active-nav heartbeat:
   (~11 m)** — to be confirmed on the bench (plan §7 open Q3/Q4), but all three
   components must use the **same** constant once chosen.
 - **Liveness timeout (plan §2.4):** proposed **~6 s** per source; **must match**
-  between controller arbitration and the emulator/stub expectations in scenario 4.
+  between controller arbitration and the firmware/emulator/stub expectations in scenario 4.
 - **Frame parsing caution:** because `~APTX` and `~APRX` payloads are raw NMEA
   containing `$`, never use "first `$`" to find the frame end for those two —
   scan to the terminating `$` at the datagram tail. (`~APDAT`/`~APCMD` payloads

@@ -28,11 +28,11 @@ increasing counts. The sensor sits on the Nano's dedicated `SDA`/`SCL` pins
 
 Centring is a runtime command (`~APCMD,z$`), not a build constant, so the
 zero offset can be set with the rudder physically amidships and is persisted in
-NVS — see [`../../Arduino/README.md`](../../Arduino/README.md).
+NVS — see [`../../firmware/Arduino/README.md`](../../firmware/Arduino/README.md).
 
 ---
 
 One of the [AutoPilot circuit boards](../README.md) — that README covers how the
 boards fit together and the open review items. This board is a sealed one-board
-unit on its own. Firmware: [`../../Arduino/README.md`](../../Arduino/README.md).
+unit on its own. Firmware: [`../../firmware/Arduino/README.md`](../../firmware/Arduino/README.md).
 Enclosure: [`../../cad/rudder/`](../../cad/rudder/README.md).

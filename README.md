@@ -51,37 +51,38 @@ ports:
 Telemetry is broadcast, so any number of displays and plugins can listen at
 once; everything else is unicast. Both sensor calibrations are runtime commands
 persisted in NVS, so a unit that is already up a mast never has to be reflashed.
-[`Arduino/README.md`](Arduino/README.md) is the authoritative protocol
+[`firmware/Arduino/README.md`](firmware/Arduino/README.md) is the authoritative protocol
 reference.
 
 ## Directories
 
 ```
-Arduino/
-  controller/    Firmware — the autopilot brain
-  display/       Firmware — TFT head unit
-  rudder/        Firmware — rudder angle sensor
-  wind/          Firmware — masthead wind sensor
-  garmin/        Standalone sketch for bringing up the Garmin NMEA input
-  libraries/     Vendored Arduino libraries
-  scripts/       Serial-link and upload helpers (arduino_link.py, arduino_upload.py)
-  README.md      Pinouts, build + library instructions (authoritative)
-circuit/         EasyEDA exports — seven PCBs, one directory each, README per board
-cad/             Enclosures — one directory per unit (only the wind sensor is built)
-navigator/
-  README.md      Raspberry Pi 5 setup: Ubuntu, Wi-Fi, OpenCPN Flatpak, NVMe boot
-opencpn_plugin/
-  autopilot_pi/  OpenCPN plugin source + Flatpak build
-  README.md      Plugin architecture, build, and usage
-emulator/        Garmin GPSMAP 276c emulator + the NMEA wire-contract test harness
-experiments/
-  pid/           Offline PID tuning scripts (Python/matplotlib)
-assets/          Images and diagrams used in documentation
+firmware/               Everything that runs on a microcontroller, and its test tooling
+  Arduino/
+    controller/         Firmware — the autopilot brain
+    display/            Firmware — TFT head unit
+    rudder/             Firmware — rudder angle sensor
+    wind/               Firmware — masthead wind sensor
+    garmin/             Standalone sketch for bringing up the Garmin NMEA input
+    libraries/          Vendored Arduino libraries
+    scripts/            Serial-link and upload helpers (arduino_link.py, arduino_upload.py)
+    README.md           Pinouts, build + library instructions (authoritative)
+  emulator/             Garmin GPSMAP 276c emulator + the NMEA wire-contract test harness
+  experiments/
+    pid/                Offline PID tuning scripts (Python/matplotlib)
+navigator/              Everything that runs on the Raspberry Pi 5
+  README.md             Pi 5 setup: Ubuntu, Wi-Fi, OpenCPN Flatpak, NVMe boot
+  boot/ etc/ home/      Config files as deployed on the Pi (udev, systemd, XFCE)
+  opencpn_plugin/
+    autopilot_pi/       OpenCPN plugin source + Flatpak build, with its own README
+circuit/                EasyEDA exports — seven PCBs, one directory each, README per board
+cad/                    Enclosures — one directory per unit (only the wind sensor is built)
+assets/                 Images and diagrams used in documentation
 ```
 
 ## Quick-start by component
 
-**Firmware** — see [`Arduino/README.md`](Arduino/README.md) for pinouts,
+**Firmware** — see [`firmware/Arduino/README.md`](firmware/Arduino/README.md) for pinouts,
 libraries, build, and upload commands. All four sketches (controller, display,
 rudder, wind) need a matching `arduino_secrets.h`.
 
@@ -90,7 +91,7 @@ Raspberry Pi 5 build: Ubuntu 24.04, NVMe boot, Wi-Fi onto SoberPilot, and the
 OpenCPN Flatpak install.
 
 **OpenCPN plugin** — see
-[`opencpn_plugin/autopilot_pi/README.md`](opencpn_plugin/autopilot_pi/README.md)
+[`navigator/opencpn_plugin/autopilot_pi/README.md`](navigator/opencpn_plugin/autopilot_pi/README.md)
 for the panel layout, build command, and send-waypoint workflow.
 
 **Boards** — see [`circuit/README.md`](circuit/README.md) for the seven PCBs,
@@ -99,6 +100,6 @@ how they stack into the four units, and the Gerbers to send to a board house.
 **Enclosures** — see [`cad/`](cad/). The [wind sensor](cad/wind/README.md) is
 built and printable; the other three are placeholders.
 
-**Testing without a boat** — [`emulator/`](emulator/README.md) stands in for the
+**Testing without a boat** — [`firmware/emulator/`](firmware/emulator/README.md) stands in for the
 Garmin GPSMAP 276c on the controller's NMEA UART, and carries the test harness
 for the wire contract.

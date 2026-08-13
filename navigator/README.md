@@ -763,7 +763,7 @@ sudo apt update && sudo apt full-upgrade
 
 ### autopilot_pi plugin
 
-Full details and build prerequisites are in `opencpn_plugin/autopilot_pi/README.md`.
+Full details and build prerequisites are in `navigator/opencpn_plugin/autopilot_pi/README.md`.
 
 ```bash
 # Build prerequisites (run once)
@@ -771,7 +771,7 @@ sudo apt install -y flatpak-builder
 flatpak install --user flathub org.freedesktop.Sdk//25.08
 
 # Build and install the plugin
-cd ~/dev/AutoPilot/opencpn_plugin/autopilot_pi
+cd ~/dev/AutoPilot/navigator/opencpn_plugin/autopilot_pi
 flatpak-builder --user --install --force-clean \
     build-dir flatpak/org.opencpn.OpenCPN.Plugin.autopilot.yaml
 ```

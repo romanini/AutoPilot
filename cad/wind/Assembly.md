@@ -143,11 +143,11 @@ close.
 *Red/blue shows the pole split — across the diameter, not top-to-bottom.*
 
 > **Size discrepancy — pick one and note it.** The photo above is annotated
-> **10×5 mm N45**. The project's own [`BOM.txt`](BOM.txt)
-> says **5×5×5 mm square**, and the upstream page says the same. Any of these
-> works *provided it is diametrically magnetised* and sits ~1 mm off the chip.
-> The 10×5 disc in the photo is the easier one to align, because the pole
-> boundary is visible on the rim.
+> **10×5 mm N45**, while the upstream Yachta page and its bill of materials call
+> for a **5×5×5 mm square**. Any of these works *provided it is diametrically
+> magnetised* and sits ~1 mm off the chip. The 10×5 disc in the photo is the
+> easier one to align, because the pole boundary is visible on the rim — it is
+> also what the [shopping list](README.md#bearings-fasteners-magnets) buys.
 
 ## Step 4 — Wind vane
 

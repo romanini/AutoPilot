@@ -36,11 +36,11 @@ I²C pins.
 
 Both the vane zero and the wind-speed calibration are runtime commands
 persisted in NVS, so a unit that is already up the mast never has to be
-reflashed to be calibrated — see [`../../Arduino/README.md`](../../Arduino/README.md).
+reflashed to be calibrated — see [`../../firmware/Arduino/README.md`](../../firmware/Arduino/README.md).
 
 ---
 
 One of the [AutoPilot circuit boards](../README.md) — that README covers how the
 boards fit together and the open review items. This board is a sealed one-board
-unit on its own. Firmware: [`../../Arduino/README.md`](../../Arduino/README.md).
+unit on its own. Firmware: [`../../firmware/Arduino/README.md`](../../firmware/Arduino/README.md).
 Enclosure: [`../../cad/wind/`](../../cad/wind/README.md).

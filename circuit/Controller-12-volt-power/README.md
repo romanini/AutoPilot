@@ -30,4 +30,4 @@ NMEA wiring, fuses the 12 V rails, and routes them to the controller over the
 One of the [AutoPilot circuit boards](../README.md) — that README covers how the
 boards fit together and the open review items. It shares a case with the
 [controller board](../Controller/README.md). Firmware:
-[`../../Arduino/README.md`](../../Arduino/README.md). Enclosure: [`../../cad/controller/`](../../cad/controller/README.md).
+[`../../firmware/Arduino/README.md`](../../firmware/Arduino/README.md). Enclosure: [`../../cad/controller/`](../../cad/controller/README.md).

@@ -37,7 +37,7 @@ cad/wind/
 ├── README.md                       this file
 ├── Assembly.md                     build instructions
 ├── 3D-Parts/                       STLs — print from here
-└── FreeCad/                    FreeCAD documents built from the IGES
+└── FreeCad/                        FreeCAD documents — the editable source
 ```
 
 The board lives in [`circuit/Sensor-Wind/`](../../circuit/Sensor-Wind/README.md);
@@ -45,9 +45,11 @@ build photos in [`assets/wind/`](../../assets/wind/).
 
 ### Printed parts
 
-German IGES name → English FreeCAD document → STL you print.
+Print from `3D-Parts/`. The German names below are the upstream IGES masters
+each FreeCAD document was built from — they are no longer in the repo, but they
+explain the naming and match the upstream Yachta project if you go looking there.
 
-| STL | FreeCAD / IGES | Qty | What it is |
+| STL | FreeCAD doc ← upstream name | Qty | What it is |
 |---|---|---|---|
 | `bot.stl` | `BottomHousing` ← `Unterteil` | 1 | **Modified.** Main housing: board pocket, bearing seat, arm socket |
 | `top_1.stl` | `TopCover` ← `Oberteil` | 1 | **Modified.** Cover; its hub carries the vane bearing |
@@ -104,20 +106,29 @@ Two consequences:
 - **The cups now hang 5 mm lower.** Check clearance to anything under the
   masthead — anchor light, mast crane, backstay.
 
-### Rebuilding the CAD
+### Editing the CAD
 
-All three modified parts are generated from the IGES masters, not hand-edited.
-To regenerate `FreeCad/*.FCStd` and the STLs:
+`FreeCad/*.FCStd` is the editable source. The three modified parts were
+originally generated from the upstream German IGES masters by a build script,
+which also cut the board pocket using the outline read straight out of the
+EasyEDA export. **Neither the IGES masters nor that script are in the repo any
+more** — the FreeCAD documents and the STLs are what is kept. Both are still in
+the git history if the generated route is ever wanted back.
 
-```bash
-/Applications/FreeCAD.app/Contents/Resources/bin/freecadcmd cad/wind/build_wind_sensor.py
-```
+Editing now happens in the FreeCAD GUI, which the documents are built for: the
+modified parts keep a live Part-workbench boolean tree (`OriginalHousing` +
+`SnoutBody` + `SocketKeel`, with the pockets cut out of it), so every feature is
+still parametric rather than a frozen mesh. Export the STL to `3D-Parts/` after
+a change.
 
-It reads the board outline straight from the EasyEDA export, so if the PCB
-changes shape the housing follows. The modified documents keep a live Part
-boolean tree, so every feature stays editable in the FreeCAD GUI. The carrier's
-extra length is the `STEM_EXTRA` constant at the top of the script — change it
-and re-run if the cups need to drop further.
+Two things the script used to handle, which are now manual:
+
+- **If the PCB outline changes**, the board pocket no longer follows it
+  automatically — re-cut it against the new
+  [`circuit/Sensor-Wind/`](../../circuit/Sensor-Wind/README.md) export.
+- **The bearing carrier's extra 5 mm** was a `STEM_EXTRA` constant; it is now
+  baked into `BottomBearingHolder.FCStd`. Change it in the model if the cups
+  need to drop further.
 
 ---
 

@@ -1,0 +1,110 @@
+
+#include <WiFi.h>
+#include <AsyncUDP.h>
+
+#define PUBLISH_INTERVAL 1000
+#define DATA_SIZE 300
+#define BROADCAST_PORT 8888
+
+// Subnet-directed broadcast for the soft-AP's own network. We send here instead
+// of AsyncUDP::broadcastTo() (which targets the limited broadcast 255.255.255.255):
+// in AP-only mode there is no default route, so 255.255.255.255 has no interface
+// to egress and the datagram is silently dropped. 10.20.1.255 matches the soft-AP
+// netif's subnet, so lwip routes it out the AP interface as an L2 broadcast that
+// every associated station (display, OpenCPN, ...) receives.
+IPAddress broadcastIp(10, 20, 1, 255);
+
+AsyncUDP udpClient;
+
+bool isRudderOk();  // defined in rudder.ino
+
+uint32_t last_publish_time_mills = millis();
+char serialzied_data[DATA_SIZE];
+
+void setup_publish() {
+  DEBUG_PRINTLN("Publishing all setup");
+}
+
+void publish_APDAT() {
+  if (millis() - last_publish_time_mills > PUBLISH_INTERVAL) {
+    last_publish_time_mills = millis();
+    time_t currentTime = autoPilot.getDateTime();
+    sprintf(serialzied_data, "~APDAT,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%f,%.2f,%.2f,%.2f,%.2f,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.6f,%.6f,%d,%d,%.2f,%d,%.2f,%d$",
+            year(currentTime) % 100,    // %d
+            month(currentTime),         //%d
+            day(currentTime),           //%d
+            hour(currentTime),          // %d
+            minute(currentTime),        //%d
+            autoPilot.hasFix(),         // %d
+            autoPilot.getFixquality(),  // %d
+            autoPilot.getSatellites(),  // %d
+
+            autoPilot.isNavigationEndabled(), // %d
+            autoPilot.getMode(),         // %d
+            autoPilot.isWaypointSet(),   // %d
+            autoPilot.getWaypointLat(),  // %f
+            autoPilot.getWaypointLon(),  // %f
+
+            // heading_desired is only meaningful in mode 1 (compass hold); in
+            // mode 2 report the live magnetic-frame setpoint (Option 3) so
+            // the displays show what's actually being steered to, not a stale
+            // value from the last time mode 1 was active.
+            (autoPilot.getMode() == 2) ? autoPilot.getHeadingCommand() : autoPilot.getHeadingDesired(),  //%.2f
+
+            autoPilot.getHeading(),            //%.2f
+            autoPilot.getPitch(),             // %.2f
+            autoPilot.getRoll(),              // %.2f
+            autoPilot.getStabilityClassification(), // %d
+            autoPilot.getBearing(),            //%.2f
+            autoPilot.getBearingCorrection(),  //%.2f
+
+            autoPilot.getSpeed(),     // %.2f
+            autoPilot.getDistance(),  // %.2f
+            autoPilot.getCourse(),    //%.2f
+
+            autoPilot.getLocationLat(),  //%.6f
+            autoPilot.getLocationLon(),  //%.6f
+
+            autoPilot.getNavSource(),     // %d  0=NONE, 1=GARMIN, 2=OPENCPN (Phase B)
+
+            // Appended - old parsers (autopilot_pi, monitor.py) that don't
+            // know about these simply ignore the extra trailing values.
+            autoPilot.getAutoTuneState(),  // %d  0=idle, 1=ready, 2=running (autotune.ino)
+
+            // Damped/trust-gated GPS track (gpstracktrim.ino's cog_damped),
+            // published alongside - not instead of - raw course above, so
+            // existing consumers of that field are unaffected. Displays that
+            // want a stable "Track" reading should use this + the validity
+            // flag instead of raw course, which is known-noisy below ~1kn.
+            autoPilot.getDampedCourse(),      // %.2f
+            autoPilot.isDampedCourseValid(),  // %d
+
+            // Rudder sensor board (firmware/Arduino/rudder/), fed via ~APRUD on its own
+            // UDP port - see rudder.ino. isRudderOk() (not the raw magnet
+            // flag) combines the sensor's own magnet-detected flag with a 1s
+            // receive timeout, so a disconnected rudder board reads as "no
+            // data" here instead of freezing on its last value.
+            autoPilot.getRudderAngle(),  // %.2f
+            isRudderOk()                 // %d
+    );
+
+    //DEBUG_PRINTLN(serialzied_data);
+
+    udpClient.writeTo((const uint8_t *)serialzied_data, strlen(serialzied_data), broadcastIp, BROADCAST_PORT);
+  }
+}
+
+// Relay a line received from the Garmin to every station (displays, plugin,
+// monitor) as "~APRX,<raw nmea>$". The payload is verbatim NMEA (it contains a
+// '$' of its own); receivers must locate the frame terminator as the LAST '$'.
+void publish_APRX(const char* nmea) {
+  int n = snprintf(serialzied_data, DATA_SIZE, "~APRX,%s$", nmea);
+  if (n <= 0 || n >= DATA_SIZE) return;   // too long to frame; drop
+  udpClient.writeTo((const uint8_t *)serialzied_data, strlen(serialzied_data), broadcastIp, BROADCAST_PORT);
+}
+
+void publish_RESET() {
+  sprintf(serialzied_data, "~RESET,1$");
+  DEBUG_PRINTLN(serialzied_data);
+  udpClient.writeTo((const uint8_t *)serialzied_data, strlen(serialzied_data), broadcastIp, BROADCAST_PORT);
+}
