@@ -13,15 +13,15 @@ Original instructions, which these are derived from:
 > from what you are building in four ways:
 >
 > 1. **The cups.** The photos show the three cups and their hub printed as a
->    single piece. Ours are **three separate `cup_round.stl` cups glued into
->    `base_cup_wheel.stl`**, which together make the part shown in the photos.
+>    single piece. Ours are **three separate `CupRound` cups glued into
+>    `CupWheelHub`**, which together make the part shown in the photos.
 > 2. **The board.** The photos show the original ESP8266 board. Ours is the
 >    Nano ESP32 board in `circuit/Sensor-Wind/`, which is longer — hence the new
 >    housing.
-> 3. **The housing.** `bot.stl` and `top_1.stl` have been extended with a nose
+> 3. **The housing.** `BottomHousing` and `TopCover` have been extended with a nose
 >    to cover the longer board, and **the arm-tube socket has moved 47.8 mm
 >    outboard along the tube axis** — see [Step 7](#step-7--standpipe-and-mast-base).
-> 4. **The bearing carrier.** `bot_ball_bearing.stl` is **5 mm longer** than the
+> 4. **The bearing carrier.** `BottomBearingHolder` is **5 mm longer** than the
 >    original, to drop the cup wheel clear of the relocated arm socket. That
 >    also means **the cup-wheel shaft screw is an M5×70, not an M5×60** — see
 >    [Step 6](#step-6--cup-wheel).
@@ -73,8 +73,10 @@ for the small captive-nut and magnet jobs called out below.
 
 ## Step 1 — Print
 
-All parts are in [`3D-Parts/`](3D-Parts/). See [README.md](README.md) for what
-each one is.
+Export a mesh from each `.FCStd` in this directory — see
+[README.md](README.md) for what each one is and how to export. Two parts
+(`fane_support_big`, `fane_support_smal`) have no FreeCAD source and must come
+out of git history or from upstream; the README gives the commands.
 
 | Setting | Value |
 |---|---|
@@ -83,11 +85,11 @@ each one is.
 | Layers | 0.2 mm |
 | Walls | 3 perimeters minimum |
 | Infill | 30 %+ |
-| Supports | Needed for `bot.stl` (the socket keel) and the cups |
+| Supports | Needed for `BottomHousing` (the socket keel) and the cups |
 
-Print **three** copies of `cup_round.stl`. One each of everything else.
+Print **three** copies of `CupRound`. One each of everything else.
 
-`bot.stl` prints best rim-down (the z = 0 face on the bed), which puts the
+`BottomHousing` prints best rim-down (the z = 0 face on the bed), which puts the
 socket keel pointing up and needs no support under the nose.
 
 ## Step 2 — Clean and lacquer
@@ -107,15 +109,15 @@ recesses. Mask them or wipe them clean while wet.
 
 ## Step 3 — Wind vane bearing and direction magnet
 
-The vane turns on a **625** bearing carried in the hub on top of `top_1.stl`,
+The vane turns on a **625** bearing carried in the hub on top of `TopCover`,
 and its shaft carries the magnet the AS5600 reads.
 
-1. Press the **625 bearing (16×5×5)** into the hub recess on top of `top_1.stl`
+1. Press the **625 bearing (16×5×5)** into the hub recess on top of `TopCover`
    until it seats on the shoulder.
 2. Pass the **M5×25 countersunk screw** up through the bearing from below.
    Fit a washer and the **M5 nut** on top. Snug only — the vane must spin
    freely; you should be able to flick it and have it coast.
-3. Clamp the bearing with `fane_support_smal.stl` and **four M3×10 screws**.
+3. Clamp the bearing with `fane_support_smal` and **four M3×10 screws**.
 
 ![625 bearing seated in the top_1 hub](../../assets/wind/Yachta4.png)
 *The 625 bearing pressed into the hub, M5×25 screw through it.*
@@ -151,9 +153,9 @@ close.
 
 ## Step 4 — Wind vane
 
-1. Press the **M5 nut** into the recess in `fane.stl` and lock it with a drop of
+1. Press the **M5 nut** into the recess in `WindVane` and lock it with a drop of
    superglue. Let it set before loading it.
-2. Fit `fane_support_big.stl` — the 78 mm dome — over the hub and onto the vane
+2. Fit `fane_support_big` — the 78 mm dome — over the hub and onto the vane
    shaft.
 3. Screw the vane onto the shaft.
 4. Fit the **M6×60 screw** in the boss on the opposite side of the vane. This is
@@ -177,11 +179,11 @@ wheel sweeping past the hall sensor.
 > wheel clear of the relocated arm socket.
 
 1. Press the **695 bearing (13×5×4)** into the **narrow end** of
-   `bot_ball_bearing.stl`.
+   `BottomBearingHolder`.
 2. Press a **625 bearing (16×5×5)** into the **flange end** until it seats.
-   That flange end is the top in service — it plugs up into `bot.stl`.
+   That flange end is the top in service — it plugs up into `BottomHousing`.
 3. Glue the **four 5×1.5×1 mm bar magnets** into the four slots in
-   `magnetholder.stl`.
+   `MagnetHolder`.
 
 ### Magnet polarity — the one that silently doubles your wind speed
 
@@ -200,7 +202,7 @@ once cured.
 
 4. Thread the **M5×70 screw** up through the magnet holder and secure it from
    below with an **M5 stop nut**.
-5. Slide the assembly up into the aperture in the underside of `bot.stl`.
+5. Slide the assembly up into the aperture in the underside of `BottomHousing`.
 
 ![Magnet holder on the shaft](../../assets/wind/Yachta12.png)
 *Magnet holder on the M5×60 screw.*
@@ -213,9 +215,9 @@ once cured.
 > **This is where our build differs from every photo below.** The photos show a
 > one-piece cup wheel. Yours is four printed pieces.
 
-1. Press the **M5 nut** into the recess in the centre of `base_cup_wheel.stl`
+1. Press the **M5 nut** into the recess in the centre of `CupWheelHub`
    and lock it with a drop of superglue.
-2. **Glue the three `cup_round.stl` cups into the hub.** Slide each arm into its
+2. **Glue the three `CupRound` cups into the hub.** Slide each arm into its
    groove from below; a gentle tap with a small hammer seats the last millimetre
    or two. Do not force a cup shell — it will crack before the arm moves.
    Use the flexible 2-component acrylic here, not superglue: these joints carry
@@ -255,19 +257,19 @@ once cured.
    ![Cable hole in the tube](../../assets/wind/Yachta20.png)
 
 2. Feed the 12 V cable up the tube.
-3. Push the tube into the socket in `bot.stl`.
+3. Push the tube into the socket in `BottomHousing`.
 
 > ### The tube is now 47.8 mm shorter than the original
 > The socket was moved outboard along its own axis to make room for the Nano.
 > The **angle is unchanged (20° below horizontal) and the bore is unchanged
-> (Ø10)**, so the same tube and the same `base_power.stl` still fit — the tube
+> (Ø10)**, so the same tube and the same `MastBase` still fit — the tube
 > just needs to be **47.8 mm shorter**, or the mast base moved 47.8 mm along the
 > tube axis toward the sensor. Cut and deburr before you fit anything.
 
-4. Fit the other end into `base_power.stl` and mount that to the masthead.
+4. Fit the other end into `MastBase` and mount that to the masthead.
 
-![Tube in the bot.stl socket](../../assets/wind/Yachta21.png)
-*Underside of `bot.stl` — bearing flange, centre bore, and the arm socket.*
+![Tube in the BottomHousing socket](../../assets/wind/Yachta21.png)
+*Underside of `BottomHousing` — bearing flange, centre bore, and the arm socket.*
 
 ## Step 8 — Board and wiring
 
@@ -275,7 +277,7 @@ The board is the one in [`circuit/Sensor-Wind/`](../../circuit/Sensor-Wind/READM
 [README.md](README.md#electronics-you-will-need-to-buy) for its parts list.
 
 1. Route the 12 V pair through into the pocket **before** the board goes in.
-2. Drop the board into the pocket in `bot.stl`. It locates on four bosses at
+2. Drop the board into the pocket in `BottomHousing`. It locates on four bosses at
    ±15 / ±16 mm; the pocket has 0.4 mm clearance so it should drop in without
    force. If it binds, check for lacquer overspray in the pocket.
 3. Fasten with **four M3×10 screws**.
@@ -297,11 +299,11 @@ eye before closing up.
 ## Step 9 — Close it up
 
 1. Check the pocket is clear of swarf and the cable is not pinched.
-2. Fit `top_1.stl` over the board. The locating rib drops into the pocket.
+2. Fit `TopCover` over the board. The locating rib drops into the pocket.
 3. Fasten with the four M3×10 screws at ±15 / ±25 mm, **plus the fifth screw at
    the nose tip (77.5, 0)** — that one is new and it is what keeps the long nose
    from lifting and letting water in.
-4. Fit `top_2.stl`.
+4. Fit `TopCap`.
 
 ## Step 10 — Bench test
 

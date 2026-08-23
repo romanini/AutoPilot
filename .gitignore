@@ -6,6 +6,8 @@ hat/ugfx/ugfx.py
 hat/ugfx/ugfx_wrap.cpp
 deps
 *.mo
+*.FCBak
+cad/**/*.stl
 .idea/
 **/.DS_Store
 opencpn_plugin/autopilot_pi/.flatpak-builder/

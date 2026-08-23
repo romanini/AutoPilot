@@ -36,8 +36,7 @@ Background and the options that were weighed:
 cad/wind/
 ├── README.md                       this file
 ├── Assembly.md                     build instructions
-├── 3D-Parts/                       STLs — print from here
-└── FreeCad/                        FreeCAD documents — the editable source
+└── *.FCStd                         FreeCAD documents — the editable source
 ```
 
 The board lives in [`circuit/Sensor-Wind/`](../../circuit/Sensor-Wind/README.md);
@@ -45,32 +44,47 @@ build photos in [`assets/wind/`](../../assets/wind/).
 
 ### Printed parts
 
-Print from `3D-Parts/`. The German names below are the upstream IGES masters
-each FreeCAD document was built from — they are no longer in the repo, but they
-explain the naming and match the upstream Yachta project if you go looking there.
+**No STLs are kept in the repo.** Open the `.FCStd` and export a mesh when you
+are about to print — see [Exporting a printable mesh](#exporting-a-printable-mesh)
+below. The German names are the upstream IGES masters each FreeCAD document was
+built from; they are no longer in the repo either, but they explain the naming
+and match the upstream Yachta project if you go looking there.
 
-| STL | FreeCAD doc ← upstream name | Qty | What it is |
-|---|---|---|---|
-| `bot.stl` | `BottomHousing` ← `Unterteil` | 1 | **Modified.** Main housing: board pocket, bearing seat, arm socket |
-| `top_1.stl` | `TopCover` ← `Oberteil` | 1 | **Modified.** Cover; its hub carries the vane bearing |
-| `top_2.stl` | `TopCap` ← `Oberteil` | 1 | Top cap |
-| `bot_ball_bearing.stl` | `BottomBearingHolder` ← `Unterteil-2` | 1 | **Modified.** Carries the two lower bearings; stem 5 mm longer |
-| `magnetholder.stl` | `MagnetHolder` ← `Magnethalter` | 1 | Holds the four speed magnets |
-| `base_cup_wheel.stl` | `CupWheelHub` ← `Loeffel_mitte` | 1 | Hub the three cups glue into |
-| `cup_round.stl` | `CupRound` ← `Loeffel_rund` | **3** | The cups |
-| `cup_pointed.stl` | `CupPointed` ← `Loeffel_spitz` | — | Alternative cup profile |
-| `fane.stl` | `WindVane` ← `Windfahne` | 1 | The vane blade |
-| `fane_support_big.stl` | — | 1 | 78 mm dome the vane mounts on |
-| `fane_support_smal.stl` | — | 1 | Clamps the vane bearing into the cover hub |
-| `base_power.stl` | `MastBase` ← `Fuss_regler` | 1 | Mast base the standpipe plugs into |
+| FreeCAD document ← upstream name | Qty | What it is |
+|---|---|---|
+| `BottomHousing.FCStd` ← `Unterteil` | 1 | **Modified.** Main housing: board pocket, bearing seat, arm socket |
+| `TopCover.FCStd` ← `Oberteil` | 1 | **Modified.** Cover; its hub carries the vane bearing |
+| `TopCap.FCStd` ← `Oberteil` | 1 | Top cap |
+| `BottomBearingHolder.FCStd` ← `Unterteil-2` | 1 | **Modified.** Carries the two lower bearings; stem 5 mm longer |
+| `MagnetHolder.FCStd` ← `Magnethalter` | 1 | Holds the four speed magnets |
+| `CupWheelHub.FCStd` ← `Loeffel_mitte` | 1 | Hub the three cups glue into |
+| `CupRound.FCStd` ← `Loeffel_rund` | **3** | The cups |
+| `CupPointed.FCStd` ← `Loeffel_spitz` | — | Alternative cup profile |
+| `WindVane.FCStd` ← `Windfahne` | 1 | The vane blade |
+| `MastBase.FCStd` ← `Fuss_regler` | 1 | Mast base the standpipe plugs into |
 
-`magnet_holder_2.stl` and `cup_pointed_long.stl` are upstream variants, not used
-in this build. `WindexBase` has no STL — it is an upstream alternative top.
+`WindexBase.FCStd` is an upstream alternative top, not used in this build.
+
+> **Two parts of the build have no FreeCAD source.** The vane supports —
+> `fane_support_big` (the 78 mm dome the vane mounts on, ×1) and
+> `fane_support_smal` (clamps the vane bearing into the cover hub, ×1) — only
+> ever existed as upstream meshes, and so did the unused `magnet_holder_2` and
+> `cup_pointed_long` variants. They are not regenerable from anything in this
+> directory. Pull them out of git history when you print:
+>
+> ```
+> git show 3b8b956:cad/wind/3D-Parts/fane_support_big.stl > fane_support_big.stl
+> git show 3b8b956:cad/wind/3D-Parts/fane_support_smal.stl > fane_support_smal.stl
+> ```
+>
+> Or fetch them from
+> [upstream](https://github.com/norbert-walter/Windsensor_Yachta). Modelling
+> them properly is the obvious loose end here.
 
 ### What was changed from upstream
 
 The Nano ESP32 board is **103.25 × 40.13 mm** — longer than the 70 mm housing —
-so `bot.stl` and `top_1.stl` grew a nose to cover it:
+so `BottomHousing` and `TopCover` grew a nose to cover it:
 
 - Board pocket now follows the board outline with 0.4 mm clearance
 - A **49 × 23 × 14.8 mm well** under the nose for the Nano, which hangs 14 mm
@@ -85,7 +99,7 @@ Everything within **r = 20 mm of the axis is untouched** — bearing seats, magn
 gaps, mounting bosses and screw positions are all exactly as the original, so
 the rotating assembly is unaffected.
 
-**`bot_ball_bearing.stl` — stem lengthened 36 → 41 mm.** The relocated arm
+**`BottomBearingHolder` — stem lengthened 36 → 41 mm.** The relocated arm
 socket reaches about 2.5 mm deeper than the bare tube did, into the band the cup
 wheel sweeps. Rather than thin the socket wall, the bearing carrier's stem was
 stretched 5 mm, which drops the cup wheel clear with margin.
@@ -108,18 +122,33 @@ Two consequences:
 
 ### Editing the CAD
 
-`FreeCad/*.FCStd` is the editable source. The three modified parts were
-originally generated from the upstream German IGES masters by a build script,
-which also cut the board pocket using the outline read straight out of the
-EasyEDA export. **Neither the IGES masters nor that script are in the repo any
-more** — the FreeCAD documents and the STLs are what is kept. Both are still in
-the git history if the generated route is ever wanted back.
+The `.FCStd` documents in this directory are the editable source, and the only
+one. The three modified parts were originally generated from the upstream German
+IGES masters by a build script, which also cut the board pocket using the outline
+read straight out of the EasyEDA export. **Neither the IGES masters nor that
+script are in the repo any more** — the FreeCAD documents are what is kept. Both
+are still in the git history if the generated route is ever wanted back.
 
-Editing now happens in the FreeCAD GUI, which the documents are built for: the
+Editing happens in the FreeCAD GUI, which the documents are built for: the
 modified parts keep a live Part-workbench boolean tree (`OriginalHousing` +
 `SnoutBody` + `SocketKeel`, with the pockets cut out of it), so every feature is
-still parametric rather than a frozen mesh. Export the STL to `3D-Parts/` after
-a change.
+still parametric rather than a frozen mesh.
+
+#### Exporting a printable mesh
+
+Meshes are generated on demand and **never committed** — a checked-in STL only
+becomes a stale copy of a model that has moved on. Either export from the GUI
+(select the part → *File → Export…* → STL), or from the command line:
+
+```
+freecadcmd -c "
+import Mesh, FreeCAD
+d = FreeCAD.open('BottomHousing.FCStd')
+Mesh.export([d.Objects[-1]], '/tmp/BottomHousing.stl')
+"
+```
+
+Write the result somewhere outside the repo, or clean it up before committing.
 
 Two things the script used to handle, which are now manual:
 

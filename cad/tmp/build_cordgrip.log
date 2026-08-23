@@ -1,0 +1,40 @@
+CordGrip -- clean replacement for McMaster 69915K52
+
+thread          M17.0 x 3.0 trapezoidal, minor 15.0, 4.2 turns of engagement
+flank angle     28.8 deg from radial (61.2 deg overhang from horizontal)
+nut crest flat  0.50 mm (pitch 3.0 - dilated tool width 2.50)
+body            flange D20.0 x 2.5, top face z=16.0, bore D7.0
+pocket          D11.4 x 6.40 deep, 45 deg seat D11.4->D7.0 at z=7.40..9.60
+pocket wall     1.80 mm (thread root r7.50 - pocket r5.70)
+seal            D11.2 x 8.0, bore D6.0; sits z=9.50..17.50, 1.50 mm proud
+nut             hex AF24.0 (AC 27.71) x 13.0, exit D7.6, wall 3.25
+nut first touch bottom face at z=7.00; bottoms on body top after 1.50 mm
+compression     18.8% of seal height
+assembly height 20.00 mm above the mounting face at first touch
+thread engagement at full squeeze: 9.00 mm
+
+validity:
+  body         valid=True solids=1 shells=1 faces=28 vol=2344.09
+     mesh: pts=3253 facets=6506 solid=True selfint=False nonmanifold=False invalidpts=False components=1
+  nut          valid=True solids=1 shells=1 faces=33 vol=4154.70
+     mesh: pts=2259 facets=4518 solid=True selfint=False nonmanifold=False invalidpts=False components=1
+  seal         valid=True solids=1 shells=1 faces=6 vol=560.64
+     mesh: pts=6090 facets=12180 solid=True selfint=False nonmanifold=False invalidpts=False components=1
+
+thread presence, measured off the y-section of the actual solids:
+  body: max radius over the thread band = 8.500 (root 7.500, crest 8.500) -> THREADED
+  nut : min radius over the thread band = 7.250 (crest 7.250, major 8.750) -> THREADED
+  nut : section edges reaching the crest radius at z = 1.16, 1.56, 2.08, 4.03, 4.56, 5.08, 7.03, 7.65
+  nut : 3.0 turns of female thread over 9.0 mm at 3.0 mm pitch
+
+thread fit (female profile vs male profile, per flank):
+  r=7.500  male half-width 1.000  female half-width 1.158  clearance 0.158
+  r=8.000  male half-width 0.725  female half-width 0.975  clearance 0.250
+  r=8.500  male half-width 0.450  female half-width 0.792  clearance 0.342
+  minimum flank clearance = 0.158 mm; radial clearance = 0.250 mm at root and crest
+
+assembly:
+  nut first touches the seal with its bottom face at z=7.00, 2.67 turns engaged
+  fully tightened: bottom face z=5.50, 3.00 turns engaged, 1.50 mm of squeeze
+
+ALL CLEAN

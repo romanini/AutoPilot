@@ -6,7 +6,7 @@ has to do, ready for someone to draw it.
 
 | Unit | Enclosure | Status | Boards inside |
 |---|---|---|---|
-| Wind sensor | [`wind/`](wind/README.md) | **Built** — FreeCAD sources, printable STLs and a full assembly guide | [`circuit/Sensor-Wind/`](../circuit/Sensor-Wind/README.md) |
+| Wind sensor | [`wind/`](wind/README.md) | **Built** — FreeCAD sources and a full assembly guide | [`circuit/Sensor-Wind/`](../circuit/Sensor-Wind/README.md) |
 | Controller | [`controller/`](controller/README.md) | Placeholder | [`circuit/Controller/`](../circuit/Controller/README.md) + [`circuit/Controller-12-volt-power/`](../circuit/Controller-12-volt-power/README.md) |
 | Display | [`display/`](display/README.md) | Placeholder | [`circuit/Display/`](../circuit/Display/README.md) + [`circuit/Display-Button/`](../circuit/Display-Button/README.md) + [`circuit/Display-LCD/`](../circuit/Display-LCD/README.md) |
 | Rudder sensor | [`rudder/`](rudder/README.md) | Placeholder | [`circuit/Sensor-Rudder/`](../circuit/Sensor-Rudder/README.md) |
@@ -18,9 +18,13 @@ Each unit directory follows the same shape:
 ```
 <unit>/
 ├── README.md     what the enclosure has to do, and what goes inside
-├── FreeCad/      FreeCAD documents — the editable source
-└── 3D-Parts/     STLs — print from here
+└── *.FCStd       FreeCAD documents — the editable source
 ```
+
+**FreeCAD documents are the only source of truth. No STLs are kept in the
+repo** — export a mesh from the `.FCStd` when you are about to print, and leave
+it out of git. Anything checked in would be a stale copy of a model that has
+moved on.
 
 The [wind sensor](wind/README.md) is the worked example: it adds an
 `Assembly.md` with the step-by-step build, the shopping list, and the print

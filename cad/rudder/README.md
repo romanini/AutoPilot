@@ -48,17 +48,18 @@ spot before committing to it.
 
 ## Status
 
-Placeholder only — no FreeCAD documents and no STLs yet. The
+Placeholder only — no FreeCAD documents yet. The
 [wind sensor](../wind/README.md) is the one enclosure that is finished, and its
-directory is the pattern to follow: FreeCAD sources, printable STLs, and a
-build write-up.
+directory is the pattern to follow: FreeCAD sources and a build write-up.
 
 ```
 cad/rudder/
 ├── README.md     this file
-├── FreeCad/      FreeCAD sources        (empty)
-└── 3D-Parts/     STLs — print from here (empty)
+└── *.FCStd       FreeCAD sources — none yet
 ```
+
+STLs are not kept in the repo; export them from the `.FCStd` documents when you
+are ready to print.
 
 ---
 

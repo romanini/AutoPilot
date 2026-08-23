@@ -36,7 +36,8 @@ system is split across boards that talk over Wi-Fi.
 | **Wind sensor** | Arduino Nano ESP32 + AS5600 vane + reed-switch cup anemometer + DS18B20 | Standalone masthead wind sensor (Yachta head); joins SoberPilot as a station and reports apparent wind to the controller over UDP | `firmware/Arduino/wind/` |
 
 Supporting tooling: `firmware/experiments/pid/` (offline PID tuning experiments in
-Python/matplotlib), `circuit/` (KiCad/hardware), `assets/` (images used in
+Python/matplotlib), `circuit/` (KiCad/hardware), `cad/` (FreeCAD enclosure sources
+and printable STLs — see CAD & enclosures below), `assets/` (images used in
 docs). There is no dedicated UDP monitor script — see Debugging below.
 
 **The Arduino firmware is the heart of the project and the usual subject of
@@ -624,3 +625,103 @@ rm ~/.var/app/org.opencpn.OpenCPN/config/opencpn/load_stamps/libautopilot_pi
 - The `AutoPilotState` struct in `AutoPilotLink.h` mirrors `~APDAT` field order
   exactly.  If the controller adds fields to `publish.ino`, update `ParsePacket()`
   and the struct together.
+
+## CAD & enclosures (`cad/`)
+
+One directory per unit (`cad/wind/`, `cad/rudder/`, …), each holding its `README.md`
+(plus `Assembly.md` where there is one) and the `.FCStd` documents **flat in the unit
+directory** — there is no `FreeCad/` subdirectory any more.
+
+**No STLs live in the repo.**  The `3D-Parts/` directories are gone; meshes are
+exported from the `.FCStd` on demand and written outside the repo.  Never commit one —
+a checked-in STL is a stale copy of a model that has moved on.  (Historical exception:
+`fane_support_big` / `fane_support_smal` in `cad/wind/` have no FreeCAD source and only
+exist in git history at `3b8b956:cad/wind/3D-Parts/`.)
+
+Two families of parts live here and they are edited completely differently:
+
+- **`cad/wind/`** — single `Part::Feature` objects holding a **baked BREP shape** with
+  no feature tree (imported from the upstream Yachta IGES masters).  Nothing to
+  re-parameterise; every change is a boolean operation on the shape.
+- **`cad/rudder/`** — authored from scratch as **parametric PartDesign bodies**: a
+  `Params` spreadsheet whose aliases drive every sketch constraint and pad length, all
+  sketches fully constrained.  Edit these by changing a spreadsheet cell, not by
+  boolean surgery.
+
+Prefer the second style for anything new.
+
+### ALWAYS author the GUI data — never ship a headless `.FCStd`
+
+`freecadcmd` builds a perfectly good `Document.xml` and **no `GuiDocument.xml`**.  A
+file saved that way has no view providers, no visibility state and no camera: the user
+opens it in FreeCAD and sees an empty 3D view.  The geometry is in there, but as far as
+they are concerned the work does not exist.
+
+So whenever a script creates or modifies a `.FCStd`, it must also author the GUI side.
+`FreeCADGui` runs fine without a display if you bring the main window up offscreen:
+
+```python
+# run with QT_QPA_PLATFORM=offscreen
+import FreeCADGui
+FreeCADGui.showMainWindow()      # BEFORE App.newDocument() / openDocument()
+```
+
+Then, before saving:
+
+- hide every sketch, datum and origin feature, and every PartDesign feature that is not
+  `body.Tip`;
+- show `body` and `body.Tip`, and set `ShapeColor` on them;
+- splice a `<Camera settings="OrthographicCamera { … }"/>` element into
+  `GuiDocument.xml` (rewrite the zip after `saveAs`).  Coin wants a **normalised
+  axis + angle**, not a raw quaternion — `App.Rotation(...).Axis` normalised plus
+  `.Angle`.  FreeCAD's axonometric rotation is
+  `App.Rotation(0.4247082, 0.1759200, 0.3398509, 0.8204732)`.  Without this the
+  document opens on the default camera and the part can be off-screen.
+
+**Verification is not optional and is one command:**
+
+```bash
+unzip -l cad/<unit>/<Part>.FCStd | grep -E "GuiDocument|ShapeAppearance"
+```
+
+No `GuiDocument.xml` in that listing means the file is not finished.  Re-open it in a
+GUI-enabled session and confirm `Gui.getDocument(d).getObject(name).Visibility` is
+`True` for the body and its tip and `False` for the sketches.
+
+### Scripting gotchas
+
+- Binary is `/Applications/FreeCAD.app/Contents/Resources/bin/freecadcmd` (not on
+  PATH).  `print()` output is swallowed — have the script write a log file and `cat` it.
+  Wrap the whole script in `try/except` + `traceback.format_exc()` into that log, or
+  failures surface only as "Unknown exception while processing file".
+- The bundled interpreter (`.../Resources/bin/python`) has numpy + matplotlib; the
+  system `python3` does not.
+- Offscreen Qt has **no OpenGL**, so `createViewer()` / `saveImage()` fail.  For a
+  visual check, tessellate with `MeshPart.meshFromShape()` and render the triangles
+  with matplotlib (`matplotlib.use("Agg")`).
+- FreeCAD 1.x renamed the sketch attachment property to **`AttachmentSupport`**.
+  Attach sketches to `XY_Plane` with an `AttachmentOffset` in Z rather than to a face —
+  that sidesteps topological naming entirely and keeps the tree editable.
+- Drive dimensions from the spreadsheet by naming the constraint first:
+  `sk.renameConstraint(sk.ConstraintCount - 1, 'hub_r')` then
+  `sk.setExpression('.Constraints.hub_r', 'Params.hub_dia / 2')`.
+- A same-sheet derived cell is a plain formula string — `sh.set('B7', '=plate_size -
+  arm_w')`.  `sh.setExpression('B7', ...)` raises `Property 'B7' not found`.
+- `Gui.getDocument(d).ActiveObject` is read-only; there is no need to set an active
+  body when scripting.
+- Overlapping profiles in one sketch will not pad.  Build an X/cross plate as separate
+  pads that fuse (a hub circle plus two crossed obrounds), not one self-intersecting
+  wire.
+- `saveAs` leaves a `*.FCBak` next to the file — delete it so it does not land in git.
+- Fusing a prism to extend an outline also fills any internal void it spans.  Cut the
+  added prism against the original envelope first (e.g. `sq.cut(cylinder(R - 0.1))`) so
+  pockets and bores survive.
+
+### When reverse-engineering an STL
+
+Mesh in, model out: slice the mesh along its axis
+(`shape.slice()`, or intersect triangles with a plane yourself), least-squares-fit each
+loop to a circle, and read the feature dimensions off the fits — do **not** import the
+mesh and ship that.  Verify by sampling every mesh vertex and triangle centroid and
+measuring `Part.Vertex(p).distToShape(solid)`; on the rudder test parts that lands at
+0.005–0.04 mm, which is the mesh's own chord error and well under print resolution.
