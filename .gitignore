@@ -5,6 +5,7 @@ dist
 hat/ugfx/ugfx.py
 hat/ugfx/ugfx_wrap.cpp
 deps
+tmp/
 *.mo
 *.FCBak
 cad/**/*.stl
