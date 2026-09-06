@@ -66,6 +66,7 @@ void setup() {
   setup_rudder();
   setup_wind();
   setup_motor();
+  setup_motor_enable();
   setup_compass();
   setup_gps();
   setup_garmin();
@@ -97,6 +98,9 @@ void control_task(void *pvParameters) {
   for (;;) {  // A Task shall never return or exit.
     cur_mills = millis();
     check_compass();
+    // Before anything reads navigation state this tick: the motor-enable /
+    // kill switch gates it (motorenable.ino).
+    check_motor_enable();
 
     // Advance the PID clock every loop, not just while navigating. If dt were
     // only updated inside the navigating branch it would span the entire time

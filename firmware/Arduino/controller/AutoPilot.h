@@ -57,8 +57,10 @@ private:
   bool rudder_magnet_ok;   // AS5600 magnet-detected flag from the same ~APRUD packet
 
   // Masthead wind sensor board (firmware/Arduino/wind/), fed via ~APWND on its own UDP
-  // port - see wind.ino. Stored but not yet republished on ~APDAT; that change
-  // has to land across controller, display and plugin together.
+  // port - see wind.ino. A subset of these is republished on ~APDAT (apparent
+  // angle and speed, plus the derived true wind and the air temperature); the
+  // m/s, Beaufort and rev/s forms stay controller-side, since the first two are
+  // derivable from knots and the third is calibration data, not display data.
   float wind_direction;    // apparent wind angle, 0-360 degrees clockwise from the bow
   float wind_speed_kn;
   float wind_speed_mps;
@@ -149,6 +151,18 @@ public:
   float getWindTemperature();
   bool isWindVaneOk();
   bool isWindTempOk();
+  // Apparent -> true wind. Computed on demand rather than stored: it is a pure
+  // function of the apparent wind and the boat speed, so deriving it here means
+  // it can never go stale against a newer ~APWND or GPS fix, and there is no
+  // ordering question about which setter recomputes it.
+  //
+  // Both outputs come back from a single locked read of all three inputs, for
+  // the same reason setWind() takes eight fields in one call: a caller must
+  // never be able to see an angle and a speed that describe different instants.
+  // Angle is 0-360 clockwise from the bow (same convention as the apparent
+  // angle), speed is knots (same as getSpeed()). Validity is not checked here -
+  // ask isTrueWindOk() (wind.ino) before believing the result.
+  void getTrueWind(float& angle_deg, float& speed_kn);
   bool isWaypointSet();
   float getWaypointLat();
   float getWaypointLon();

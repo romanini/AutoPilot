@@ -27,7 +27,6 @@ const int   AutoPilotPanel::HEARTBEAT_INTERVAL_MS = 1000;  // 1 s — well withi
 
 wxBEGIN_EVENT_TABLE(AutoPilotPanel, wxScrolledWindow)
     EVT_BUTTON(ID_BTN_MODE,       AutoPilotPanel::OnMode)
-    EVT_BUTTON(ID_BTN_NAV_TOGGLE, AutoPilotPanel::OnNavToggle)
     EVT_BUTTON(ID_BTN_PORT_SHORT, AutoPilotPanel::OnPortShort)
     EVT_BUTTON(ID_BTN_PORT_LONG,  AutoPilotPanel::OnPortLong)
     EVT_BUTTON(ID_BTN_STBD_SHORT, AutoPilotPanel::OnStbdShort)
@@ -394,7 +393,12 @@ void AutoPilotPanel::BuildUI_Float()
     m_btn_port_short = new wxButton(this, ID_BTN_PORT_SHORT, "< 1");
     m_btn_stbd_short = new wxButton(this, ID_BTN_STBD_SHORT, "1 >");
     m_btn_stbd_long  = new wxButton(this, ID_BTN_STBD_LONG,  "10 >>");
-    m_btn_nav_toggle = new wxButton(this, ID_BTN_NAV_TOGGLE, "Enable");
+    // Read-only. Navigation is set only by the controller's motor-enable
+    // switch (controller/motorenable.ino) - see UpdateFromState. Kept as a
+    // button rather than deleted so the three dock layouts keep their
+    // fixed-pixel geometry; it is permanently disabled and only ever shows
+    // where navigation stands.
+    m_btn_nav_toggle = new wxButton(this, ID_BTN_NAV_TOGGLE, "Nav Off");
     m_btn_send_route->SetMinSize(kBtnSz);
     m_btn_mode->SetMinSize(kBtnSz);
     m_btn_port_long->SetMinSize(kBtnSz);
@@ -603,7 +607,12 @@ void AutoPilotPanel::BuildUI_Right()
 
     // ── Mode  |  Enable/Disable ────────────────────────────────────────────
     m_btn_mode       = new wxButton(this, ID_BTN_MODE,       "Mode");
-    m_btn_nav_toggle = new wxButton(this, ID_BTN_NAV_TOGGLE, "Enable");
+    // Read-only. Navigation is set only by the controller's motor-enable
+    // switch (controller/motorenable.ino) - see UpdateFromState. Kept as a
+    // button rather than deleted so the three dock layouts keep their
+    // fixed-pixel geometry; it is permanently disabled and only ever shows
+    // where navigation stands.
+    m_btn_nav_toggle = new wxButton(this, ID_BTN_NAV_TOGGLE, "Nav Off");
     BtnRow(m_btn_mode, m_btn_nav_toggle);
 
     // ── Zero Rudder ────────────────────────────────────────────────────────
@@ -767,7 +776,12 @@ void AutoPilotPanel::BuildUI_TopBottom()
     ctrl->AddStretchSpacer(1);
 
     m_btn_mode       = new wxButton(this, ID_BTN_MODE,       "Mode");
-    m_btn_nav_toggle = new wxButton(this, ID_BTN_NAV_TOGGLE, "Enable");
+    // Read-only. Navigation is set only by the controller's motor-enable
+    // switch (controller/motorenable.ino) - see UpdateFromState. Kept as a
+    // button rather than deleted so the three dock layouts keep their
+    // fixed-pixel geometry; it is permanently disabled and only ever shows
+    // where navigation stands.
+    m_btn_nav_toggle = new wxButton(this, ID_BTN_NAV_TOGGLE, "Nav Off");
     ctrl->Add(m_btn_mode,       0, wxALIGN_CENTER_VERTICAL | wxRIGHT, kBtnPad);
     ctrl->Add(m_btn_nav_toggle, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, kBtnPad);
 
@@ -884,8 +898,11 @@ void AutoPilotPanel::UpdateFromState(const AutoPilotState& s, bool connected)
     }
 
     bool nav_on = connected && s.nav_enabled;
-    m_btn_nav_toggle->Enable(connected);
-    m_btn_nav_toggle->SetLabel(nav_on ? "Disable" : "Enable");
+    // Indicator, not a control: navigation follows the controller's motor-enable
+    // switch and nothing here can change it. Disabled unconditionally - a live
+    // button that silently did nothing would be worse than an obviously inert one.
+    m_btn_nav_toggle->Enable(false);
+    m_btn_nav_toggle->SetLabel(!connected ? "Nav --" : (nav_on ? "Nav On" : "Nav Off"));
     m_btn_mode->Enable(nav_on);
     m_btn_port_long->Enable(nav_on);
     m_btn_port_short->Enable(nav_on);
@@ -966,12 +983,6 @@ void AutoPilotPanel::OnMode(wxCommandEvent&)
     if (!s.nav_enabled) return;
     int new_mode = (s.mode == 2) ? 1 : (s.waypoint_set ? 2 : 1);
     m_link->SendMode(new_mode);
-}
-
-void AutoPilotPanel::OnNavToggle(wxCommandEvent&)
-{
-    if (!m_link || !m_link->IsConnected()) return;
-    m_link->SendNavEnable(!m_link->State().nav_enabled);
 }
 
 void AutoPilotPanel::OnPortShort(wxCommandEvent&)

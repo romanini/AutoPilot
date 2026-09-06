@@ -3,7 +3,12 @@
 #include <AsyncUDP.h>
 
 #define PUBLISH_INTERVAL 1000
-#define DATA_SIZE 300
+// Sized for the longest ~APDAT the formats below can produce (208 chars with
+// every field at full width) plus headroom for the next batch of trailing
+// fields. The build is snprintf-bounded rather than trusting this number, but
+// the buffer still has to be big enough that a full frame is never truncated -
+// a short frame parses as "fields absent" on every receiver, which is silent.
+#define DATA_SIZE 400
 #define BROADCAST_PORT 8888
 
 // Subnet-directed broadcast for the soft-AP's own network. We send here instead
@@ -16,7 +21,9 @@ IPAddress broadcastIp(10, 20, 1, 255);
 
 AsyncUDP udpClient;
 
-bool isRudderOk();  // defined in rudder.ino
+bool isRudderOk();    // defined in rudder.ino
+bool isWindOk();      // defined in wind.ino
+bool isTrueWindOk();  // defined in wind.ino
 
 uint32_t last_publish_time_mills = millis();
 char serialzied_data[DATA_SIZE];
@@ -29,7 +36,14 @@ void publish_APDAT() {
   if (millis() - last_publish_time_mills > PUBLISH_INTERVAL) {
     last_publish_time_mills = millis();
     time_t currentTime = autoPilot.getDateTime();
-    sprintf(serialzied_data, "~APDAT,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%f,%.2f,%.2f,%.2f,%.2f,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.6f,%.6f,%d,%d,%.2f,%d,%.2f,%d$",
+
+    // Both true-wind values in one call so the pair can't straddle a state
+    // update - see AutoPilot::getTrueWind().
+    float trueWindAngle = 0.0;
+    float trueWindSpeed = 0.0;
+    autoPilot.getTrueWind(trueWindAngle, trueWindSpeed);
+
+    snprintf(serialzied_data, DATA_SIZE, "~APDAT,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%f,%.2f,%.2f,%.2f,%.2f,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.6f,%.6f,%d,%d,%.2f,%d,%.2f,%d,%.1f,%.2f,%d,%.1f,%.2f,%d,%.1f,%d$",
             year(currentTime) % 100,    // %d
             month(currentTime),         //%d
             day(currentTime),           //%d
@@ -85,7 +99,34 @@ void publish_APDAT() {
             // receive timeout, so a disconnected rudder board reads as "no
             // data" here instead of freezing on its last value.
             autoPilot.getRudderAngle(),  // %.2f
-            isRudderOk()                 // %d
+            isRudderOk(),                // %d
+
+            // Masthead wind sensor board (firmware/Arduino/wind/), relayed the
+            // same way the rudder is. Only the display-facing subset travels:
+            // m/s and Beaufort are derivable from knots, and the raw rev/s is
+            // calibration data that belongs on the telnet 'p' line, not in a
+            // broadcast every display has to parse.
+            //
+            // Apparent first, then true, then air temperature - each value
+            // immediately followed by its own validity flag, so a receiver
+            // never has to reason about which flag covers which field.
+            autoPilot.getWindDirection(),  // %.1f  apparent wind angle, 0-360 clockwise from the bow
+            autoPilot.getWindSpeedKn(),    // %.2f  apparent wind speed, knots
+            isWindOk(),                    // %d    vane magnet ok AND heard from within the timeout
+
+            // True wind is derived here rather than on each display so the TFT
+            // head units and the OpenCPN plugin can't disagree about it, and so
+            // there is one place to fix when a speed-through-water sensor
+            // eventually replaces SOG in the calculation.
+            trueWindAngle,                 // %.1f  0-360 clockwise from the bow
+            trueWindSpeed,                 // %.2f  knots
+            isTrueWindOk(),                // %d    the above AND a GPS fix (true wind needs a boat speed)
+
+            // Separate flag because a dead DS18B20 costs nothing that matters -
+            // wind angle and speed keep working - so it must not take the whole
+            // wind reading down with it.
+            autoPilot.getWindTemperature(),  // %.1f  masthead air temperature, C
+            autoPilot.isWindTempOk()         // %d
     );
 
     //DEBUG_PRINTLN(serialzied_data);

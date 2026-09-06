@@ -35,6 +35,7 @@ state to any displays on the network. Source files:
 | `garmin.ino` | Ingests Garmin NMEA-0183 sentences (waypoint / bearing data) |
 | `pid.ino` | PID loop converting heading error into a steering correction |
 | `motor.ino` | Drives the steering motor (direction + timed pulses) |
+| `motorenable.ino` | Reads the motor-enable / kill switch on `A6` — the **only** thing that enables or disables navigation; lights the switch lamp from `D6` |
 | `publish.ino` | Builds and **broadcasts** `~APDAT,...$` telemetry on UDP 8888 |
 | `subscribe.ino` | **Listens** on UDP 8889 for `~APCMD,...$` commands from displays |
 | `telnet.ino` | Telnet console for live debugging |
@@ -45,9 +46,12 @@ state to any displays on the network. Source files:
 
 ### `display/` — cockpit head unit
 Joins the controller's Wi-Fi as a station, shows the live data on the HX8357 LCD,
-and sends button presses back as commands. Buttons switch between navigation and
-compass mode (or disable the autopilot) and, in compass mode, turn 1°, 10° or 90°
-to port or starboard. To keep the UI feeling instant it updates its own local copy
+and sends button presses back as commands. Buttons switch between waypoint and
+compass mode and, in compass mode, turn 1°, 10° or 90° to port or starboard.
+Navigation on/off is **not** among them — that is the motor-enable switch on the
+controller board alone (`controller/motorenable.ino`); the display shows
+`nav_enabled` from `~APDAT` but never sets it, and its old enable/disable button
+(`D4`, now `AUX_BUTTON_PIN`) is free apart from auto-tune start/abort. To keep the UI feeling instant it updates its own local copy
 of the state immediately on a press, then transmits the change.
 
 | File | Responsibility |
@@ -197,6 +201,19 @@ Plain-text UDP datagrams framed with a leading `~` and trailing `$`:
   speed. Neither covers "the board stopped transmitting"; that is a receive
   timeout on the controller side, same as `isRudderOk`.
 
+  Wind also rides along on `~APDAT` as eight trailing fields for the
+  displays/plugin: apparent angle and speed with `isWindOk`, then the
+  **controller-derived true wind** angle and speed with `isTrueWindOk`, then air
+  temperature with its own flag. The m/s, Beaufort and raw rev/s forms stay on
+  the controller — the first two are derivable from knots, and the third is
+  calibration data (see the telnet `p` output). True wind is computed once, on
+  the controller (`AutoPilot::getTrueWind()`), so no two displays can disagree
+  about it; it uses **SOG**, not speed through water, so it carries current and
+  leeway — good enough to display and to steer a wind angle by, not good enough
+  to log as polar data. `isTrueWindOk` is `isWindOk` *and* a GPS fix: with no
+  fix there is no boat speed to subtract, and reporting the apparent wind
+  relabelled as true would be worse than reporting nothing.
+
 Because telemetry is broadcast, multiple displays can listen at once; commands
 are unicast to the controller's AP address.
 
@@ -227,7 +244,7 @@ cp wind/arduino_secrets.h.example       wind/arduino_secrets.h
 ```
 
 > **Controller pin numbering:** in the Arduino IDE, set **Tools ▸ Pin Numbering**
-> to **"By Arduino pin (default)"** when building, or the motor/GPS
+> to **"By Arduino pin (default)"** when building, or the motor/GPS/motor-enable
 > pin assignments will be wrong.
 > ![Tools_Pin_Numbering](../../assets/ArduinoIDE_PIN_mode.png)
 
@@ -250,13 +267,28 @@ the sketches `#include` (`WiFi`, `AsyncUDP`, `SPI`, `Wire`, `USB`,
 | Adafruit GFX Library | Adafruit | display |
 | Adafruit HX8357 Library | Adafruit | display |
 | Adafruit AS5600 Library | Adafruit | rudder, wind |
-| OneWire | Paul Stoffregen | wind |
-| DallasTemperature | Miles Burton | wind |
 
 Installing the Adafruit libraries also pulls in **Adafruit BusIO** (all four
 sketches) and **Adafruit Unified Sensor** (controller) as dependencies (the IDE
 offers to add them automatically; the `sketch.yaml` profiles list them
-explicitly). Pin **DallasTemperature** to the 3.x line — 4.x changes the API.
+explicitly).
+
+### Careful with libraries that reach past the Arduino pin API
+
+The `wind` sketch's DS18B20 used to use **OneWire** + **DallasTemperature**, and
+never read a temperature. OneWire's ESP32 back end uses the number it is
+constructed with as a raw GPIO bit index, but on the Nano ESP32 under the
+default *Arduino* Pin Numbering the `Dx` constants are Arduino pin indices —
+`D4` is `4`, while the pad is `GPIO7`. So `pinMode()` configured the right pad
+and every bus operation drove `GPIO4` (which is `A3`, wired to nothing).
+
+Writing `D4` instead of `7` is what keeps the rest of a sketch correct under
+either Pin Numbering setting, but it only protects code that goes through the
+Arduino API. **Any library that writes the GPIO registers directly is wrong on
+this board no matter which name you pass it**, and it fails silently — the
+symptom is a dead peripheral, not a compile or runtime error. Check for
+`GPIO.out_w1ts` / `GPIO.in` and friends before adding one. `wind/temperature.ino`
+bit-bangs its single DS18B20 through `digitalRead`/`digitalWrite` instead.
 
 ## Building with arduino-cli
 

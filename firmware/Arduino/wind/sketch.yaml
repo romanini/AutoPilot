@@ -24,10 +24,10 @@ profiles:
     libraries:
       - Adafruit AS5600 Library (1.0.0)  # vane angle encoder (Adafruit_AS5600.h)
       - Adafruit BusIO (1.16.1)          # dependency of the Adafruit driver
-      - OneWire (2.3.8)                  # 1-Wire bus for the DS18B20
-      - DallasTemperature (3.9.0)        # DS18B20 driver, last of the 3.x line
-                                         # (same API as the 3.8.0 the original
-                                         # firmware pins, with ESP32 fixes; 4.x
-                                         # changes the API)
+      # No OneWire/DallasTemperature: OneWire's ESP32 back end treats the pin
+      # number it is given as a raw GPIO index, which on the Nano ESP32 is not
+      # the Arduino pin number (D4 is Arduino 4, GPIO 7), so every bus
+      # operation landed on the wrong pad. temperature.ino bit-bangs the one
+      # DS18B20 through the Arduino pin API instead - see the comment there.
 
 default_profile: nano

@@ -1,7 +1,12 @@
 #include <WiFi.h>
 #include <AsyncUDP.h>
 
-#define DATA_SIZE 300
+// Must be at least the controller's own DATA_SIZE (controller/publish.ino):
+// an oversized datagram is *dropped whole* below, not truncated, so a receive
+// buffer that lags behind a grown ~APDAT doesn't lose the new trailing fields,
+// it loses every field - the display simply goes to "not connected" with no
+// hint as to why. Grow this side first when adding fields to the telemetry.
+#define DATA_SIZE 400
 #define LAST_RECEIVE_MAX_TIME 10000
 #define RECONNECT_INTERVAL 30000
 #define RECONNECT_WAIT_INTERVAL 30000

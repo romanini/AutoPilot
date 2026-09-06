@@ -51,8 +51,14 @@ Each display joins it as a station. Communication is plain-text UDP datagrams
 framed with a leading `~` and trailing `$`:
 
 - **Telemetry** — controller → display(s), **broadcast on UDP 8888**:
-  `~APDAT,<year>,<month>,<day>,<hour>,<minute>,<fix>,<fixquality>,<satellites>,<nav_enabled>,<mode>,<waypoint_set>,<wp_lat>,<wp_lon>,<heading_desired>,<heading>,<pitch>,<roll>,<stability>,<bearing>,<bearing_correction>,<speed>,<distance>,<course>,<location_lat>,<location_lon>$`
-  (built in `controller/publish.ino`, parsed in `display/AutoPilot.cpp::parseAPDAT`).
+  `~APDAT,<year>,<month>,<day>,<hour>,<minute>,<fix>,<fixquality>,<satellites>,<nav_enabled>,<mode>,<waypoint_set>,<wp_lat>,<wp_lon>,<heading_desired>,<heading>,<pitch>,<roll>,<stability>,<bearing>,<bearing_correction>,<speed>,<distance>,<course>,<location_lat>,<location_lon>`
+  then the appended trailing fields, in order:
+  `,<nav_source>,<autotune_state>,<cog_damped>,<cog_damped_valid>,<rudder_angle>,<rudder_ok>,<awa>,<aws_kn>,<wind_ok>,<twa>,<tws_kn>,<true_wind_ok>,<air_temp_c>,<temp_ok>$`
+  — 39 fields (built in `controller/publish.ino`, parsed in
+  `display/AutoPilot.cpp::parseAPDAT` and `autopilot_pi`'s `ParseApdat()`).
+  **Fields are only ever appended, never reordered or removed**, and every
+  receiver treats trailing fields as optional, so a display running older
+  firmware keeps working against a newer controller.
 - **Commands** — display → controller, **unicast on UDP 8889**:
   `~APCMD,<cmd>$` (mode changes, heading nudges, tack, etc.).
 - **Reset** — `~RESET,1$`.
@@ -80,13 +86,23 @@ be reachable from both has to be wired up twice. Who can send what today:
 
 | | UDP `~APCMD` | Telnet |
 |---|---|---|
-| `a` `m` `n` `w` | display, plugin | yes |
+| `a` `m` `w` | display, plugin | yes |
 | `t` (autotune) | display, plugin | `pat` (arm only) |
 | `X` | plugin | no |
 | `z` `v` `d` `k` (sensor calibration) | plugin sends `z` only | **yes, all four** |
+| `n` (navigation on/off) | **retired — ignored** | **retired** — replies with why |
 
-The displays send only `a`, `m`, `n`, `t` — they have buttons, not a keyboard,
-so the calibration verbs will never come from there.
+The displays send only `a`, `m`, `t` — they have buttons, not a keyboard, so the
+calibration verbs will never come from there.
+
+**`n` is retired on purpose — don't put it back.** Navigation is engaged and
+disengaged *only* by the motor-enable switch wired to the controller board (see
+"The motor-enable switch" below). `dispatch_command()` has no `n` case at all;
+telnet keeps one solely to *answer* ("Navigation is set by the motor-enable
+switch on the controller only"), because it can, and because otherwise a typed
+`n1` falls through to "Unknown command" and sends the operator hunting for a
+typo instead of looking at the switch. That asymmetry is the two-surfaces split
+working as intended, not an oversight.
 
 **What telnet can and cannot report about a relayed command.** No `~APCMD` has
 an ack, so telnet can never tell you a sensor board *received* a datagram,
@@ -126,6 +142,50 @@ acted on it, the display suppresses the operator-controlled fields for
 `LOCAL_COMMAND_SUPPRESS_MS` after a press (see `localCommandTime` in
 `display/AutoPilot.cpp`). Keep this in mind when touching either the parser or the
 button code.
+
+**`nav_enabled` is parsed *outside* that suppression**, in both the display and
+the plugin, and that is deliberate: the display can no longer set it, so there is
+never a local value worth protecting, and suppressing it would only add lag to
+the one field the operator most needs to see promptly — the kill switch.
+
+## The motor-enable switch (`controller/motorenable.ino`)
+
+The controller board's "Motor Enable" switch (U7) is the **sole** authority on
+whether navigation is engaged. It is the motor's kill switch, so one action does
+the whole job and the software state can never claim to be steering a motor with
+no power.
+
+The switch closes +5 V onto `Motor5V`, which feeds the motor header *and* a
+10 k/10 k divider (`MOTOR_ENABLE_R1`/`R2`, filtered by `C1` 100 nF) into **`A6`**.
+So `A6` reads ~2.5 V closed and a hard 0 V open — the lower leg is what makes
+"open" a defined zero rather than a floating pin. **`D6`** drives a 1 kΩ into a
+2N2222 (`Q1`) that low-side switches the lamp inside the switch: `D6` HIGH = lit.
+The lamp follows `isNavigationEndabled()`, not the switch position — the switch
+already shows its own position; what is worth showing is what the autopilot
+believes.
+
+**`A6` is GPIO13, an ADC2 channel, and ADC2 is shared with Wi-Fi.** On the
+ESP32-S3 an arbiter gives Wi-Fi priority, and a read that loses it comes back
+invalid — which arduino-esp32's `__analogReadRaw` turns into a plain `0`. Hence
+the median-of-3 plus a 100 ms debounce; a spurious 0 is the fail-safe direction
+(reads as "off"), so the filtering is about nuisance disengages, not safety.
+`A0`–`A3` are ADC1 and unaffected; `A4`/`A5` are SDA/SCL.
+
+`check_motor_enable()` runs from `control_task` every 10 ms tick, *before*
+anything reads navigation state, and enforces `navigation_enabled ==` the
+debounced switch every tick rather than only on edges — that per-tick
+enforcement is what makes the switch authoritative by construction instead of
+relying on nothing else ever writing the field. `setNavigationEnabled()` is
+still only called on an actual change, because the disabled→enabled transition
+does real work (seeds `heading_desired` from the current heading, clears
+`compass_fallback`) that must not re-run 100 times a second.
+
+**Consequence to keep in mind: the boat engages at power-up if the switch is
+already closed.** That is the switch being authoritative, working as specified.
+
+The telnet `p` output carries a `Motor enable: on (2497 mV)` line — the raw
+divider reading is the thing to look at when the switch and the reported state
+disagree.
 
 ## Firmware file map
 
@@ -403,13 +463,56 @@ is a spinlock guarding only the command handoff from the AsyncUDP task, needed
 because the nudge carries a value alongside its flag. Nothing blocking is ever
 called while holding the spinlock.
 
+**No 1-Wire library, and the trap that removed it.** `temperature.ino`
+bit-bangs its single DS18B20 through `digitalRead`/`digitalWrite` rather than
+using OneWire + DallasTemperature, and that is not a preference. OneWire's
+ESP32 back end uses the number it is constructed with as a **raw GPIO bit
+index** (`PIN_TO_BITMASK(pin)` is `(pin)`, then `GPIO.in >> pin`). On the Nano
+ESP32 under the default Arduino Pin Numbering, `D4` is Arduino pin `4` while
+the pad is `GPIO7` — so `begin()`'s `pinMode()` set up the right pad and every
+bus operation drove `GPIO4`, which is `A3` and wired to nothing. Temperature
+read as "no data" for as long as the library was in there.
+
+Generalise it: writing `D4` instead of `7` is what makes this sketch immune to
+the Pin Numbering setting, but **that only protects code going through the
+Arduino API**. Any library reaching past it to the GPIO registers is broken
+here whichever name it is handed, and it fails *silently* — a dead peripheral,
+no compile or runtime error. Feeding such a library the GPIO number instead
+does not fix it either, because its own `pinMode()` call would then configure
+the wrong pad. Grep a candidate library for `GPIO.out_w1ts`/`GPIO.in` before
+adding it.
+
+Because the bus has exactly one device, dropping the library cost almost
+nothing: there is no ROM search and no device table, every transaction is SKIP
+ROM, and `report_empty_bus()` reports drive/rise-time/presence when the bus
+comes up empty — the three things that separate an open DQ joint from a dead
+part from a missing pull-up, none of which a voltmeter on the pads can tell
+apart.
+
+**`TEMPERATURE_CORRECTION_C` is 3.6, measured on this board, and it is mostly
+not self-heating.** The original subtracts a flat 6.0 and calls it self-heating
+compensation, but the arithmetic does not support that: ~1 mA while converting,
+375 ms in every 500, is ~2.5 mW, and a TO-92 in still air is roughly 200 °C/W,
+so the die runs about **0.5 °C** above its own package. The rest is the board —
+the ESP32-S3 module runs warm centimetres away on the same small PCB, so the
+sensor genuinely sits in air above ambient. The practical consequence is that
+the constant is only weakly tied to the poll rate (halving it would move the
+reading ~0.25 °C) and strongly tied to how heat leaves the board, so it will
+want re-measuring once the head is sealed and in free air.
+
+Calibrate it against an infrared thermometer aimed at the **flat face** of the
+TO-92, not the rounded back: the die is bonded against the flat, and a first
+attempt that read the back came out 1.0 °C cold. It is a single-point fit at
+~21 °C, so an offset with no slope — untested near 0 °C or 35 °C. It is still a
+build-time `#define` rather than a runtime NVS command like `v`/`d`/`k`, which
+is arguably the wrong side of this project's own line for a masthead unit.
+
 **Two things that look like arbitrary constants but aren't:**
-- **`TEMPERATURE_INTERVAL_MS` is 500 to match the original's poll rate**, not
-  because 2 Hz air temperature is useful. The `-6.0 °C` self-heating
-  compensation ported from the original was calibrated at that rate; polling
-  slower would make the constant wrong. That in turn forces **11-bit** DS18B20
-  resolution (375 ms conversion), because the default 12-bit takes 750 ms and
-  would not finish inside the poll interval.
+- **`TEMPERATURE_INTERVAL_MS` is 500**, and what actually pins it there is the
+  resolution: **11-bit** (375 ms conversion) has to finish inside the interval,
+  where the default 12-bit takes 750 ms and would not. The original's claim
+  that the correction constant is calibrated to the poll rate does *not* carry
+  over — see below.
 - **`ANEMOMETER_PERIOD_LIMIT_MS` is enforced in two places** — the ISR clamps
   intervals to it, `Wind::calculate()` then refuses to convert a period that
   reached it. It is defined once in `Wind.h` so the two layers can't drift.
@@ -448,12 +551,43 @@ first seven fields existed, so `process_wind_telemetry()` accepts a frame
 without it and stores 0. Keep that tolerance when adding further trailing
 fields — it is the same convention `~APDAT` follows.
 
-**Still to do (downstream):** wind fields appended to `~APDAT` in
-`controller/publish.ino`, with the display parser and `autopilot_pi`'s
-`AutoPilotState`/`ParsePacket()` updated **together**. Deliberately deferred
-until the head is built and reading sensibly — until then the telnet `p`
-command is the way to see wind state, and it prints the rudder line too (that
-line is the only confirmation a `z` landed).
+**Downstream (done).** Wind is on `~APDAT` as eight trailing fields —
+`<awa>,<aws_kn>,<wind_ok>,<twa>,<tws_kn>,<true_wind_ok>,<air_temp_c>,<temp_ok>`
+— with `display/AutoPilot.{h,cpp}` and `autopilot_pi`'s
+`AutoPilotState`/`ParseApdat()` carrying them too. Nothing *renders* them yet:
+the TFT layout (`display/screen.ino`) and the plugin panel are unchanged, so
+this is parsed-and-available, not displayed.
+
+Only the display-facing subset travels. The m/s and Beaufort forms are
+derivable from knots, and `speed_hz` is calibration data, not display data —
+all three stay controller-side, on the telnet `p` line, which remains the place
+to see the full wind state (and prints the rudder line, still the only
+confirmation a `z` landed).
+
+**True wind is derived on the controller** — `AutoPilot::getTrueWind()`, a
+single call returning angle and speed together from one locked read, for the
+same "no reader sees half an update" reason `setWind()` takes eight fields at
+once. It is computed there rather than on each display so the two TFT head
+units and the plugin can never disagree, and so there is one place to change
+when a speed-through-water sensor eventually replaces SOG.
+
+That SOG is the caveat worth repeating: the boat has no paddlewheel, so the
+"true" wind carries current and leeway. Right for a display and for steering a
+wind angle; wrong for polars or performance logs. `isTrueWindOk()` (wind.ino,
+not the class — it needs the receive timeout, same as `isWindOk()`) is
+`isWindOk()` **and** a GPS fix, because with no fix there is no boat speed to
+subtract and the output would be the apparent wind wearing a true-wind label.
+Below `GPS_SPEED_DEADBAND_KNOTS` (0.8 kn) `setSpeed()` zeroes the speed, so true
+wind reads as apparent there — correct to within the deadband, and much better
+than GPS noise at anchor swinging the reported angle.
+
+**Buffer sizes are part of this change, not incidental to it.**
+`controller/publish.ino` now uses `snprintf` into a 400-byte `DATA_SIZE`
+(208 chars worst case), and `display/subscribe.ino`'s matching `DATA_SIZE` went to
+400 with it. That one has to be **at least** the controller's: an oversized
+datagram is dropped whole there, not truncated, so a lagging receive buffer
+doesn't lose the new fields, it loses the entire frame and the display just
+goes "not connected". Grow the receiver first.
 
 ## The `AutoPilot` class — read this before "deduplicating" it
 
@@ -581,7 +715,7 @@ Pitch   [YELLOW]  │  Bearing [ORANGE] │  Location [GREEN]
 Roll    [YELLOW]  ├───────────────────┴──────────────────────
 Stability[YELLOW] │  Date/Time [WHITE, 213px] │ Send WP btn
 ──────────────────┴──────────────────────────────────────────
-[sep]  Mode  << 10  < 1  1 >  10 >>  Enable/Disable
+[sep]  Mode  << 10  < 1  1 >  10 >>  Nav On/Off (read-only)
 ```
 
 Left column total height (198 px) = mid+right data (160 px) + date bar (38 px)
@@ -589,8 +723,11 @@ so all column tops and bottoms are flush.
 
 ### Controls
 
-Single button row: **Mode · << 10 · < 1 · 1 > · 10 >> · Enable/Disable**.
+Single button row: **Mode · << 10 · < 1 · 1 > · 10 >> · Nav On/Off**.
 All disabled when no link.  Mode + adjust buttons disabled when nav is off.
+**Nav On/Off is an indicator, permanently disabled** — navigation is the
+controller's motor-enable switch only.  It is kept as a `wxButton` rather than
+deleted so all three dock layouts keep their fixed-pixel geometry.
 Mode toggles 1 ↔ 2 (goes to 2 only if `waypoint_set`; otherwise stays at 1).
 Adjust buttons auto-switch controller from mode 2 → 1 before applying delta.
 

@@ -33,7 +33,6 @@ private:
     void BuildUI_TopBottom();
 
     void OnMode(wxCommandEvent& event);
-    void OnNavToggle(wxCommandEvent& event);
     void OnSendWP(wxCommandEvent& event);
     void OnSendRoute(wxCommandEvent& event);
     void OnPortShort(wxCommandEvent& event);

@@ -95,17 +95,12 @@ void AutoPilotLink::SendMode(int mode) {
     SendCommand(wxString::Format("m%d", mode));
 }
 
-void AutoPilotLink::SendNavEnable(bool enable) {
-    if (!m_state.nav_enabled && enable && m_state.mode == 1) {
-        m_state.heading_desired = m_state.heading;
-        m_state.bearing = m_state.heading_desired;
-        m_state.bearing_correction = 0.0;
-    }
-    m_state.nav_enabled = enable;
-    m_suppress_until_ms = wxGetLocalTimeMillis() + LOCAL_SUPPRESS_MS;
-    if (m_panel) m_panel->UpdateFromState(m_state, IsConnected());
-    SendCommand(wxString::Format("n%d", enable ? 1 : 0));
-}
+// No SendNavEnable() any more. Navigation is engaged and disengaged only by the
+// motor-enable switch on the controller board (controller/motorenable.ino), which
+// is also the motor's kill switch. The controller ignores 'n' on both of its
+// command surfaces now, so sending one would produce nothing but a two-second
+// optimistic flicker here before telemetry corrected it. nav_enabled stays in
+// AutoPilotState and is still parsed from ~APDAT - it is display-only.
 
 void AutoPilotLink::SendAdjust(float degrees) {
     if (m_state.mode == 2) {
@@ -574,6 +569,18 @@ void AutoPilotLink::ParseApdat(char* data) {
     // 0.0/false, which UpdateFromState treats the same as rudder_ok == false.
     s.rudder_angle = nextDouble();
     s.rudder_ok    = nextInt() != 0;
+    // Masthead wind; absent on older firmware → 0.0/false, and every consumer
+    // must gate on the *_ok flags rather than the values, since "0 degrees,
+    // 0 knots" is a perfectly plausible real reading (dead calm, dead ahead)
+    // and so cannot itself signal "no data".
+    s.wind_angle         = nextDouble();
+    s.wind_speed         = nextDouble();
+    s.wind_ok            = nextInt() != 0;
+    s.true_wind_angle    = nextDouble();
+    s.true_wind_speed    = nextDouble();
+    s.true_wind_ok       = nextInt() != 0;
+    s.air_temperature    = nextDouble();
+    s.air_temperature_ok = nextInt() != 0;
 
     // Preserve locally-commanded fields for LOCAL_SUPPRESS_MS after a button press,
     // matching the display unit's localCommandTime suppression in AutoPilot.cpp.

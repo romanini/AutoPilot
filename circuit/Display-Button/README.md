@@ -23,12 +23,12 @@ buttons tie into the matching net labels, and the SPI bus continues out of U3 â€
 either straight to an HX8357 module, or to the
 [LCD carrier board](../Display-LCD/README.md). CN2 powers the button backlights.
 
-One naming trap: the display mainboard calls the fifth button's net
-`BacklightBtn`, but the firmware currently reads that pin (`D4`) as
-`NAVIGATION_DISABLE_BUTTON_PIN` â€” today it is the **Enable** button. The net
-name is deliberate and forward-looking: once these boards are in, enable/disable
-moves to the motor **kill switch** on the controller, which frees this button up
-to do what its net says.
+The display mainboard calls the fifth button's net `BacklightBtn`, and that has
+now come true on the firmware side: enable/disable has moved to the motor
+**kill switch** on the controller (`firmware/Arduino/controller/motorenable.ino`),
+which is the only thing that engages navigation. The firmware reads that pin
+(`D4`) as `AUX_BUTTON_PIN`; it still carries auto-tune start/abort and is
+otherwise free for the backlight the net name promises.
 
 ---
 

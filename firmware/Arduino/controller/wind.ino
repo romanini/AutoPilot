@@ -125,6 +125,21 @@ bool isWindOk() {
   return autoPilot.isWindVaneOk();
 }
 
+// Is the derived true wind (AutoPilot::getTrueWind()) worth showing?
+//
+// True wind needs a boat speed on top of everything isWindOk() covers, and the
+// only speed this system has is SOG from the GPS - so with no fix there is no
+// true wind to report, only an apparent one. A consumer that ignored this would
+// not get a slightly-wrong true wind, it would get the apparent wind relabelled,
+// which is worse than showing nothing.
+//
+// Lives here rather than in AutoPilot for the same reason isWindOk() does: it
+// combines the class's state with the receive timeout, which the class has no
+// knowledge of.
+bool isTrueWindOk() {
+  return isWindOk() && autoPilot.hasFix();
+}
+
 // Milliseconds since the last ~APWND, or -1 if we have never heard from the
 // wind board at all.
 //

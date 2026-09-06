@@ -30,7 +30,6 @@ int telnet_count = BUF_SIZE;
 void process_adjust_bearing(CustomClientType& client, char buffer[]);
 void process_steer_angle(CustomClientType& client, char buffer[]);
 void process_mode(CustomClientType& client, char buffer[]);
-void process_navigation(CustomClientType& client, char buffer[]);
 void process_print(CustomClientType& client);
 void process_quit(CustomClientType& client);
 void process_waypoint(CustomClientType& client, char buffer[]);
@@ -50,6 +49,7 @@ bool relay_rudder_command(const char* cmd);     // defined in rudder.ino
 bool relay_wind_command(const char* cmd);       // defined in wind.ino
 bool isRudderOk();                              // defined in rudder.ino
 bool isWindOk();                                // defined in wind.ino
+bool isTrueWindOk();                            // defined in wind.ino
 long rudder_last_heard_ms();                    // defined in rudder.ino
 long wind_last_heard_ms();                      // defined in wind.ino
 
@@ -77,18 +77,6 @@ void process_steer_angle(CustomClientType& client, char buffer[]) {
   client.println("ok");
   DEBUG_PRINT("set steer angle ");
   DEBUG_PRINTLN(steer_angle);
-}
-
-void process_navigation(CustomClientType& client, char buffer[]) {
-  int new_nav = atoi(&buffer[1]);
-  if (new_nav >= 0 && new_nav <= 1) {
-    autoPilot.setNavigationEnabled(new_nav == 1);
-    DEBUG_PRINT("set navigation ");
-    DEBUG_PRINT(new_nav);
-    client.println("ok");
-  } else {
-    client.println("Invalid Navigation");
-  }
 }
 
 void process_mode(CustomClientType& client, char buffer[]) {
@@ -137,6 +125,16 @@ void process_print(CustomClientType& client) {
 
   client.print("Nav source: ");
   client.println(navsource_selected_name());
+
+  // Motor-enable / kill switch (motorenable.ino). Worth its own line because it
+  // now gates navigation: if Navigation below reads "disabled" and nothing on a
+  // display will re-enable it, this is the first place to look. The millivolts
+  // are the raw divider reading - ~2500 closed, ~0 open.
+  client.print("Motor enable: ");
+  client.print(motor_enable_switch_on() ? "on" : "off");
+  client.print(" (");
+  client.print(motor_enable_sense_mv());
+  client.println(" mV)");
 
   client.print("Navigation: ");
   if (autoPilot.isNavigationEndabled()) {
@@ -219,6 +217,29 @@ void process_print(CustomClientType& client) {
     } else {
       client.println("no data");
     }
+  } else {
+    client.println("no data");
+  }
+
+  // Derived here, not received from the masthead: the apparent wind above with
+  // the boat's own motion subtracted (AutoPilot::getTrueWind()). On its own
+  // line because it has its own failure mode - no GPS fix means no boat speed
+  // to subtract, which costs the true wind while leaving the apparent wind
+  // above perfectly good. SOG is echoed because it is the input that makes the
+  // two lines differ, and the usual reason they don't differ enough.
+  client.print("True wind: ");
+  if (isTrueWindOk()) {
+    float trueWindAngle = 0.0;
+    float trueWindSpeed = 0.0;
+    autoPilot.getTrueWind(trueWindAngle, trueWindSpeed);
+    client.print(trueWindAngle, 1);
+    client.print(" deg  ");
+    client.print(trueWindSpeed, 2);
+    client.print(" kn  (from ");
+    client.print(autoPilot.getSpeed(), 2);
+    client.println(" kn SOG)");
+  } else if (isWindOk()) {
+    client.println("no GPS fix - no boat speed to subtract");
   } else {
     client.println("no data");
   }
@@ -394,7 +415,7 @@ void process_help(CustomClientType& client) {
   client.println("\ta<heading offset> \t- Adjust heading to be <heading offset> from current heading.");
   client.println("\tg<nmea> \t\t- Inject a Garmin NMEA line (test the ~APRX relay).");
   client.println("\tm<1|2> \t\t\t- Set the mode 1 = compass, 2 = waypoint.");
-  client.println("\tn<0|1> \t\t\t- Navigation 0 = off, 1 = on");
+  client.println("\t\t\t\t  (navigation on/off is the motor-enable switch only)");
   client.println("\tp \t\t\t- Print current auto pilot status.");
   client.println("\tq \t\t\t- Quit the current session.");
   client.println("\tw<lat,long> \t\t- Set the waypoint to <lat,long>.");
@@ -439,9 +460,15 @@ void process_telnet(CustomClientType& client, char buffer[]) {
       process_mode(client, buffer);
       show_state = true;
       break;
+    // 'n' is kept only to answer back. Navigation is now engaged solely by the
+    // motor-enable switch (motorenable.ino), and telnet is the one command
+    // surface that can say so - the ~APCMD side just ignores 'n' because there
+    // is no one there to tell. Removing the case outright would make a typed
+    // 'n1' fall through to "Unknown command", which sends the operator looking
+    // for a typo instead of at the switch.
     case 'n':
-      process_navigation(client, buffer);
-      show_state = true;
+      client.println("Navigation is set by the motor-enable switch on the controller only.");
+      show_state = true;  // the Motor enable / Navigation lines below show where it stands
       break;
     case 'p':
       process_print(client);

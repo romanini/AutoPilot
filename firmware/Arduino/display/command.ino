@@ -52,15 +52,12 @@ void set_mode(int mode) {
 #endif
 }
 
-void set_navigation(int nav) {
-#ifndef MOCK_SEND
-  sprintf(command, "n%d", nav);
-  send_command(command);
-  autoPilot.setNavigationEnabled(nav == 1);
-  DEBUG_PRINT("set navigation ");
-  DEBUG_PRINTLN(nav);
-#endif
-}
+// No set_navigation() here any more. Navigation is engaged and disengaged only
+// by the motor-enable switch on the controller board (controller/motorenable.ino),
+// which is the kill switch - so the display shows nav_enabled from ~APDAT but
+// never authors it. The controller ignores 'n' on both of its command surfaces,
+// so sending one would only produce an optimistic local flicker that the next
+// telemetry frame undoes.
 
 // Relay auto-tune (autotune.ino): 1 = arm ("ready"), 2 = start running, 0 = abort.
 void send_autotune(int state) {

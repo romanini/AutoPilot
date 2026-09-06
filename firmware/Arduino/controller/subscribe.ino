@@ -92,13 +92,15 @@ void dispatch_command(char buffer[]) {
       }
       break;
     }
-    case 'n': {
-      int new_nav = atoi(&buffer[1]);
-      if (new_nav >= 0 && new_nav <= 1) {
-        autoPilot.setNavigationEnabled(new_nav == 1);
-      }
-      break;
-    }
+    // No 'n' (navigation on/off) case, deliberately. Navigation is engaged and
+    // disengaged only by the motor-enable switch on the controller board
+    // (motorenable.ino) - it is the kill switch, so it is the single authority,
+    // and check_motor_enable() would overwrite anything set from here on its
+    // next 10 ms tick anyway. Falling through to default (ignored) is the
+    // honest behaviour: an old display or plugin still sending 'n' gets no
+    // effect rather than a 100 ms flicker. ~APDAT still publishes nav_enabled,
+    // so they keep showing the state - they just no longer set it.
+
     case 'w': {
       // Route into the OPENCPN nav source rather than calling setWaypoint()
       // directly: the selector (navsource.ino) owns setWaypoint/setMode so it can

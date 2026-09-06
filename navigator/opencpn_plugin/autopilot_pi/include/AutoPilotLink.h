@@ -39,6 +39,32 @@ struct AutoPilotState {
     // as display/AutoPilot.cpp's isRudderOk().
     double rudder_angle;
     bool   rudder_ok;
+    // Masthead wind sensor board (firmware/Arduino/wind/), relayed by the
+    // controller (controller/wind.ino) and appended after the rudder fields.
+    // Only the display-facing subset is on the wire - the m/s, Beaufort and raw
+    // rev/s forms stay controller-side (see controller/publish.ino).
+    //
+    // Angles are 0-360 clockwise from the bow, speeds are knots. wind_ok is the
+    // controller's isWindOk() (vane magnet detected AND heard from within its
+    // 1s timeout), so a powered-off masthead reads as "no data" instead of a
+    // frozen value - same meaning as display/AutoPilot.cpp's isWindOk().
+    double wind_angle;        // apparent
+    double wind_speed;        // apparent
+    bool   wind_ok;
+    // True wind is computed on the controller (its AutoPilot::getTrueWind())
+    // rather than here, so the plugin and the TFT head units can never disagree
+    // about it. It is derived from SOG, not speed through water - this boat has
+    // no paddlewheel - so it carries current and leeway with it: fine to
+    // display, wrong to treat as polar data. true_wind_ok is the controller's
+    // isTrueWindOk(): wind_ok AND a GPS fix, since without a fix there is no
+    // boat speed to subtract.
+    double true_wind_angle;
+    double true_wind_speed;
+    bool   true_wind_ok;
+    // Separate flag: a dead DS18B20 costs nothing that matters, so it must not
+    // take the wind reading down with it, nor read as a real 0 C.
+    double air_temperature;   // degrees C
+    bool   air_temperature_ok;
 };
 
 class AutoPilotPanel;
@@ -57,7 +83,6 @@ public:
     const AutoPilotState& State() const { return m_state; }
 
     void SendMode(int mode);
-    void SendNavEnable(bool enable);
     void SendAdjust(float degrees);
     void SendWaypoint(double lat, double lon);
     void SendStopFollow();   // emits ~APCMD,X$ to clear OPENCPN source immediately

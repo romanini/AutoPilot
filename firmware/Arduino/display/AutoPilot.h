@@ -61,6 +61,22 @@ private:
   float rudder_angle;  // last angle from the rudder sensor board, 180 = dead center (see controller/rudder.ino)
   bool  rudder_ok;     // controller's isRudderOk(): sensor magnet detected AND received within its 1s timeout - not just a raw magnet flag
 
+  // Masthead wind sensor board (controller/wind.ino), relayed on ~APDAT. Only
+  // the display-facing subset arrives - the m/s, Beaufort and raw rev/s forms
+  // stay on the controller (see controller/publish.ino).
+  float wind_angle;       // apparent wind angle, 0-360 clockwise from the bow
+  float wind_speed;       // apparent wind speed, knots
+  bool  wind_ok;          // controller's isWindOk(): vane magnet detected AND received within its 1s timeout
+  // True wind is computed on the controller (AutoPilot::getTrueWind() there),
+  // not here, so every display and the OpenCPN plugin show the same numbers.
+  // It is SOG-derived, not speed-through-water - see that function's comment
+  // before using it for anything but a display.
+  float true_wind_angle;  // 0-360 clockwise from the bow
+  float true_wind_speed;  // knots
+  bool  true_wind_ok;     // controller's isTrueWindOk(): wind_ok AND a GPS fix
+  float air_temperature;  // masthead air temperature, degrees C
+  bool  air_temperature_ok;  // a DS18B20 answered - separate from wind_ok, since losing it costs nothing else
+
   float location_lat;   // current latitude
   float location_lon;  // current longitude
   bool destinationChanged;
@@ -105,7 +121,6 @@ public:
   void setMode(int mode);
   int getNavSource();
   bool isNavigationEnabled();
-  void setNavigationEnabled(bool nav);
   bool isWaypointSet();
   float getWaypointLat();
   float getWaypointLon();
@@ -124,6 +139,14 @@ public:
   bool  isDampedCourseValid();
   float getRudderAngle();
   bool  isRudderOk();
+  float getWindAngle();
+  float getWindSpeed();
+  bool  isWindOk();
+  float getTrueWindAngle();
+  float getTrueWindSpeed();
+  bool  isTrueWindOk();
+  float getAirTemperature();
+  bool  isAirTemperatureOk();
   float getLocationLat();
   float getLocationLon();
   bool hasDestinationChanged();

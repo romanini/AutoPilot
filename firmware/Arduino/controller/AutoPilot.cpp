@@ -508,6 +508,51 @@ bool AutoPilot::isWindTempOk() {
   return value;
 }
 
+// True wind, by subtracting the boat's own motion from the apparent wind
+// vector:
+//
+//   TWS = |(AWS*sin(AWA), AWS*cos(AWA) - V)|
+//   TWA = atan2(AWS*sin(AWA), AWS*cos(AWA) - V)
+//
+// where the first component is athwartships and the second fore-and-aft.
+//
+// V is SOG, because this boat has no paddlewheel and SOG is the only speed the
+// system has. Current and leeway therefore end up folded into the answer: it is
+// the right number for a wind display and a wind-angle steering reference, but
+// it is NOT true wind through the water, so it should not be fed to a polar or
+// logged as boat performance data. Anything showing it should say "true wind"
+// and mean "SOG-derived".
+//
+// Note also that AutoPilot::setSpeed() zeroes anything under
+// GPS_SPEED_DEADBAND_KNOTS, so below that speed this returns the apparent wind
+// unchanged. That is very close to correct anyway - at well under a knot there
+// is almost nothing to subtract - and it is far better than letting GPS noise
+// at rest swing the reported true wind angle around.
+//
+// The apparent angle goes in signed (-180..180, starboard positive) so atan2
+// gives a signed angle back; the result is normalized to the same 0-360
+// convention everything else in the wind path uses. atan2(0, 0) is 0, which is
+// the right answer for no wind and no motion.
+void AutoPilot::getTrueWind(float& angle_deg, float& speed_kn) {
+  this->lock();
+  float apparent_speed = this->wind_speed_kn;
+  float apparent_angle = this->wind_direction;
+  float boat_speed = this->speed;
+  this->unlock();
+
+  float signed_angle = normalizeDegrees(apparent_angle);
+  if (signed_angle > 180.0f) {
+    signed_angle -= 360.0f;
+  }
+
+  float radians = toRadians(signed_angle);
+  float athwartships = apparent_speed * sinf(radians);
+  float fore_aft = apparent_speed * cosf(radians) - boat_speed;
+
+  speed_kn = sqrtf(athwartships * athwartships + fore_aft * fore_aft);
+  angle_deg = normalizeDegrees(toDegrees(atan2f(athwartships, fore_aft)));
+}
+
 int AutoPilot::getStabilityClassification() {
   this->lock();
   float value = this->stability_classification;

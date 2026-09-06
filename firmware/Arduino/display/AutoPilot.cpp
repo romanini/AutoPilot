@@ -63,6 +63,14 @@ void AutoPilot::init() {
   cog_damped_valid = false;
   rudder_angle = 0.0;
   rudder_ok = false;
+  wind_angle = 0.0;
+  wind_speed = 0.0;
+  wind_ok = false;
+  true_wind_angle = 0.0;
+  true_wind_speed = 0.0;
+  true_wind_ok = false;
+  air_temperature = 0.0;
+  air_temperature_ok = false;
   location_lat = 0.0;
   location_lon = 0.0;
   destinationChanged = true;
@@ -176,23 +184,11 @@ bool AutoPilot::isNavigationEnabled() {
   return value;
 }
 
-void AutoPilot::setNavigationEnabled(bool enable) {
-  this->lock();
-  this->localCommandTime = millis();
-  if (this->navigation_enabled == false && enable == true) {
-    // if we are re-enabling and current mode is compass we should stat to navigate to current heading to previous one.
-    if (this->mode == 1) {
-      this->heading_desired = this->heading;
-      this->bearing = this->heading_desired;
-      this->bearing_correction = 0;
-    }
-  }
-  this->modeChanged = true;
-  this->destinationChanged = true;
-
-  this->navigation_enabled = enable;
-  this->unlock();  
-}
+// No setNavigationEnabled() any more. Navigation is authored solely by the
+// motor-enable switch on the controller (controller/motorenable.ino); here it is
+// a pure mirror, written only by parseAPDAT below. The optimistic-update
+// treatment the other operator fields get would be actively wrong for it -
+// there is no local action to be optimistic about.
 
 bool AutoPilot::isWaypointSet() {
   this->lock();
@@ -272,6 +268,62 @@ float AutoPilot::getRudderAngle() {
 bool AutoPilot::isRudderOk() {
   this->lock();
   bool value = this->rudder_ok;
+  this->unlock();
+  return value;
+}
+
+float AutoPilot::getWindAngle() {
+  this->lock();
+  float value = this->wind_angle;
+  this->unlock();
+  return value;
+}
+
+float AutoPilot::getWindSpeed() {
+  this->lock();
+  float value = this->wind_speed;
+  this->unlock();
+  return value;
+}
+
+bool AutoPilot::isWindOk() {
+  this->lock();
+  bool value = this->wind_ok;
+  this->unlock();
+  return value;
+}
+
+float AutoPilot::getTrueWindAngle() {
+  this->lock();
+  float value = this->true_wind_angle;
+  this->unlock();
+  return value;
+}
+
+float AutoPilot::getTrueWindSpeed() {
+  this->lock();
+  float value = this->true_wind_speed;
+  this->unlock();
+  return value;
+}
+
+bool AutoPilot::isTrueWindOk() {
+  this->lock();
+  bool value = this->true_wind_ok;
+  this->unlock();
+  return value;
+}
+
+float AutoPilot::getAirTemperature() {
+  this->lock();
+  float value = this->air_temperature;
+  this->unlock();
+  return value;
+}
+
+bool AutoPilot::isAirTemperatureOk() {
+  this->lock();
+  bool value = this->air_temperature_ok;
   this->unlock();
   return value;
 }
@@ -476,10 +528,10 @@ unsigned long AutoPilot::getAutoTuneReadyAt() {
   return value;
 }
 
-// Optimistic local update (mirrors setMode/setNavigationEnabled): applied
-// immediately so the screen reacts on the button press, then suppressed in
-// the parsed telemetry for LOCAL_COMMAND_SUPPRESS_MS so the next APDAT frame
-// (still reflecting the pre-command controller state) doesn't clobber it.
+// Optimistic local update (mirrors setMode): applied immediately so the screen
+// reacts on the button press, then suppressed in the parsed telemetry for
+// LOCAL_COMMAND_SUPPRESS_MS so the next APDAT frame (still reflecting the
+// pre-command controller state) doesn't clobber it.
 void AutoPilot::armAutoTune() {
   this->lock();
   this->localCommandTime = millis();
@@ -675,8 +727,13 @@ void AutoPilot::parseAPDAT(char *sentence) {
 
   bool suppressLocalFields = (millis() - this->localCommandTime) < LOCAL_COMMAND_SUPPRESS_MS;
 
+  // Deliberately outside the suppressLocalFields guard, unlike mode below: the
+  // display can no longer change navigation, so there is never a local value
+  // worth protecting here and the controller's word is always the current one.
+  // Suppressing it would only add up to LOCAL_COMMAND_SUPPRESS_MS of lag to the
+  // one field the operator most needs to see promptly - the kill switch.
   p = advance_field(p);  // Advance to the next field; NULL if none remain.
-  if (!suppressLocalFields) {
+  {
     int currentNavigationEnabled = this->navigation_enabled;
     if (!isEmpty(p)) {
       int navigation = atoi(p);
@@ -900,6 +957,74 @@ void AutoPilot::parseAPDAT(char *sentence) {
     this->rudder_ok = atoi(p) > 0;
   } else {
     this->rudder_ok = false;
+  }
+
+  // Masthead wind sensor board (controller/wind.ino), relayed on ~APDAT.
+  // Tolerant of absence like every trailing field before it, so a controller
+  // running older firmware parses as "no wind data" rather than as a real
+  // reading of 0 degrees / 0 knots - which on a wind display would be
+  // indistinguishable from a dead calm dead ahead.
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
+  if (!isEmpty(p)) {
+    this->wind_angle = atof(p);
+  } else {
+    this->wind_angle = 0.0;
+  }
+
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
+  if (!isEmpty(p)) {
+    this->wind_speed = atof(p);
+  } else {
+    this->wind_speed = 0.0;
+  }
+
+  // The controller's computed isWindOk() (vane magnet detected AND received
+  // within its 1s timeout), not the board's raw vane flag - see wind.ino.
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
+  if (!isEmpty(p)) {
+    this->wind_ok = atoi(p) > 0;
+  } else {
+    this->wind_ok = false;
+  }
+
+  // True wind arrives already computed (controller AutoPilot::getTrueWind()) so
+  // every display agrees; it is SOG-derived, and true_wind_ok is false whenever
+  // there is no fix to derive it from.
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
+  if (!isEmpty(p)) {
+    this->true_wind_angle = atof(p);
+  } else {
+    this->true_wind_angle = 0.0;
+  }
+
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
+  if (!isEmpty(p)) {
+    this->true_wind_speed = atof(p);
+  } else {
+    this->true_wind_speed = 0.0;
+  }
+
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
+  if (!isEmpty(p)) {
+    this->true_wind_ok = atoi(p) > 0;
+  } else {
+    this->true_wind_ok = false;
+  }
+
+  // Masthead air temperature, with its own flag: a dead DS18B20 costs nothing
+  // else, so it must not read as a real 0 C.
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
+  if (!isEmpty(p)) {
+    this->air_temperature = atof(p);
+  } else {
+    this->air_temperature = 0.0;
+  }
+
+  p = advance_field(p);  // Advance to the next field; NULL if none remain.
+  if (!isEmpty(p)) {
+    this->air_temperature_ok = atoi(p) > 0;
+  } else {
+    this->air_temperature_ok = false;
   }
 
   this->unlock();

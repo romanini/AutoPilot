@@ -17,7 +17,11 @@
 
 #define PORT_ADJUST_BUTTON_PIN D3
 #define STARBORD_ADJUST_BUTTON_PIN D2
-#define NAVIGATION_DISABLE_BUTTON_PIN D4
+// D4 used to be the navigation enable/disable button. Navigation is now set
+// only by the motor-enable switch on the controller (controller/motorenable.ino),
+// so this button no longer touches it and is free to be repurposed (screen
+// backlight). It still carries auto-tune start/abort - see its case below.
+#define AUX_BUTTON_PIN D4
 #define MODE_BUTTON_PIN D5
 #define TACK_BUTTON_PIN D6
 
@@ -28,7 +32,7 @@
 
 #define BUTTON_HOLD_TIME 1000
 
-const int button_pins[] = { PORT_ADJUST_BUTTON_PIN, NAVIGATION_DISABLE_BUTTON_PIN, MODE_BUTTON_PIN, STARBORD_ADJUST_BUTTON_PIN, TACK_BUTTON_PIN };
+const int button_pins[] = { PORT_ADJUST_BUTTON_PIN, AUX_BUTTON_PIN, MODE_BUTTON_PIN, STARBORD_ADJUST_BUTTON_PIN, TACK_BUTTON_PIN };
 const int num_buttons = sizeof(button_pins) / sizeof(button_pins[0]);
 
 unsigned long beep_on_time = 0;
@@ -208,7 +212,11 @@ void button_release(int pin) {
         }
       }
       break;
-    case NAVIGATION_DISABLE_BUTTON_PIN: {
+    case AUX_BUTTON_PIN: {
+      // Auto-tune start/abort only. The navigation enable/disable that used to
+      // live here is gone: that is the controller's motor-enable switch now.
+      // Outside a tune this button currently does nothing - it is the one
+      // reserved for the screen backlight.
       int atState = autoPilot.getAutoTuneState();
       if (atState == 2) {
         // Auto-tuning: this button is the abort switch.
@@ -218,17 +226,8 @@ void button_release(int pin) {
         // Ready/armed: this button fires the tune.
         DEBUG_PRINTLN("Starting auto-tune");
         send_autotune(2);
-      } else if (autoPilot.isNavigationEnabled()) {
-        set_navigation(0);
-        DEBUG_PRINTLN("Disabling Navigation");
-      } else {
-        set_navigation(1);
-        DEBUG_PRINTLN("Enabling Navigation");
       }
-      if (autoPilot.isTackRequested()) {
-        autoPilot.cancelTackRequested();
-      }
-      DEBUG_PRINTLN("Navigation on/off Button Pressed");
+      DEBUG_PRINTLN("Aux Button Pressed");
       break;
     }
     case MODE_BUTTON_PIN:

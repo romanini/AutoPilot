@@ -30,10 +30,12 @@ All communication uses plain-text UDP datagrams framed `~…$`, on four pairs of
 ports:
 
 - **Telemetry** `~APDAT,…$` — controller → everyone, **broadcast UDP 8888**, ~1 Hz.
-  31 fields: date/time, GPS fix, nav_enabled, mode, waypoint, heading, pitch,
-  roll, stability, bearing, speed, distance, course, location, and the rudder
-  angle with its health flag. `controller/publish.ino` is the wire format;
-  `AutoPilot::parse` is the reader.
+  39 fields: date/time, GPS fix, nav_enabled, mode, waypoint, heading, pitch,
+  roll, stability, bearing, speed, distance, course, location, the rudder angle
+  with its health flag, and the masthead wind — apparent angle/speed, the
+  controller-derived true angle/speed, and air temperature, each with its own
+  health flag. `controller/publish.ino` is the wire format; `AutoPilot::parse`
+  is the reader.
 - **Commands** `~APCMD,<cmd>$` — display or navigator → controller, **unicast
   UDP 8889**: `m1`/`m2` (mode), `n0`/`n1` (nav enable), `a±N.NN` (heading
   adjust), `w<lat>,<lon>` (set waypoint), `X` (follow stopped), `t0`/`t1`/`t2`

@@ -57,7 +57,7 @@ All colours match the TFT palette exactly.  Fixed pixel layout at 480 × ~275 px
 │                                        │  GPS(8)             │           │
 ├────────────────────────────────────────┴─────────────────────────────────┤
 │  ─────────────────────────────────────────────────────────────────────   │
-│   Mode    << 10    < 1    1 >    10 >>    Enable/Disable                 │
+│   Mode    << 10    < 1    1 >    10 >>    Nav On/Off (read-only)         │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -97,7 +97,7 @@ Single button row below the data area:
 | **< 1** | Connected + nav enabled | Adjust desired heading −1° |
 | **1 >** | Connected + nav enabled | Adjust desired heading +1° |
 | **10 >>** | Connected + nav enabled | Adjust desired heading +10° |
-| **Enable / Disable** | Connected | Toggle navigation enabled/disabled. Label reflects current state. All other buttons disabled when nav is off. |
+| **Nav On / Nav Off** | Never — permanently disabled | **Indicator, not a control.** Navigation is engaged and disengaged only by the motor-enable switch on the controller board (`controller/motorenable.ino`), which is also the motor kill switch. Reads `Nav --` with no link. All other buttons are disabled when nav is off. |
 | **Send WP** | Connected + active OpenCPN route leg | Send the active waypoint coordinates to the controller. Does not change mode. |
 
 All buttons are disabled when there is no link (no `~APDAT` received within 10 s).
@@ -165,11 +165,12 @@ autopilot_pi/
 - `ParsePacket()` parses `~APDAT` into `AutoPilotState` and calls
   `AutoPilotPanel::UpdateFromState()`.
 - Connection timeout: 10 s with no packet → `IsConnected()` returns false.
-- **Optimistic state**: `SendMode()`, `SendNavEnable()`, `SendAdjust()` each
-  update `m_state` locally, call `UpdateFromState()` immediately, and set a
-  2 s suppress window so the next telemetry packet does not overwrite the
-  locally-commanded fields (`nav_enabled`, `mode`, `heading_desired`,
-  `bearing`, `bearing_correction`).
+- **Optimistic state**: `SendMode()` and `SendAdjust()` each update `m_state`
+  locally, call `UpdateFromState()` immediately, and set a 2 s suppress window
+  so the next telemetry packet does not overwrite the locally-commanded fields
+  (`mode`, `heading_desired`, `bearing`, `bearing_correction`). `nav_enabled` is
+  deliberately **not** among them: the plugin cannot set it, so it is always
+  taken straight from telemetry.
 - `AutoPilotState` struct mirrors every field in the `~APDAT` sentence.
 
 **`AutoPilotPanel`** (`wxScrolledWindow`)
@@ -250,7 +251,9 @@ With the Raspberry Pi 5 on the SoberPilot network and the controller running:
 3. Within ~1 s the data cells populate (controller broadcasts every ~1 s).
 4. Heading, pitch, roll, bearing should match the physical display unit.
 5. Press **< 1** — desired heading decrements by 1°; physical display updates too.
-6. Press **Enable** — navigation enables; all other buttons become active.
+6. Flip the **motor-enable switch** on the controller — the indicator reads
+   `Nav On` within ~1 s and all other buttons become active. Nothing in the
+   plugin (or on a display) can enable navigation.
 7. Create and activate a route in OpenCPN — **Send WP** button activates.
 8. Click **Send WP** — controller receives waypoint; physical display shows
    `waypoint_set = true` in Destination cell.
