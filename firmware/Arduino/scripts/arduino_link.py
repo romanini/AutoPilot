@@ -28,6 +28,13 @@ import serial.tools.list_ports as list_ports
 BOARDS_FILE = Path(__file__).resolve().parent / "boards.json"
 LINK_DIR = Path.home() / ".arduino-ports"
 
+# A board's USB manufacturer/product strings come from whatever firmware is
+# running on it: a Nano ESP32 that hasn't been flashed with an Arduino sketch
+# yet reports "Espressif Systems" / "ARDUINO_NANO_NORA", which is exactly the
+# state a board is in before you register it. The vendor ID stays Arduino's
+# either way, so match on that (and keep the string as a fallback).
+ARDUINO_VIDS = {0x2341, 0x2A03}
+
 
 def load_boards():
     if not BOARDS_FILE.exists():
@@ -42,9 +49,11 @@ def save_boards(boards):
 def connected_arduinos():
     boards = []
     for p in list_ports.comports():
-        if p.manufacturer == "Arduino" and p.serial_number:
+        if not p.serial_number:
+            continue
+        if p.vid in ARDUINO_VIDS or p.manufacturer == "Arduino":
             boards.append(p)
-    return boards
+    return sorted(boards, key=lambda p: p.device)
 
 
 def cmd_list():
@@ -53,9 +62,16 @@ def cmd_list():
     if not found:
         print("No Arduino boards currently connected.")
         return
+    unregistered = 0
     for p in found:
-        name = boards.get(p.serial_number, "(unregistered)")
+        name = boards.get(p.serial_number)
+        if not name:
+            name = "(unregistered)"
+            unregistered += 1
         print(f"{p.serial_number}  {p.device}  {p.product or ''}  -> {name}")
+    if unregistered:
+        print(f"\n{unregistered} unregistered board(s); name one with:")
+        print("    arduino_link.py register <name> [serial]")
 
 
 def cmd_register(name, serial=None):

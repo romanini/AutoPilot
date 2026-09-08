@@ -5,7 +5,9 @@ A marine autopilot built on the **Arduino Nano ESP32**. One board (the
 (the **display**) is the cockpit head unit with an LCD and buttons; a third
 (the **rudder** sensor) reports rudder angle from an AS5600 magnetic sensor
 (boat is wheel-steered); a fourth (the **wind** sensor) sits at the masthead and
-reports apparent wind. They talk to each other over Wi-Fi using UDP.
+reports apparent wind; a fifth (the **wind-display**) is a second, listen-only
+head unit showing the wind on an analogue dial. They talk to each other over
+Wi-Fi using UDP.
 
 ```
    sensors                     Wi-Fi (SoftAP "SoberPilot", 10.20.1.x)
@@ -20,7 +22,12 @@ reports apparent wind. They talk to each other over Wi-Fi using UDP.
                 steering motor                                         HX8357 LCD + buttons
 ```
 
-## The four sketches
+Because the telemetry is a broadcast, head units are additive: the
+**wind-display** is a second station on the same UDP 8888, listening to the same
+datagram and drawing a different picture from it. It sends nothing back, so
+nothing on the controller side had to change to accommodate it.
+
+## The five sketches
 
 ### `controller/` — sensors, navigation, and steering
 Acts as the Wi-Fi access point (`SoftAP` SSID **SoberPilot**, `10.20.1.x`). It
@@ -171,6 +178,124 @@ against an unchanged `speed_hz` in the next packet.
 Note the two "offsets" are unrelated despite the shared word — the vane offset
 is an angle in encoder counts, the speed offset is a scalar in m/s.
 
+### `wind-display/` — cockpit wind display
+
+A second head unit, mounted on the cockpit bulkhead, showing the masthead wind
+as a classic analogue dial - a grey no-go wedge running from the hub out
+through the ring, red to port and green to starboard between it and the
+asymmetric sector, a fat amber arrow for apparent wind and a thin cyan one for
+true, both aimed inward at the boat from the bearing the wind is blowing from -
+over four large numbers (AWA/AWS, TWA/TWS) and a small SOG/HDG line.
+
+It is a **pure listener**: it joins SoberPilot as a station, receives the same
+broadcast `~APDAT` every other head unit gets, and never transmits anything at
+all. It has no buttons, no `command.ino`, and no display modes - it shows the
+wind and nothing else.
+
+Same 320x480 SPI panel as `display/`, and the same boot-time HX8357/ST7365P
+auto-detection (`tft.ino` is a verbatim copy), but run **portrait**
+(`setRotation(0)`) where the head unit runs landscape. It also drives the
+backlight pin, which `display/` does not - see below.
+
+| File | Responsibility |
+|------|----------------|
+| `wind-display.ino` | `setup()`/`loop()`, FreeRTOS task wiring |
+| `screen.ino` | Panel bring-up, the three screen states, and the numbers |
+| `dial.ino` | The dial itself: polar geometry, ring, no-go wedge, hull, pointers |
+| `dial.h` | Dial layout, palette, and why the ring is static |
+| `screen.h` | `ScreenState` - in a header so the generated prototypes can see it |
+| `subscribe.ino` | Listens on UDP 8888 for `~APDAT`, and reconnects Wi-Fi on timeout |
+| `wifi.ino` | Connects to the **SoberPilot** access point |
+| `AutoPilot.{h,cpp}` | Read-only mirror of the telemetry + the `~APDAT` parser |
+
+**Three screen states, deliberately distinguishable.** A blank or frozen dial
+would leave the operator unable to tell a flat battery at the masthead from a
+Wi-Fi dropout, and those are very different afternoons. So: no `~APDAT` inside
+the receive timeout gives a red **NO LINK / waiting for SoberPilot**; telemetry
+arriving with the controller's `isWindOk()` false gives an amber **NO WIND /
+masthead not reporting**; and true wind unavailable on its own - which has
+exactly one cause, no GPS fix, since the controller derives it from SOG - shows
+the apparent pointer as normal with **NO FIX** in the two true-wind fields.
+
+**Colour occupies only the sectors where "which side is the wind on" is the
+question being asked.** Two zones bracket it, and they differ in both shade and
+shape because they mean different things:
+
+- The **no-go wedge** (`NOGO_HALF_ANGLE`, 40° either side of the bow), near-black
+  slate, a full wedge from the hub — a prohibition, and an area you cannot enter.
+- The **asymmetric sector** (`RUN_HALF_ANGLE`, 60° either side of dead astern, so
+  edges at AWA 120°), muted indigo, a band on the ring only — an affordance:
+  abaft this line the asymmetric is the sail.
+
+Both are properties of the **boat**, not the instrument, and both are single
+`#define`s. The 60° is in *apparent* wind because that is what this scale is,
+and the conversion is worth keeping in view: sail-selection angles are naturally
+true-wind angles and the two diverge sharply off the wind. At 12 kn true, TWA
+120° with 6.8 kn of boat speed reads as AWA 86°; TWA 150° with 6.5 reads as AWA
+123°. So AWA 120° is around TWA 145–150° — past where a cruising asymmetric
+first goes up (nearer AWA 90°) and squarely in the middle of where it is
+carried. That is a deliberate trade: putting the edge at the strict hoist angle
+left colour on only 50° a side and washed the dial out, and the port/starboard
+cue through the reaching angles is worth more than marking the hoist exactly.
+What *not* to do is reach into the 135–150° range by analogy with true-wind
+figures — AWA 135° is TWA 155–160°, which is not an asymmetric angle at all.
+
+**The true arrow is painted on top of the apparent one, and that order is
+load-bearing.** The true arrow is shorter at both ends and narrower everywhere,
+so it lies strictly inside the apparent arrow's footprint at every radius —
+drawn underneath it does not merely overlap, it disappears completely, and the
+two coincide exactly whenever the boat is stopped (which includes every bench
+test). Painted on top it reads as a cyan core inside an amber border, with both
+legible whether they agree or not. `render.sh`'s `overlap` check paints the pair
+coincident at every whole degree and fails if a single cyan pixel ever touches
+the background, so retuning either arrow's proportions cannot quietly break it.
+
+**The arrows point inward**, wide end out at the bearing the wind is blowing
+from, point aimed at the boat. That costs some length: dirty regions are
+axis-aligned rectangles, and the bounding box of a chord lying on the diagonal
+has a corner at roughly 1.09x its radius, so anything drawn inside the ring has
+to stay within about r=106 or its tile would notch the ring. The arrows get
+their length by reaching further *in* instead, which the bounding box does not
+care about. `render.sh`'s `boxes` check enforces the limit over every angle -
+it is what caught this when the arrows were first reversed at their old length.
+
+**The interior is composited off-screen, and that is what stops it flickering.**
+Everything inside the ring is drawn through a `Surface` — either the panel or an
+off-screen `GFXcanvas16` tile — so a wind update reaches the glass as two to
+four contiguous pushes of *final* pixels rather than as a visible sequence of
+black-out, wedge, hull, needle. Only the rectangles the pointers moved through
+are repainted, merged where the union is still small enough to composite in one
+piece. Typical cost is 5–18k pixels, 3–12 ms of SPI, with no intermediate state
+to see at any update rate.
+
+**The screen damps what it draws.** The masthead vane is noisy and `~APDAT`
+delivers a raw snapshot of it once a second, so drawn as-is the needle teleports
+every second and the numbers flicker between neighbouring values. A first-order
+filter (`WIND_DAMPING_TAU_MS`, 350 ms) runs at the 20 Hz display tick over all
+four wind values, turning that into a glide; a 0.5° redraw deadband then lets a
+steady wind settle to zero redraws. The tick rate is the rate the needle
+*glides* at, not the rate readings arrive at — between packets the filter is
+still closing the gap, and every tick it does that on is a frame. The time
+constant is capped in practice by the 1 Hz telemetry: a filter that has not
+settled before the next reading lands is permanently chasing, which is what made
+an earlier 700 ms setting read as lag. Angles are filtered along the shortest arc —
+averaging 359° and 1° arithmetically gives 180°, and the needle would cross the
+stern to get there. This is display damping only: nothing is transmitted, and
+the controller still steers from its own undamped values.
+
+**It drives the backlight (`D8`), and `display/` does not.** The LCD carrier's
+backlight FET gate is held low by its own 100k pull-down, so an ST7365P panel
+comes up dark unless something drives that pin; the head units in service get
+away with it only because they are HX8357 breakouts with a hard-wired
+backlight. It is a plain `digitalWrite` for now - dimming wants a way to ask
+for it, and this unit has no buttons.
+
+**Why its `AutoPilot` class is so much smaller.** It is the third copy in the
+project and shares a shape with the other two, not a role - see the `autopilot`
+skill before merging any of them. This one has no optimistic-update suppression
+because it has no local changes to protect, and it stores only the ten fields it
+draws (the parser still walks all 39 by position; it just discards the rest).
+
 ## Communication protocol
 
 Plain-text UDP datagrams framed with a leading `~` and trailing `$`:
@@ -264,11 +389,11 @@ the sketches `#include` (`WiFi`, `AsyncUDP`, `SPI`, `Wire`, `USB`,
 | PID | Brett Beauregard | controller |
 | Time | Michael Margolis | controller, display |
 | Timezone | Jack Christensen | controller |
-| Adafruit GFX Library | Adafruit | display |
-| Adafruit HX8357 Library | Adafruit | display |
+| Adafruit GFX Library | Adafruit | display, wind-display |
+| Adafruit HX8357 Library | Adafruit | display, wind-display |
 | Adafruit AS5600 Library | Adafruit | rudder, wind |
 
-Installing the Adafruit libraries also pulls in **Adafruit BusIO** (all four
+Installing the Adafruit libraries also pulls in **Adafruit BusIO** (all five
 sketches) and **Adafruit Unified Sensor** (controller) as dependencies (the IDE
 offers to add them automatically; the `sketch.yaml` profiles list them
 explicitly).

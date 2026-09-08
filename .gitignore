@@ -18,3 +18,4 @@ circuit/tools/*-dump.json
 
 circuit/tools/projects.draft.json
 circuit/tools/inspect-screenshot.png
+firmware/experiments/wind-display-render/out/

@@ -16,6 +16,7 @@ controller itself hosts:
 | **Display unit(s)** | Arduino Nano ESP32 + 320×480 TFT | Cockpit head unit: live autopilot state on a colour LCD, five buttons for mode/heading control. Panel is an HX8357 module or a ST7365P, detected at boot |
 | **Rudder sensor** | Arduino Nano ESP32 + AS5600L | Standalone board at the quadrant: reports rudder angle, which a wheel-steered boat has no other way to know |
 | **Wind sensor** | Arduino Nano ESP32 + AS5600L, Hall switch, DS18B20 | Standalone masthead unit: apparent wind angle and speed, plus air temperature |
+| **Wind display** | Arduino Nano ESP32 + 320×480 TFT, portrait | Second head unit on the cockpit bulkhead: the masthead wind as an analogue dial, apparent and true. Listen-only — no buttons, transmits nothing |
 | **Navigator** | Raspberry Pi 5 (8 GB) + OpenCPN | Chart plotter: GPS, AIS and vector charts; the host for the plugin below. See [`navigator/README.md`](navigator/README.md) for the hardware alternatives that were evaluated |
 | **OpenCPN plugin** | `autopilot_pi` (C++/wxWidgets) | Software display unit inside OpenCPN: mirrors the TFT panel on screen, sends commands, pushes active waypoints to the controller |
 
@@ -63,7 +64,7 @@ Each has its own README with the detail — start there rather than here.
 
 | Directory | What's in it |
 |---|---|
-| [`firmware/`](firmware/README.md) | Everything that runs on a microcontroller: the four Arduino sketches, the Garmin emulator and NMEA test harness, and the offline PID experiments |
+| [`firmware/`](firmware/README.md) | Everything that runs on a microcontroller: the five Arduino sketches, the Garmin emulator and NMEA test harness, and the offline PID and wind-dial rendering experiments |
 | [`navigator/`](navigator/README.md) | Everything that runs on the Raspberry Pi 5: its setup, the config files as deployed, and the `autopilot_pi` OpenCPN plugin |
 | [`circuit/`](circuit/README.md) | EasyEDA exports for the seven PCBs, and how they stack into the four units |
 | [`cad/`](cad/README.md) | Enclosures, one directory per unit |
@@ -72,8 +73,8 @@ Each has its own README with the detail — start there rather than here.
 ## Quick-start by component
 
 **Firmware** — see [`firmware/Arduino/README.md`](firmware/Arduino/README.md) for pinouts,
-libraries, build, and upload commands. All four sketches (controller, display,
-rudder, wind) need a matching `arduino_secrets.h`.
+libraries, build, and upload commands. All five sketches (controller, display,
+rudder, wind, wind-display) need a matching `arduino_secrets.h`.
 
 **Navigator** — see [`navigator/README.md`](navigator/README.md) for the
 Raspberry Pi 5 build: Ubuntu 24.04, NVMe boot, Wi-Fi onto SoberPilot, and the

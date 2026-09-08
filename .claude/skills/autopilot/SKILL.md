@@ -34,6 +34,7 @@ system is split across boards that talk over Wi-Fi.
 | **OpenCPN plugin** | `autopilot_pi` C++/wxWidgets Flatpak extension | Software display unit inside OpenCPN — mirrors TFT layout, sends commands, pushes active waypoints to controller | `navigator/opencpn_plugin/autopilot_pi/` |
 | **Rudder sensor** | Arduino Nano ESP32 + AS5600 (I2C) | Standalone rudder angle sensor (boat is wheel-steered); joins SoberPilot as a station and reports angle to the controller over UDP | `firmware/Arduino/rudder/` |
 | **Wind sensor** | Arduino Nano ESP32 + AS5600 vane + reed-switch cup anemometer + DS18B20 | Standalone masthead wind sensor (Yachta head); joins SoberPilot as a station and reports apparent wind to the controller over UDP | `firmware/Arduino/wind/` |
+| **Wind display** | Arduino Nano ESP32 + the same 320x480 TFT, portrait | Second head unit, listen-only: draws the masthead wind as an analogue dial from `~APDAT`. No buttons, transmits nothing | `firmware/Arduino/wind-display/` |
 
 Supporting tooling: `firmware/experiments/pid/` (offline PID tuning experiments in
 Python/matplotlib), `circuit/` (KiCad/hardware), `cad/` (FreeCAD enclosure sources
@@ -208,6 +209,14 @@ update) · `command.ino` (`~APCMD` out) · `subscribe.ino` (`~APDAT` in) ·
 FreeRTOS tasks) · `angle.ino` (AS5600 read + calibration + the mutex) ·
 `publish.ino` (`~APRUD` out, 8890) · `subscribe.ino` (relayed `~APCMD,z$` in,
 8891) · `wifi.ino` (joins SoberPilot, auto-reconnect).
+
+**`wind-display/`** (Wi-Fi station, listens on 8888, sends nothing):
+`wind-display.ino` · `screen.ino` (three screen states + the numbers) ·
+`dial.ino` + `dial.h` (the gauge: ring, no-go wedge, hull, pointers) ·
+`screen.h` (`ScreenState`, in a header so the generated prototypes see it) ·
+`subscribe.ino` (`~APDAT` in) · `wifi.ino` · `tft.{h,ino}` +
+`Adafruit_ST7365.{h,cpp}` (verbatim copies of the display's) ·
+`AutoPilot.{h,cpp}` (read-only mirror + parser).
 
 **`wind/`** (Wi-Fi station, own ports — see below): `wind.ino` (setup +
 FreeRTOS tasks + sample cadence) · `Wind.{h,cpp}` (state model **and** the
@@ -571,6 +580,19 @@ once. It is computed there rather than on each display so the two TFT head
 units and the plugin can never disagree, and so there is one place to change
 when a speed-through-water sensor eventually replaces SOG.
 
+**A zero-length true wind vector has no direction, and `getTrueWind()` says so
+explicitly.** When the resultant is under `TRUE_WIND_MIN_KNOTS` the function
+returns the *apparent* angle rather than `atan2`'s answer, because `atan2(0, 0)`
+is 0 - or 180, depending which side of the axis the signed zeros land on - and
+that reads as a confident "dead ahead" while the vane plainly shows otherwise.
+It is the normal state on a workbench (cups stopped, boat stopped) and it was
+reported as a bug from exactly there. Holding the apparent angle is also correct
+in the limit: a stationary boat's true wind *is* its apparent wind.
+
+Note the test keys off the RESULT, not off the apparent speed. Zero apparent
+wind while moving is not degenerate at all - it means the true wind equals the
+boat's own speed, from dead astern - and the normal path gets that right.
+
 That SOG is the caveat worth repeating: the boat has no paddlewheel, so the
 "true" wind carries current and leeway. Right for a display and for steering a
 wind angle; wrong for polars or performance logs. `isTrueWindOk()` (wind.ino,
@@ -591,11 +613,11 @@ goes "not connected". Grow the receiver first.
 
 ## The `AutoPilot` class — read this before "deduplicating" it
 
-Both sketches have an `AutoPilot.{h,cpp}` that looks nearly identical (same field
-names, same mutex-guarded getter pattern). **They are not safe to merge into one
-shared file**, and this has already been investigated — don't redo that analysis
-from scratch or naively collapse them. The shared *shape* hides genuinely
-different, role-specific behavior:
+**Three** sketches now have an `AutoPilot.{h,cpp}` that looks nearly identical
+(same field names, same mutex-guarded getter pattern). **They are not safe to
+merge into one shared file**, and this has already been investigated — don't
+redo that analysis from scratch or naively collapse them. The shared *shape*
+hides genuinely different, role-specific behavior:
 
 - The **controller** is the authority: its setters compute navigation
   (`setFix` has the GPS-loss → compass-hold fallback, `setMode` returns `int` and
@@ -606,6 +628,14 @@ different, role-specific behavior:
   `localCommandTime` suppression, and broken-out `year/month/...` fields. Its
   `setMode` returns `void`; note the controller's accessor is misspelled
   `isNavigationEn**d**abled()` while the display's is `isNavigationEnabled()`.
+- The **wind-display** is a *read-only* mirror. It has no buttons and never
+  transmits, so it deliberately has **no** `localCommandTime` suppression (there
+  is no local change to protect, and suppressing would only add lag), no setters
+  beyond the parser and `setConnected`, and only the ten `~APDAT` fields it
+  actually draws. Its `parseAPDAT` walks all 39 positions in an indexed loop
+  with a `switch`, rather than the display's 39 copy-pasted blocks, and discards
+  the rest — adding a field to that screen means storing it, not changing the
+  walk. Do not "complete" it by copying the display's missing fields in.
 
 What is truly common is only the boilerplate (recursive-mutex `lock`/`unlock`,
 `normalizeDegrees`, `getCourseCorrection`, and the plain locked getters). If
@@ -613,6 +643,213 @@ sharing is ever desired, the only safe shape is a **shared base class**
 (`AutoPilotState` with the common fields/getters) plus a per-sketch subclass for
 the divergent logic — never a single flat superset, which would silently change
 one board's behavior.
+
+## The cockpit wind display (`firmware/Arduino/wind-display/`)
+
+A second head unit on the same 320x480 panel as `display/`, run **portrait**
+(`setRotation(0)`) instead of landscape, showing the masthead wind as an
+analogue dial. It is a pure listener — same broadcast `~APDAT`, no `~APCMD`, no
+buttons, no `command.ino` — so nothing on the controller side changed to
+support it. `tft.{h,ino}` and `Adafruit_ST7365.{h,cpp}` are verbatim copies of
+the display's, except that this `tft.h` **enables `TFT_BL` (D8)** and
+`setup_screen()` drives it high: the LCD carrier's backlight gate is held low by
+its own 100k pull-down, so an ST7365P panel comes up dark otherwise. The head
+units in service get away without it only because they are HX8357 breakouts.
+
+**The static-ring / repainted-interior split is the load-bearing design
+decision.** The ring (r 118..152: red/grey/green arcs, ticks, degree labels) is
+drawn once at boot and never touched; only the interior (no-go wedge, hull, the
+two pointers) repaints. That is why the degree labels sit *on* the ring band
+rather than inside it as they would on a paper dial — it keeps everything the
+pointers sweep over to a handful of cheap shapes. Adafruit_GFX has no clipping
+and no colour framebuffer to double-buffer with, so a repaint that had to
+restore text from under a needle would mean clearing the whole disc: ~30 ms of
+visible black flash, once a second, forever.
+
+**The interior is composited off-screen — do not draw it straight at the
+panel.** Everything inside the ring goes through a `Surface` (dial.h: a
+`Adafruit_GFX*` plus an origin offset), so the identical code paints either to
+the screen or into a `GFXcanvas16` tile that is pushed in one `drawRGBBitmap`.
+This was a fix for a reported fault, not a premature optimisation: the first
+version drew straight at the panel — black out the old needle, repaint the
+wedge, repaint the hull, draw the new needle — four separate SPI bursts per
+update, and at 1 Hz in a shifty breeze the operator watches it happen and reads
+it as the dial flashing. Composited, a frame is 2–4 contiguous pushes of final
+pixels (5–18k px, 3–12 ms) with no intermediate state visible at any rate.
+
+Only the rectangles the pointers moved through are repainted, merged where the
+union is still under `DIAL_MAX_TILE_PIXELS` **and** still has all four corners
+inside the interior circle. That second test is not optional: tiles are filled
+edge to edge, and the union of a pointer at 0° with one at 90° has a corner out
+at r=160, well past the ring — which is painted once at boot and never
+repainted, so the damage would be permanent. Single pointer boxes always pass
+(worst case r=114.1 against the interior's 116; the host renderer's `boxes`
+check brute-forces all 3600 tenth-degree angles).
+
+**The arrows point inward, and that caps how long they can be.** Wide end out
+at the bearing the wind blows from, point aimed at the boat — pointing outward
+would read as the boat throwing wind at the horizon. The cap is a property of
+the repaint scheme, not taste: dirty regions are axis-aligned rectangles, and
+the bounding box of a chord on the diagonal has a corner at about
+`r * sqrt(2) * sin(45 + halfwidth)` ≈ 1.09·r, which crosses the ring's inner
+edge (118) long before the chord does. So anything inside the ring must stay
+within about r=106 — `APPARENT_R_WIDE` is 102, giving a worst-case box corner of
+114.9 against the 116 limit. Length comes from `R_POINT` reaching further *in*,
+which the bounding box does not care about. Reversing the arrows at their
+original length put the corner at 124.8, and the `boxes` check caught it before
+it ever reached hardware.
+
+There is no hub dot any more: it marked the pivot of a needle, and inward arrows
+have no pivot.
+
+**Draw order is apparent first, true on top — do not "fix" it back.** The true
+arrow is shorter at both ends and narrower everywhere (48..94 against 34..102,
+half-width 6 against 11), so it lies *strictly inside* the apparent arrow's
+footprint at every radius. Underneath, it does not merely overlap — it vanishes,
+and the two coincide exactly whenever the boat is stopped, so every bench test
+hits it. It was reported as a bug from precisely there. On top it reads as a
+cyan core inside an amber border, about 4 px at the wide end tapering to the
+point. The containment is what makes this work, so anything that retunes the two
+arrows' proportions has to preserve it; `render.sh`'s `overlap` check paints the
+pair coincident at every whole degree and fails if one cyan pixel touches the
+background.
+
+(An earlier comment argued the opposite order, on the grounds that the apparent
+arrow is the one the helm steers by and so belongs on top. That reasoning is
+fine and the conclusion is still wrong: an invisible arrow beats a slightly
+less prominent one.)
+
+**Pointer rectangles are vertex bounding boxes, not slightly larger triangles —
+don't "optimise" that back either.** The larger-triangle version is the obvious
+approach and it silently does not work: `fillTriangle` rasterises from integer
+vertices, so re-rounding them moves scanline spans by a pixel and the grown fill
+misses occasional edge pixels near the thin tip. At 1 Hz those accumulate into a
+spray of stale amber and cyan specks across the dial within a minute. A bounding
+box is a superset by construction however the rasteriser rounds.
+
+**The ring is four arcs, not two.** Colour occupies only the sectors where
+"which side is the wind on" is the question the helm is asking; two grey zones
+bracket it. Forward, the no-go sector carries the wedge's own shade right
+through the ring (`NOGO_R_OUT` = `DIAL_R_IN`, so wedge and arc meet with no
+seam) — inside that edge the boat is not going anywhere on either tack. Aft, the
+asymmetric sector (`RUN_HALF_ANGLE`, 60° either side of dead astern, so its
+edges land on AWA 120°) ends the colour aft: from there the asymmetric is the
+sail.
+
+The two differ in shade *and* shape, and both differences carry meaning: the
+no-go is near-black slate and a full wedge from the hub (a prohibition, an area
+you cannot enter); the asymmetric sector is a lighter indigo and a ring band
+only (an affordance — somewhere you can go, with a different sail up). They were
+briefly the same shade, which read as "neither of these is a sector" and got
+more misleading as the aft one grew to half the dial. `DIAL_RUN` = `DIAL_NOGO`
+reverts it.
+
+`ring_color()` is the single source of truth for which arc a bearing falls on.
+
+**`RUN_HALF_ANGLE` is set for APPARENT wind, and that is the whole subtlety.**
+This dial's scale is AWA, but sail-selection angles are naturally TWA, and the
+two diverge sharply off the wind: at 12 kn true, TWA 120° with 6.8 kn of boat
+speed reads as AWA 86°, and TWA 150° with 6.5 kn reads as AWA 123°. So the
+strict hoist angle for a cruising asymmetric is around the apparent beam, and 60
+(AWA 120°) sits deeper than that on purpose — at the beam, colour covered only
+50° a side and the dial washed out, and the port/starboard cue through the
+reaching angles is worth more than marking the hoist to the degree. **Do not
+reach for a number in the 135-150 range here by analogy with true-wind
+figures**; AWA 135° is TWA 155-160°, which is not an asymmetric angle at all but
+the deep limit where a symmetric kite starts dying behind the main. (That
+mistake was made once already, in this file.) Like `NOGO_HALF_ANGLE`, it is a
+property of the boat, not the instrument.
+
+**Degree labels are blitted transparently** (`drawBitmap` with no background
+colour), over the already-painted ring. Passing `ring_color()` as a background
+instead works only while no label straddles an arc boundary, and a label box is
+~12° wide at that radius - so a sector angle within 6° of a labelled tick would
+paint a solid rectangle of one arc's colour across its neighbour. Drawing
+transparently decouples the sector angles from the label positions entirely,
+which is what lets `RUN_HALF_ANGLE` sit exactly on the 90 marks.
+
+**The screen damps what it draws** (`WIND_DAMPING_TAU_MS`, 350 ms, first-order,
+stepped at the 20 Hz display tick over all four wind values), with a 0.5° redraw
+deadband so a steady wind settles to zero redraws instead of chasing vane noise.
+
+The tick rate is the rate the needle *glides* at, not the rate readings arrive
+at: between the 1 Hz packets the filter is still closing the gap, and every tick
+it does that on is a frame. That same 1 Hz is what caps the time constant - a
+filter still unsettled when the next reading lands is permanently chasing, and
+an earlier 700 ms setting read as visible lag for exactly that reason (only ~76%
+of each step covered before the next arrived). The deadband is the other half of
+the smoothness: one pixel at the pointer tip is ~0.4°, so a 1° deadband advanced
+the needle in visible ~2.5 px hops.
+
+Two more things about the filter are load-bearing:
+
+- **Angles are filtered along the shortest arc.** Averaging 359° and 1°
+  arithmetically gives 180° — a needle asked to cross the bow would sweep all
+  the way round the stern to get there.
+- **The filter is stepped exactly once per tick, in `display()`, and the result
+  is handed to the dial and the numbers together** (the `WindReading` struct).
+  Damping them separately would let the needle and the figure under it disagree.
+
+It is display damping only — nothing is transmitted, and the controller still
+steers from its own undamped values. The constant is `#ifndef`-guarded so the
+host renderer can build a second binary with it off; its repaint diffs need
+undamped values, because a filter converges asymptotically and never lands on
+exactly the same pixel twice.
+
+**Numbers cache the rendered string, not the value.** With damping, the
+underlying floats change every tick, so comparing them would repaint "47S" over
+"47S" ten times a second. `TextCache`/`text_changed()` compare the text, colour
+and font, so a field is touched only when it actually reads differently.
+
+**Three screen states, and they must stay distinguishable.** `SCREEN_NO_LINK`
+(no `~APDAT` inside the receive timeout) → red "NO LINK / waiting for
+SoberPilot"; `SCREEN_NO_WIND` (link fine, controller's `isWindOk()` false) →
+amber "NO WIND / masthead not reporting"; and, separately from the states,
+true-wind-unavailable-alone shows the apparent pointer normally with **NO FIX**
+in the true-wind fields — that has exactly one cause (no GPS fix, since the
+controller derives true wind from SOG) so it is worth naming. A blank or frozen
+dial would leave the operator unable to tell a dead masthead from a Wi-Fi
+dropout, which are very different afternoons.
+
+**The header guards are namespaced (`WIND_DISPLAY_SCREEN_H`,
+`WIND_DISPLAY_DIAL_H`) and must stay that way.** `dial.h` defines `SCREEN_H` as
+the panel's pixel height, which is exactly the guard name `screen.h` would
+otherwise use. Whichever lost the race would either warn about a redefinition
+or — if `dial.h` got there first — find its guard already "defined", emit
+nothing at all, and leave every type in it missing with the errors pointing at
+`screen.ino`. It survived on include order alone until the collision warning was
+spotted in a build log.
+
+**Every sketch-defined type used in a function signature lives in a header the
+main sketch includes** — `ScreenState`, `TextCache`, `Damped` and `WindReading`
+in `screen.h`; `Surface` and `DialRect` in `dial.h`; and `wind-display.ino`
+includes both. The Arduino build emits its generated prototypes at the top of
+the concatenated sketch, so a type defined part-way down a .ino is invisible to
+the prototype for the function that uses it — same trap as `TftType`/`tft.h` and
+`CustomClientType` in `telnet.ino`, and it bit three times while this sketch was
+written. The failure is "'X' does not name a type" pointing hundreds of lines
+from the cause. For a related reason `dial.h` carries
+`extern Adafruit_SPITFT *tft;`: .ino files are concatenated in alphabetical
+order after the main sketch, so `dial.ino` compiles before `screen.ino` defines
+it.
+
+**Text must never wrap.** `draw_text()` calls `setTextWrap(false)`, because GFX
+wraps by default and a string one pixel wider than its canvas folds onto a
+second line *inside the same box*, coming out as two overlapping half-rows that
+look like a font bug. Measured widths that matter: "APPARENT" is 100 px at
+9pt (box 104); the dial's message sub-line is 9pt because at 12pt the longest of
+those strings is 269 px against the 216 px that fits inside the ring.
+
+**There is a host renderer for this screen.** `dial.ino` and the layout half of
+`screen.ino` compile unmodified against a framebuffer subclass of
+`Adafruit_SPITFT` plus the real `Adafruit_GFX.cpp`, which is how the wrap bug,
+the message overflow and the pointer-erase leak were all found without
+hardware. It also carries the two checks that keep the repaint honest: a
+91-frame sweep and a link-loss recovery each diffed against a from-scratch paint
+of the same reading (both must be 0 differing pixels), and the `boxes` brute
+force over every pointer angle. Run `./render.sh` after any change to
+`dial.ino` — it is one command and it has caught every bug in this screen so
+far.
 
 ## Building & uploading
 

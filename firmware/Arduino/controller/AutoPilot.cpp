@@ -18,6 +18,11 @@
 // set in setup_gps() (0.2 m/s ~= 0.39 kn) so it acts as a true backstop.
 #define GPS_SPEED_DEADBAND_KNOTS 0.8
 
+// Below this the true wind vector is treated as having no length, and therefore
+// no direction - see getTrueWind(). Far under anything a cup anemometer can
+// resolve, so it only ever catches the genuinely degenerate case.
+#define TRUE_WIND_MIN_KNOTS 0.05
+
 // Hysteresis latch for trusting raw COG enough to fold it into the damped
 // average (Doppler COG quality scales with speed; PMTK386 freezes course
 // entirely near 0). Same values/reasoning as the old COG_FALLBACK_ENABLED
@@ -531,8 +536,7 @@ bool AutoPilot::isWindTempOk() {
 //
 // The apparent angle goes in signed (-180..180, starboard positive) so atan2
 // gives a signed angle back; the result is normalized to the same 0-360
-// convention everything else in the wind path uses. atan2(0, 0) is 0, which is
-// the right answer for no wind and no motion.
+// convention everything else in the wind path uses.
 void AutoPilot::getTrueWind(float& angle_deg, float& speed_kn) {
   this->lock();
   float apparent_speed = this->wind_speed_kn;
@@ -550,7 +554,27 @@ void AutoPilot::getTrueWind(float& angle_deg, float& speed_kn) {
   float fore_aft = apparent_speed * cosf(radians) - boat_speed;
 
   speed_kn = sqrtf(athwartships * athwartships + fore_aft * fore_aft);
-  angle_deg = normalizeDegrees(toDegrees(atan2f(athwartships, fore_aft)));
+
+  if (speed_kn < TRUE_WIND_MIN_KNOTS) {
+    // A vector with no length has no direction, and atan2 does not say so - it
+    // returns 0 or 180 depending on which side of the axis the signed zeros
+    // happen to land on. Left alone that reads as a confident "dead ahead" or
+    // "dead astern" while the vane plainly shows otherwise, which is exactly
+    // what a boat on a workbench sees: cups stopped, boat stopped, apparent
+    // wind pointing wherever the vane was left.
+    //
+    // Hold the apparent angle instead. It is the only direction information
+    // that exists in this case, and it is also *correct* in the limit: a
+    // stationary boat's true wind is its apparent wind, whatever the strength.
+    //
+    // Note this deliberately keys off the RESULT, not off the apparent speed.
+    // Zero apparent wind while moving is not degenerate at all - it means the
+    // true wind is exactly the boat's own speed, from dead astern, and the
+    // normal path below gets that right.
+    angle_deg = normalizeDegrees(apparent_angle);
+  } else {
+    angle_deg = normalizeDegrees(toDegrees(atan2f(athwartships, fore_aft)));
+  }
 }
 
 int AutoPilot::getStabilityClassification() {
