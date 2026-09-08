@@ -90,7 +90,7 @@ be reachable from both has to be wired up twice. Who can send what today:
 | `a` `m` `w` | display, plugin | yes |
 | `t` (autotune) | display, plugin | `pat` (arm only) |
 | `X` | plugin | no |
-| `z` `v` `d` `k` (sensor calibration) | plugin sends `z` only | **yes, all four** |
+| `z` `v` `d` `k` (sensor calibration) | plugin sends all four (Settings dialog) | **yes, all four** |
 | `n` (navigation on/off) | **retired — ignored** | **retired** — replies with why |
 
 The displays send only `a`, `m`, `t` — they have buttons, not a keyboard, so the
@@ -349,9 +349,10 @@ is safe to call repeatedly (same reason and same shape as
 `display/subscribe.ino`). Powersave is disabled (`WiFi.setSleep(false)`) for the
 same reason it is on the navigator's `wlan0`.
 
-**Done since:** the OpenCPN plugin's rudder box and "Center now" button
-(`AutoPilotLink.cpp` sends `z`, `AutoPilotPanel.cpp` confirms first), and the
-telnet `z` command.
+**Done since:** the OpenCPN plugin's rudder box and "Zero Rudder" button, now
+living in the Settings dialog (`AutoPilotLink::SendZeroRudder` sends `z`,
+`AutoPilotSettingsDialog::OnZeroRudder` confirms first), and the telnet `z`
+command.
 
 **Publish rate (50 Hz, not the original 1 Hz):** unlike the human-readable
 1 Hz `~APDAT` broadcast, rudder angle is meant to eventually feed a real
@@ -389,8 +390,9 @@ over **Bluetooth**, not by restoring the web server.
   `~APCMD,d<±degrees>$` (vane trim) and `~APCMD,k<slope>,<offset>$` (speed
   calibration). Verbs `v`/`d`/`k` because `dispatch_command()` switches on
   `buffer[0]` alone and `a/m/n/w/X/t/z` are taken; same reasoning that picked
-  `z` for the rudder. **None is relayed by the controller yet** — three cases
-  need adding alongside the existing `case 'z':`.
+  `z` for the rudder. All three are relayed by the controller (see "Controller
+  side (done)" below) and all three are now reachable from the OpenCPN plugin's
+  Settings dialog (`AutoPilotLink::SendVaneZero/SendVaneNudge/SendWindSpeedCal`).
 
 **`speed_hz` is on the wire for calibration, not steering.** Every other speed
 field has the cup geometry *and* the fitted slope/offset baked in; rev/s is
@@ -872,11 +874,15 @@ Gotchas worth remembering:
 
 ## Debugging
 
-- No dedicated monitor script exists anymore (`monitor/monitorAutoPilot.py` was
-  removed in commit `7709125`, "cleaning up", 2026-06-20). For raw traffic on
-  any machine on the `SoberPilot` network, plain `nc -ul 8888` prints the
-  broadcast `~APDAT,...$` lines unparsed (plain text, comma-separated) — good
-  enough for "is the controller sending anything" but doesn't decode fields.
+- `navigator/usr/local/bin/apdat-monitor.py` listens on UDP 8888 and redraws a
+  single, continuously-updating decoded snapshot of the latest `~APDAT` packet
+  (same fields as telnet's `p`, minus the motor-enable millivolt reading,
+  which isn't on the wire). Run it on the navigator or any machine on the
+  `SoberPilot` network. This replaces `monitor/monitorAutoPilot.py`, removed in
+  commit `7709125`, "cleaning up", 2026-06-20 — that one is gone for good, this
+  is a fresh script, not a restoration. For raw unparsed traffic, plain
+  `nc -ul 8888` still works too — good enough for "is the controller sending
+  anything" but doesn't decode fields.
 - The controller also exposes a **telnet** console (`controller/telnet.ino`).
 
 ## The navigation computer (Raspberry Pi 5)
@@ -952,7 +958,7 @@ Pitch   [YELLOW]  │  Bearing [ORANGE] │  Location [GREEN]
 Roll    [YELLOW]  ├───────────────────┴──────────────────────
 Stability[YELLOW] │  Date/Time [WHITE, 213px] │ Send WP btn
 ──────────────────┴──────────────────────────────────────────
-[sep]  Mode  << 10  < 1  1 >  10 >>  Nav On/Off (read-only)
+[sep]  Mode  << 10  < 1  1 >  10 >>
 ```
 
 Left column total height (198 px) = mid+right data (160 px) + date bar (38 px)
@@ -960,17 +966,36 @@ so all column tops and bottoms are flush.
 
 ### Controls
 
-Single button row: **Mode · << 10 · < 1 · 1 > · 10 >> · Nav On/Off**.
+Single button row: **Mode · << 10 · < 1 · 1 > · 10 >>**.
 All disabled when no link.  Mode + adjust buttons disabled when nav is off.
-**Nav On/Off is an indicator, permanently disabled** — navigation is the
-controller's motor-enable switch only.  It is kept as a `wxButton` rather than
-deleted so all three dock layouts keep their fixed-pixel geometry.
+There is no Nav On/Off button — navigation is engaged and disengaged only by
+the controller's motor-enable switch (`controller/motorenable.ino`); the
+plugin can only display that state, which it does via the **Mode** cell
+(reads `Disabled` when nav is off).  A prior version kept a permanently-
+disabled "Nav On/Off" button as a pure indicator so all three dock layouts
+kept their fixed-pixel geometry — it was removed since the Mode cell already
+carries that information and a dead button was redundant.
 Mode toggles 1 ↔ 2 (goes to 2 only if `waypoint_set`; otherwise stays at 1).
 Adjust buttons auto-switch controller from mode 2 → 1 before applying delta.
 
 **Send WP** button (embedded in data area, bottom-right): enabled only when
 connected AND OpenCPN has an active route leg.  Sends `~APCMD,w<lat>,<lon>$`
 without changing mode — user controls mode separately.
+
+**Settings** button (own row, same slot the old Zero Rudder button used to
+occupy in all three dock layouts): opens `AutoPilotSettingsDialog`, a modeless
+window (`Show()`, not `ShowModal()`) so its wind-vane trim buttons can be
+tapped repeatedly while watching AWA update live from the still-running main
+panel underneath. Houses every calibration described in the rudder/wind
+sensor sections above: Zero Rudder (`z`, gated on nav disabled, confirmed), Zero Vane (`v`,
+confirmed — needs a hand on the vane), vane Trim ±1°/±10° (`d<±deg>`, no
+confirm — repeated taps are the expected usage), and Wind Speed Calibration
+slope/offset (`k<slope>,<offset>`, confirmed since it's a silent full
+overwrite with no readback). `AutoPilotPanel` holds a non-owning pointer to it
+and forwards every `UpdateFromState()` tick while it's open; because the
+dialog is parented to the panel, `SetDockMode()` explicitly destroys it before
+`DestroyChildren()` rather than letting that call reap it out from under the
+pointer.
 
 ### Build
 

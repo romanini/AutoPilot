@@ -35,12 +35,14 @@ set(SRCS
     src/autopilot_pi.cpp
     src/AutoPilotLink.cpp
     src/AutoPilotPanel.cpp
+    src/AutoPilotSettingsDialog.cpp
 )
 
 set(HDRS
     include/autopilot_pi.h
     include/AutoPilotLink.h
     include/AutoPilotPanel.h
+    include/AutoPilotSettingsDialog.h
     include/version.h
 )
 

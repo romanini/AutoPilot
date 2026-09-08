@@ -6,6 +6,7 @@
 #include <wx/timer.h>
 #include <wx/checkbox.h>
 #include "AutoPilotLink.h"
+#include "AutoPilotSettingsDialog.h"
 
 enum class DockMode { FLOAT, RIGHT, TOP_BOTTOM };
 
@@ -42,7 +43,7 @@ private:
     void OnUndock(wxCommandEvent& event);
     void OnFollowChanged(wxCommandEvent& event);
     void OnHeartbeat(wxTimerEvent& event);
-    void OnZeroRudder(wxCommandEvent& event);
+    void OnSettings(wxCommandEvent& event);
 
     AutoPilotLink* m_link;
     DockMode       m_dock_mode;
@@ -77,16 +78,20 @@ private:
     wxButton*   m_btn_stbd_short;
     wxButton*   m_btn_stbd_long;
     wxButton*   m_btn_mode;
-    wxButton*   m_btn_nav_toggle;
     wxButton*   m_btn_send_wp;
     wxButton*   m_btn_send_route;
     wxButton*   m_btn_undock;   // null in FLOAT mode
-    // Only enabled while connected AND navigation is disabled - zeroing while
-    // the controller is actively steering would recalibrate center out from
-    // under a live PID loop. Confirmed via a dialog (OnZeroRudder) before the
-    // ~APCMD,z$ command actually goes out.
-    wxButton*   m_btn_zero_rudder;
+    // Opens/raises m_settings_dlg - rudder/wind calibration, not a live control.
+    wxButton*   m_btn_settings;
     wxCheckBox* m_chk_follow;
+
+    // Non-owning once shown: the dialog destroys itself (see
+    // AutoPilotSettingsDialog::OnClose) and clears this via its close
+    // callback. Also explicitly torn down in SetDockMode before
+    // DestroyChildren() - it is parented to this panel, so left alone it
+    // would otherwise be destroyed out from under that pointer on every
+    // dock-mode switch.
+    AutoPilotSettingsDialog* m_settings_dlg;
 
     bool     m_navigate_available;
     double   m_navigate_lat;

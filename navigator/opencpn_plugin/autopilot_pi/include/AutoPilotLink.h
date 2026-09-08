@@ -93,6 +93,24 @@ public:
     // the next ~APRUD-derived rudder_angle settling near 180.
     void SendZeroRudder();
 
+    // Wind vane calibration - see the autopilot skill's masthead wind sensor
+    // section for what "v"/"d"/"k" each mean on the wire. All three are
+    // fire-and-forget, same as SendZeroRudder: no ack exists, so the caller
+    // confirms via the next ~APWND-derived reading.
+    //
+    // Emits ~APCMD,v$ - relayed to the wind board, which zeroes the vane at
+    // its current physical position (bench calibration, needs a hand on the
+    // vane aligned to the bow).
+    void SendVaneZero();
+    // Emits ~APCMD,d<±degrees>$ - relayed to the wind board, which nudges the
+    // stored vane offset by this amount. Requests accumulate on the board
+    // side, so repeated taps are the expected usage, not a bug.
+    void SendVaneNudge(float degrees);
+    // Emits ~APCMD,k<slope>,<offset>$ - relayed to the wind board, which
+    // overwrites its speed calibration outright (not incremental, unlike the
+    // vane trim above).
+    void SendWindSpeedCal(float slope, float offset);
+
     // §1c — wrap a single NMEA sentence as ~APTX and unicast to controller
     void SendNmea(const wxString& nmea_line);
 

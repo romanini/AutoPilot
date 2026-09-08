@@ -621,6 +621,15 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now wifi-keepalive.service
 ```
 
+To confirm telemetry is actually arriving (and watch it live), run the monitor
+script checked into this repo at `navigator/usr/local/bin/apdat-monitor.py` — it
+listens on UDP 8888 and redraws a single, continuously-updating snapshot of the
+latest `~APDAT` packet, the same fields as the controller's telnet `p` command:
+
+```bash
+python3 ~/dev/AutoPilot/navigator/usr/local/bin/apdat-monitor.py
+```
+
 ---
 
 ### Serial port permissions

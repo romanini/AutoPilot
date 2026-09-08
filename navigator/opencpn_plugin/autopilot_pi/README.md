@@ -57,7 +57,7 @@ All colours match the TFT palette exactly.  Fixed pixel layout at 480 × ~275 px
 │                                        │  GPS(8)             │           │
 ├────────────────────────────────────────┴─────────────────────────────────┤
 │  ─────────────────────────────────────────────────────────────────────   │
-│   Mode    << 10    < 1    1 >    10 >>    Nav On/Off (read-only)         │
+│   Mode    << 10    < 1    1 >    10 >>                                   │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -97,10 +97,37 @@ Single button row below the data area:
 | **< 1** | Connected + nav enabled | Adjust desired heading −1° |
 | **1 >** | Connected + nav enabled | Adjust desired heading +1° |
 | **10 >>** | Connected + nav enabled | Adjust desired heading +10° |
-| **Nav On / Nav Off** | Never — permanently disabled | **Indicator, not a control.** Navigation is engaged and disengaged only by the motor-enable switch on the controller board (`controller/motorenable.ino`), which is also the motor kill switch. Reads `Nav --` with no link. All other buttons are disabled when nav is off. |
 | **Send WP** | Connected + active OpenCPN route leg | Send the active waypoint coordinates to the controller. Does not change mode. |
+| **Settings** | Connected | Opens the rudder/wind calibration window (see below). |
+
+Navigation itself is not controllable from this panel at all — it is engaged
+and disengaged only by the motor-enable switch on the controller board
+(`controller/motorenable.ino`), which is also the motor kill switch. Whether
+nav is on is shown in the **Mode** cell (`Disabled` when off); all buttons
+above except Send WP and Settings are disabled while nav is off.
 
 All buttons are disabled when there is no link (no `~APDAT` received within 10 s).
+
+### Settings dialog
+
+**Settings** opens a modeless `AutoPilotSettingsDialog` window with the rudder
+and wind-vane calibrations documented in the autopilot skill's rudder/wind
+sensor sections. It's modeless (`Show()`, not `ShowModal()`) rather than a
+blocking dialog so the trim buttons can be tapped repeatedly while watching
+AWA update live underneath. Only one instance exists at a time — clicking
+Settings again while it's open just raises it.
+
+| Control | Sends | Notes |
+|---|---|---|
+| **Zero Rudder** | `~APCMD,z$` | Recalibrates dead-center from the rudder's current physical position. Confirmed via dialog. Disabled while nav is enabled — recalibrating under a live PID loop would yank the helm. |
+| **Zero Vane** | `~APCMD,v$` | Zeroes the wind vane at its current physical position. Confirmed via dialog — needs a hand holding the vane aligned to the bow. |
+| **Trim ±1°/±10°** | `~APCMD,d<±degrees>$` | Nudges the stored vane offset. No confirmation — designed for repeated taps (e.g. while tacking to find the correction). Requests accumulate on the wind board. |
+| **Wind Speed Calibration → Apply** | `~APCMD,k<slope>,<offset>$` | Overwrites the anemometer's linear-fit slope/offset outright. Confirmed via dialog echoing the values, since it's a silent full overwrite with no readback. Values come from an external calibration run (log against a reference speed source), not from anything visible in this dialog. |
+
+None of `z`/`v`/`d`/`k` have an ack, so the dialog shows *live readings*
+(current rudder angle, current AWA/AWS) for context but can never show what
+offset/slope is currently stored on either board — same limitation the rest
+of this project's calibration commands already live with.
 
 ### Optimistic UI
 
@@ -137,14 +164,16 @@ autopilot_pi/
 ├── flatpak/
 │   └── org.opencpn.OpenCPN.Plugin.autopilot.yaml   # Flatpak extension manifest
 ├── include/
-│   ├── version.h          # plugin v0.1, API v1.17
-│   ├── autopilot_pi.h     # AutoPilotPlugin — opencpn_plugin_117 subclass
-│   ├── AutoPilotLink.h    # UDP socket layer; AutoPilotState struct
-│   └── AutoPilotPanel.h   # wxScrolledWindow panel
+│   ├── version.h                    # plugin v0.1, API v1.17
+│   ├── autopilot_pi.h               # AutoPilotPlugin — opencpn_plugin_117 subclass
+│   ├── AutoPilotLink.h              # UDP socket layer; AutoPilotState struct
+│   ├── AutoPilotPanel.h             # wxScrolledWindow panel
+│   └── AutoPilotSettingsDialog.h    # modeless rudder/wind calibration window
 └── src/
-    ├── autopilot_pi.cpp   # plugin lifecycle, toolbar, SetActiveLegInfo
-    ├── AutoPilotLink.cpp  # receive/parse ~APDAT, send ~APCMD, optimistic state
-    └── AutoPilotPanel.cpp # BuildUI (fixed-pixel layout), UpdateFromState
+    ├── autopilot_pi.cpp             # plugin lifecycle, toolbar, SetActiveLegInfo
+    ├── AutoPilotLink.cpp            # receive/parse ~APDAT, send ~APCMD, optimistic state
+    ├── AutoPilotPanel.cpp           # BuildUI (fixed-pixel layout), UpdateFromState
+    └── AutoPilotSettingsDialog.cpp  # Zero Rudder / Zero Vane / vane trim / speed cal
 ```
 
 ### Class responsibilities
@@ -181,6 +210,21 @@ autopilot_pi/
   on every telemetry tick (~4 Hz).
 - `SetNavigateTarget()` called by the plugin when the active OpenCPN waypoint
   changes; enables/disables the Send WP button accordingly.
+- Owns (non-owning raw pointer) the `AutoPilotSettingsDialog` opened by the
+  Settings button; forwards each `UpdateFromState()` call to it while open, and
+  explicitly destroys it in `SetDockMode()` before `DestroyChildren()` — it is
+  parented to the panel, so a dock-mode switch would otherwise destroy it out
+  from under that pointer without going through its close callback.
+
+**`AutoPilotSettingsDialog`** (`wxDialog`, modeless)
+- Rudder/wind calibration window opened from the main panel's Settings button.
+- `UpdateFromState()` refreshes live rudder-angle/AWA-AWS readouts and the
+  Zero Rudder enable state (disabled while nav is enabled) on every tick.
+- Zero Rudder / Zero Vane both confirm via `wxMessageDialog` before sending;
+  the vane trim buttons and speed-cal Apply do not (trim is designed for
+  repeated taps, and Apply already confirms the typed values before sending).
+- Calls `SetCloseCallback()` on the owning panel so the panel's pointer is
+  cleared the moment the window closes itself.
 
 ### Key constants (AutoPilotPanel.cpp)
 
@@ -251,11 +295,18 @@ With the Raspberry Pi 5 on the SoberPilot network and the controller running:
 3. Within ~1 s the data cells populate (controller broadcasts every ~1 s).
 4. Heading, pitch, roll, bearing should match the physical display unit.
 5. Press **< 1** — desired heading decrements by 1°; physical display updates too.
-6. Flip the **motor-enable switch** on the controller — the indicator reads
-   `Nav On` within ~1 s and all other buttons become active. Nothing in the
-   plugin (or on a display) can enable navigation.
+6. Flip the **motor-enable switch** on the controller — the Mode cell drops
+   `Disabled` within ~1 s and the Mode/adjust buttons become active. Nothing
+   in the plugin (or on a display) can enable navigation.
 7. Create and activate a route in OpenCPN — **Send WP** button activates.
 8. Click **Send WP** — controller receives waypoint; physical display shows
    `waypoint_set = true` in Destination cell.
 9. Click **Mode** — controller switches to mode 2 (waypoint navigate);
    Bearing cell tracks course to waypoint.
+10. Click **Settings** — the calibration window opens with live rudder-angle
+    and AWA/AWS readings; while nav is enabled, Zero Rudder is disabled but
+    Zero Vane/Trim/speed-cal Apply are not.
+11. Tap a vane **Trim** button — the wind board's reported AWA should shift by
+    that amount on the next `~APWND`/`~APDAT` tick.
+12. Click **Zero Rudder** with nav disabled — confirm dialog appears; after
+    confirming, the rudder-angle readout should settle near 0° (dead-center).

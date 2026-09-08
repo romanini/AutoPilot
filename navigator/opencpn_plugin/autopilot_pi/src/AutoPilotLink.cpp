@@ -128,6 +128,18 @@ void AutoPilotLink::SendZeroRudder() {
     SendCommand("z");
 }
 
+void AutoPilotLink::SendVaneZero() {
+    SendCommand("v");
+}
+
+void AutoPilotLink::SendVaneNudge(float degrees) {
+    SendCommand(wxString::Format("d%+.1f", degrees));
+}
+
+void AutoPilotLink::SendWindSpeedCal(float slope, float offset) {
+    SendCommand(wxString::Format("k%.4f,%.4f", slope, offset));
+}
+
 // ---------------------------------------------------------------------------
 // §1c — NMEA send path
 // ---------------------------------------------------------------------------

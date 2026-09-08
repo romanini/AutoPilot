@@ -9,7 +9,6 @@
 // Button / control IDs
 enum {
     ID_BTN_MODE       = wxID_HIGHEST + 1,
-    ID_BTN_NAV_TOGGLE,
     ID_BTN_PORT_SHORT,
     ID_BTN_PORT_LONG,
     ID_BTN_STBD_SHORT,
@@ -17,7 +16,7 @@ enum {
     ID_BTN_SEND_WP,
     ID_BTN_SEND_ROUTE,
     ID_BTN_UNDOCK,
-    ID_BTN_ZERO_RUDDER,
+    ID_BTN_SETTINGS,
     ID_CHK_FOLLOW,
 };
 
@@ -34,7 +33,7 @@ wxBEGIN_EVENT_TABLE(AutoPilotPanel, wxScrolledWindow)
     EVT_BUTTON(ID_BTN_SEND_WP,    AutoPilotPanel::OnSendWP)
     EVT_BUTTON(ID_BTN_SEND_ROUTE, AutoPilotPanel::OnSendRoute)
     EVT_BUTTON(ID_BTN_UNDOCK,     AutoPilotPanel::OnUndock)
-    EVT_BUTTON(ID_BTN_ZERO_RUDDER, AutoPilotPanel::OnZeroRudder)
+    EVT_BUTTON(ID_BTN_SETTINGS,   AutoPilotPanel::OnSettings)
     EVT_CHECKBOX(ID_CHK_FOLLOW,   AutoPilotPanel::OnFollowChanged)
     EVT_TIMER(wxID_ANY,           AutoPilotPanel::OnHeartbeat)
 wxEND_EVENT_TABLE()
@@ -163,14 +162,13 @@ static wxStaticText* MakeVal(wxPanel* inner, const wxColour& col, int pt,
 // Initial-disable helper shared by all layouts
 static void DisableNavButtons(wxButton* port_long, wxButton* port_short,
                                wxButton* stbd_short, wxButton* stbd_long,
-                               wxButton* mode, wxButton* nav_toggle)
+                               wxButton* mode)
 {
     port_long->Enable(false);
     port_short->Enable(false);
     stbd_short->Enable(false);
     stbd_long->Enable(false);
     mode->Enable(false);
-    nav_toggle->Enable(false);
 }
 
 // ---------------------------------------------------------------------------
@@ -182,6 +180,7 @@ AutoPilotPanel::AutoPilotPanel(wxWindow* parent, AutoPilotLink* link)
     , m_link(link)
     , m_dock_mode(DockMode::FLOAT)
     , m_btn_undock(nullptr)
+    , m_settings_dlg(nullptr)
     , m_navigate_available(false)
     , m_navigate_lat(0.0)
     , m_navigate_lon(0.0)
@@ -203,6 +202,13 @@ bool AutoPilotPanel::SetDockMode(DockMode mode) {
     bool follow_checked = m_chk_follow->IsChecked();  // preserve across rebuild
 
     Freeze();
+    // Explicitly torn down first: it is parented to this panel, so
+    // DestroyChildren() below would otherwise destroy it out from under
+    // m_settings_dlg without going through its close callback.
+    if (m_settings_dlg) {
+        m_settings_dlg->Destroy();
+        m_settings_dlg = nullptr;
+    }
     DestroyChildren();  // schedules all child windows for deletion
     m_btn_undock = nullptr;
 
@@ -393,19 +399,12 @@ void AutoPilotPanel::BuildUI_Float()
     m_btn_port_short = new wxButton(this, ID_BTN_PORT_SHORT, "< 1");
     m_btn_stbd_short = new wxButton(this, ID_BTN_STBD_SHORT, "1 >");
     m_btn_stbd_long  = new wxButton(this, ID_BTN_STBD_LONG,  "10 >>");
-    // Read-only. Navigation is set only by the controller's motor-enable
-    // switch (controller/motorenable.ino) - see UpdateFromState. Kept as a
-    // button rather than deleted so the three dock layouts keep their
-    // fixed-pixel geometry; it is permanently disabled and only ever shows
-    // where navigation stands.
-    m_btn_nav_toggle = new wxButton(this, ID_BTN_NAV_TOGGLE, "Nav Off");
     m_btn_send_route->SetMinSize(kBtnSz);
     m_btn_mode->SetMinSize(kBtnSz);
     m_btn_port_long->SetMinSize(kBtnSz);
     m_btn_port_short->SetMinSize(kBtnSz);
     m_btn_stbd_short->SetMinSize(kBtnSz);
     m_btn_stbd_long->SetMinSize(kBtnSz);
-    m_btn_nav_toggle->SetMinSize(kBtnSz);
     m_btn_send_route->Enable(false);
 
     auto* btn_row = new wxBoxSizer(wxHORIZONTAL);
@@ -420,28 +419,26 @@ void AutoPilotPanel::BuildUI_Float()
     btn_row->AddStretchSpacer(1);
     btn_row->Add(m_btn_stbd_short, 0, wxRIGHT, 4);
     btn_row->AddStretchSpacer(1);
-    btn_row->Add(m_btn_stbd_long,  0, wxRIGHT, 4);
-    btn_row->AddStretchSpacer(1);
-    btn_row->Add(m_btn_nav_toggle, 0);
+    btn_row->Add(m_btn_stbd_long,  0);
     btn_row->AddStretchSpacer(1);
     root->Add(btn_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 3);
 
-    // Zero Rudder sits on its own row - the row above is already tuned to
-    // exactly fill kPanelW (480px) with 7 fixed-width buttons and 8 stretch
+    // Settings sits on its own row - the row above is already tuned to
+    // exactly fill kPanelW (480px) with 6 fixed-width buttons and 7 stretch
     // spacers; a longer, differently-sized label here would overflow it.
-    m_btn_zero_rudder = new wxButton(this, ID_BTN_ZERO_RUDDER, "Zero Rudder");
-    m_btn_zero_rudder->Enable(false);
-    auto* zero_row = new wxBoxSizer(wxHORIZONTAL);
-    zero_row->AddStretchSpacer(1);
-    zero_row->Add(m_btn_zero_rudder, 0);
-    zero_row->AddStretchSpacer(1);
-    root->Add(zero_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 3);
+    m_btn_settings = new wxButton(this, ID_BTN_SETTINGS, "Settings");
+    m_btn_settings->Enable(false);
+    auto* settings_row = new wxBoxSizer(wxHORIZONTAL);
+    settings_row->AddStretchSpacer(1);
+    settings_row->Add(m_btn_settings, 0);
+    settings_row->AddStretchSpacer(1);
+    root->Add(settings_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 3);
 
     m_btn_undock = nullptr;  // no undock button in float mode
 
     DisableNavButtons(m_btn_port_long, m_btn_port_short,
                       m_btn_stbd_short, m_btn_stbd_long,
-                      m_btn_mode, m_btn_nav_toggle);
+                      m_btn_mode);
 
     SetSizer(root);
     SetScrollRate(5, 5);
@@ -606,20 +603,15 @@ void AutoPilotPanel::BuildUI_Right()
     BtnRow(m_btn_port_long, m_btn_stbd_long);
 
     // ── Mode  |  Enable/Disable ────────────────────────────────────────────
-    m_btn_mode       = new wxButton(this, ID_BTN_MODE,       "Mode");
-    // Read-only. Navigation is set only by the controller's motor-enable
-    // switch (controller/motorenable.ino) - see UpdateFromState. Kept as a
-    // button rather than deleted so the three dock layouts keep their
-    // fixed-pixel geometry; it is permanently disabled and only ever shows
-    // where navigation stands.
-    m_btn_nav_toggle = new wxButton(this, ID_BTN_NAV_TOGGLE, "Nav Off");
-    BtnRow(m_btn_mode, m_btn_nav_toggle);
+    m_btn_mode = new wxButton(this, ID_BTN_MODE, "Mode");
+    m_btn_mode->SetMinSize(wxSize(1, kBtnH_Right));
+    root->Add(m_btn_mode, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, kPad);
 
-    // ── Zero Rudder ────────────────────────────────────────────────────────
-    m_btn_zero_rudder = new wxButton(this, ID_BTN_ZERO_RUDDER, "Zero Rudder");
-    m_btn_zero_rudder->SetMinSize(wxSize(1, kBtnH_Right));
-    m_btn_zero_rudder->Enable(false);
-    root->Add(m_btn_zero_rudder, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, kPad);
+    // ── Settings ───────────────────────────────────────────────────────────
+    m_btn_settings = new wxButton(this, ID_BTN_SETTINGS, "Settings");
+    m_btn_settings->SetMinSize(wxSize(1, kBtnH_Right));
+    m_btn_settings->Enable(false);
+    root->Add(m_btn_settings, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, kPad);
 
     // ── Undock ─────────────────────────────────────────────────────────────
     m_btn_undock = new wxButton(this, ID_BTN_UNDOCK, "Undock");
@@ -628,7 +620,7 @@ void AutoPilotPanel::BuildUI_Right()
 
     DisableNavButtons(m_btn_port_long, m_btn_port_short,
                       m_btn_stbd_short, m_btn_stbd_long,
-                      m_btn_mode, m_btn_nav_toggle);
+                      m_btn_mode);
 
     SetSizer(root);
     SetScrollRate(5, 5);
@@ -775,21 +767,14 @@ void AutoPilotPanel::BuildUI_TopBottom()
 
     ctrl->AddStretchSpacer(1);
 
-    m_btn_mode       = new wxButton(this, ID_BTN_MODE,       "Mode");
-    // Read-only. Navigation is set only by the controller's motor-enable
-    // switch (controller/motorenable.ino) - see UpdateFromState. Kept as a
-    // button rather than deleted so the three dock layouts keep their
-    // fixed-pixel geometry; it is permanently disabled and only ever shows
-    // where navigation stands.
-    m_btn_nav_toggle = new wxButton(this, ID_BTN_NAV_TOGGLE, "Nav Off");
-    ctrl->Add(m_btn_mode,       0, wxALIGN_CENTER_VERTICAL | wxRIGHT, kBtnPad);
-    ctrl->Add(m_btn_nav_toggle, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, kBtnPad);
+    m_btn_mode = new wxButton(this, ID_BTN_MODE, "Mode");
+    ctrl->Add(m_btn_mode, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, kBtnPad);
 
     ctrl->AddStretchSpacer(1);
 
-    m_btn_zero_rudder = new wxButton(this, ID_BTN_ZERO_RUDDER, "Zero Rudder");
-    m_btn_zero_rudder->Enable(false);
-    ctrl->Add(m_btn_zero_rudder, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, kBtnPad);
+    m_btn_settings = new wxButton(this, ID_BTN_SETTINGS, "Settings");
+    m_btn_settings->Enable(false);
+    ctrl->Add(m_btn_settings, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, kBtnPad);
 
     ctrl->AddStretchSpacer(1);
 
@@ -800,7 +785,7 @@ void AutoPilotPanel::BuildUI_TopBottom()
 
     DisableNavButtons(m_btn_port_long, m_btn_port_short,
                       m_btn_stbd_short, m_btn_stbd_long,
-                      m_btn_mode, m_btn_nav_toggle);
+                      m_btn_mode);
 
     SetSizer(root);
     SetScrollRate(5, 5);
@@ -898,11 +883,6 @@ void AutoPilotPanel::UpdateFromState(const AutoPilotState& s, bool connected)
     }
 
     bool nav_on = connected && s.nav_enabled;
-    // Indicator, not a control: navigation follows the controller's motor-enable
-    // switch and nothing here can change it. Disabled unconditionally - a live
-    // button that silently did nothing would be worse than an obviously inert one.
-    m_btn_nav_toggle->Enable(false);
-    m_btn_nav_toggle->SetLabel(!connected ? "Nav --" : (nav_on ? "Nav On" : "Nav Off"));
     m_btn_mode->Enable(nav_on);
     m_btn_port_long->Enable(nav_on);
     m_btn_port_short->Enable(nav_on);
@@ -910,9 +890,11 @@ void AutoPilotPanel::UpdateFromState(const AutoPilotState& s, bool connected)
     m_btn_stbd_long->Enable(nav_on);
     m_btn_send_wp->Enable(connected && m_navigate_available);
     m_btn_send_route->Enable(connected && !m_route_guid.IsEmpty());
-    // Only safe to zero while the controller isn't actively steering -
-    // recalibrating center out from under a live PID loop would yank the helm.
-    m_btn_zero_rudder->Enable(connected && !s.nav_enabled);
+    // Unlike Zero Rudder inside it, Settings itself only needs a link - it's
+    // just a window with live readings, and the per-action safety gating
+    // (e.g. nav-enabled for Zero Rudder) lives in the dialog itself.
+    m_btn_settings->Enable(connected);
+    if (m_settings_dlg) m_settings_dlg->UpdateFromState(s, connected);
 
     Layout();
 }
@@ -1037,24 +1019,19 @@ void AutoPilotPanel::OnSendRoute(wxCommandEvent&)
     }
 }
 
-// Confirms before sending ~APCMD,z$ (relayed to the rudder sensor board,
-// see AutoPilotLink::SendZeroRudder) - this recalibrates the board's
-// dead-center offset from whatever position the rudder is physically in
-// right now, so a mis-timed press with the rudder off-center would silently
-// miscalibrate steering. The button is already disabled while nav_enabled
-// (see UpdateFromState), but re-check here too since IsConnected()/state can
-// change between the button being enabled and the dialog closing.
-void AutoPilotPanel::OnZeroRudder(wxCommandEvent&)
+// Opens the rudder/wind calibration window, or just raises it if already
+// open. Modeless (see AutoPilotSettingsDialog) so it can keep refreshing
+// live readings while the user works with it.
+void AutoPilotPanel::OnSettings(wxCommandEvent&)
 {
-    if (!m_link || !m_link->IsConnected() || m_link->State().nav_enabled) return;
-
-    wxMessageDialog dlg(this,
-        "Center the rudder firmly amidships before continuing.\n\n"
-        "For best results, keep the boat stationary while doing this.",
-        "Zero Rudder", wxOK | wxCANCEL | wxICON_QUESTION);
-    dlg.SetOKCancelLabels("Zero", "Cancel");
-    if (dlg.ShowModal() == wxID_OK)
-        m_link->SendZeroRudder();
+    if (m_settings_dlg) {
+        m_settings_dlg->Raise();
+        return;
+    }
+    m_settings_dlg = new AutoPilotSettingsDialog(this, m_link);
+    m_settings_dlg->SetCloseCallback([this]() { m_settings_dlg = nullptr; });
+    m_settings_dlg->UpdateFromState(m_link->State(), m_link->IsConnected());
+    m_settings_dlg->Show(true);
 }
 
 void AutoPilotPanel::OnUndock(wxCommandEvent&)
