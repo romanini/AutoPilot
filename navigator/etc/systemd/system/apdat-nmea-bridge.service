@@ -1,0 +1,12 @@
+[Unit]
+Description=Bridge ~APDAT wind fields to NMEA0183 MWV over UDP for OpenCPN
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/apdat-nmea-bridge.py
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
