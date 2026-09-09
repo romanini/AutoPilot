@@ -2,7 +2,7 @@
 #include <WiFi.h>
 #include <AsyncUDP.h>
 
-#define PUBLISH_INTERVAL 1000
+#define PUBLISH_INTERVAL 200
 // Sized for the longest ~APDAT the formats below can produce (208 chars with
 // every field at full width) plus headroom for the next batch of trailing
 // fields. The build is snprintf-bounded rather than trusting this number, but
