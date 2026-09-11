@@ -25,7 +25,7 @@ slot in cleanly:
   (Options → Connections → Network, UDP/TCP) pointed at the sensor and gets apparent
   wind natively; its dashboard computes true wind from SOG/heading.
 - A wired NMEA 0183 sensor instead runs down the mast to either a controller UART
-  (third NMEA input) or a USB-serial dongle on the OrangePi.
+  (third NMEA input) or a USB-serial dongle on the Raspberry Pi 5.
 - NMEA 2000-only sensors are a poor fit — we have no N2K backbone, so they'd need a
   ~$150–250 gateway plus power/backbone hardware.
 - Long-term bonus: wind data in the controller enables a future **wind-vane steering
@@ -66,7 +66,7 @@ conversion (~€50), InqWind, and a universal firmware that covers several of th
 Conventional vane/cup masthead unit, wired NMEA 0183 output, 20 m thin cable included.
 - **Pros:** commercial reliability at the lowest wired-commercial price; NMEA 0183
   plugs straight into a controller UART (like the Garmin input) or a $15 USB-serial
-  on the OrangePi; no gateways, no ecosystem lock-in.
+  on the Raspberry Pi 5; no gateways, no ecosystem lock-in.
 - **Cons:** cable pull down the mast and to the cockpit/nav area; wind data lands on
   one consumer first — needs the controller-rebroadcast pattern to reach everything.
 

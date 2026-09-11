@@ -19,7 +19,7 @@ Companion docs: [`RouteImplementationPlan.md`](RouteImplementationPlan.md) §2.6
 
 **STATUS: IMPLEMENTED BUT DISABLED-BY-DEFAULT, 2026-07-04.** Landed early
 (ahead of the sea-trial gate) as a compile-time-only feature: `#define
-XTE_STEERING_ENABLED 0` in `Arduino/controller/controller.ino` gates the whole
+XTE_STEERING_ENABLED 0` in `firmware/Arduino/controller/controller.ino` gates the whole
 thing out (new file `crosstrack.ino` compiles to nothing, the XTE/BOD parsing
 in `garmin.ino` compiles to nothing, the blend hook in `control_task` compiles
 to nothing) — a disabled build is byte-for-byte the same size as before this
@@ -28,7 +28,7 @@ it on. **Do not flip it on before the sea-trial gate below is satisfied** —
 landing the code early doesn't change the reasoning for holding off on
 enabling it.
 
-**Machine:** Mac (controller firmware). **Files:** `Arduino/controller/crosstrack.ino`
+**Machine:** Mac (controller firmware). **Files:** `firmware/Arduino/controller/crosstrack.ino`
 (new — state + blend math), `garmin.ino` (XTE/BOD parsing, gated), `controller.ino`
 (the feature flag + `control_task` hook, gated). Tuning constants
 (`XTE_KXT_DEG_PER_NM`, `XTE_MAX_CORRECTION_DEG`, `XTE_BLEND_RADIUS_NM`) live at
@@ -84,7 +84,7 @@ practice, but worth confirming on the bench with a real multi-leg route.
 
 **STATUS: DECIDED AND IMPLEMENTED 2026-07-03** (ahead of the sea-trial gate
 below — the operator chose to pull this one forward). See
-`Arduino/controller/navsource.ino`. Kept here for history; the "never circle"
+`firmware/Arduino/controller/navsource.ino`. Kept here for history; the "never circle"
 reasoning below was the original analysis and was explicitly overridden.
 
 **Decision:** at end-of-route (any source going non-live, whether from genuine

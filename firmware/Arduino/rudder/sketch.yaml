@@ -1,0 +1,27 @@
+# Arduino sketch project file (https://arduino.github.io/arduino-cli/latest/sketch-project-file/)
+#
+# Defines a reproducible build "profile" for the rudder position sensor sketch.
+# Build with:
+#
+#     arduino-cli compile --profile nano        # run from this folder
+#     arduino-cli upload  --profile nano -p /dev/cu.usbmodemXXXX
+#
+# The first compile auto-installs the core + libraries listed below, so nothing
+# has to live in firmware/Arduino/libraries.
+#
+# NOTE: profile library lists are NOT dependency-resolved - every transitive
+# dependency must be listed explicitly (that is why Adafruit BusIO is here even
+# though we never #include it directly; the AS5600 driver needs it).
+
+profiles:
+  nano:
+    notes: Arduino Nano ESP32 - AS5600 rudder position sensor over I2C, joins
+      SoberPilot Wi-Fi and reports angle to the controller over UDP
+    fqbn: arduino:esp32:nano_nora
+    platforms:
+      - platform: arduino:esp32 (2.0.18-arduino.5)
+    libraries:
+      - Adafruit AS5600 Library (1.0.0)  # AS5600 driver (Adafruit_AS5600.h)
+      - Adafruit BusIO (1.16.1)          # dependency of the Adafruit driver
+
+default_profile: nano

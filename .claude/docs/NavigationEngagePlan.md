@@ -17,7 +17,7 @@ waypoint, but it never calls `setNavigationEnabled(true)`. The operator presses
 came from.
 
 **Why this is safe:** `control_task` only runs the PID → motor path when
-`navigation_enabled` is true (`Arduino/controller/controller.ino:97-117`). Mode 2
+`navigation_enabled` is true (`firmware/Arduino/controller/controller.ino:97-117`). Mode 2
 with nav **off** does not move the rudder. So "auto Mode 2, manual Enable" is a
 safe, deliberate state: the controller is locked onto the waypoint and waiting
 for the operator's go.
@@ -51,7 +51,7 @@ ever looks "live for steering."
 
 ## 2. Controller model — unified two-source selector
 
-`Arduino/controller/navsource.ino` is rewritten from the Garmin-only/armed logic
+`firmware/Arduino/controller/navsource.ino` is rewritten from the Garmin-only/armed logic
 into a **two-source selector**. Delete `follow_garmin_armed` and the
 auto-`setNavigationEnabled(true)` path.
 

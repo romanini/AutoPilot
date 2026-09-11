@@ -1,0 +1,33 @@
+# Arduino sketch project file (https://arduino.github.io/arduino-cli/latest/sketch-project-file/)
+#
+# Defines a reproducible build "profile" for the masthead wind sensor sketch.
+# Build with:
+#
+#     arduino-cli compile --profile nano        # run from this folder
+#     arduino-cli upload  --profile nano -p /dev/cu.usbmodemXXXX
+#
+# The first compile auto-installs the core + libraries listed below, so nothing
+# has to live in firmware/Arduino/libraries.
+#
+# NOTE: profile library lists are NOT dependency-resolved - every transitive
+# dependency must be listed explicitly (that is why Adafruit BusIO is here even
+# though we never #include it directly; the AS5600 driver needs it).
+
+profiles:
+  nano:
+    notes: Arduino Nano ESP32 - Yachta masthead wind sensor (AS5600 vane over
+      I2C, reed-switch cup anemometer, DS18B20 air temperature), joins
+      SoberPilot Wi-Fi and reports wind to the controller over UDP
+    fqbn: arduino:esp32:nano_nora
+    platforms:
+      - platform: arduino:esp32 (2.0.18-arduino.5)
+    libraries:
+      - Adafruit AS5600 Library (1.0.0)  # vane angle encoder (Adafruit_AS5600.h)
+      - Adafruit BusIO (1.16.1)          # dependency of the Adafruit driver
+      # No OneWire/DallasTemperature: OneWire's ESP32 back end treats the pin
+      # number it is given as a raw GPIO index, which on the Nano ESP32 is not
+      # the Arduino pin number (D4 is Arduino 4, GPIO 7), so every bus
+      # operation landed on the wrong pad. temperature.ino bit-bangs the one
+      # DS18B20 through the Arduino pin API instead - see the comment there.
+
+default_profile: nano

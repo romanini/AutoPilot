@@ -1,7 +1,7 @@
 # Phase A test plan — navigation-engagement selector
 
 Bench/integration checklist for the two-source selector in
-`Arduino/controller/navsource.ino` (see [`NavigationEngagePlan.md`](NavigationEngagePlan.md) §2–3).
+`firmware/Arduino/controller/navsource.ino` (see [`NavigationEngagePlan.md`](NavigationEngagePlan.md) §2–3).
 All Group A tests were run from OpenCPN alone; B/C/D use the Garmin emulator.
 
 > **The one rule under test:** navigation is *never* auto-enabled. In every case,
@@ -24,7 +24,7 @@ Telnet shortcuts: `n1` = Enable, `n0` = Disable, `p` = status.
 
 Ports (this bench): controller CDC `/dev/cu.usbmodem3485187A7A942` (38400) · FTDI
 Garmin tap `/dev/cu.usbserial-AB7DHVRF` (4800). Emulator base command (run in
-`emulator/`, needs the `.venv`):
+`firmware/emulator/`, needs the `.venv`):
 
 ```bash
 .venv/bin/python garmin_emulator.py --port /dev/cu.usbserial-AB7DHVRF --navigate-after 2

@@ -25,7 +25,7 @@ and [Enable NVMe boot](#raspberry-pi-5--enable-nvme-boot) below.
 
 ## SD card backup and restore
 
-The OrangePi setup is not distributed as a disk image — it is too large for Git.
+The navigator setup is not distributed as a disk image — it is too large for Git.
 To set up a fresh card, follow the from-scratch setup below. Use the commands here
 to back up an existing working card or restore from a backup.
 
@@ -126,11 +126,11 @@ back-to-back on the Mac while Imager is already open.
    (**Ubuntu Server 24.04 LTS (64-bit)**) and the same ⚙ settings (hostname `navigator`,
    same username/password, SSH enabled) → **Choose Storage** → select the NVMe device (not
    the SD card!) → **Write**.
-3. Do **not** assemble the Pi 5 yet. NVMe boot has to be enabled from the EEPROM bootloader
-   first, and that has to happen while running from the SD card — see
-   [Enable NVMe boot](#raspberry-pi-5--enable-nvme-boot) after Part 2 below. Insert only the
-   SD card for now; leave the NVMe drive out of the M.2 HAT until that step tells you to
-   install it.
+3. Don't set `BOOT_ORDER` yet — NVMe boot has to be enabled from the EEPROM bootloader while
+   running from the SD card, so put the SD card in and boot that first. The NVMe drive itself
+   can go into the M.2 HAT whenever it's convenient: the EEPROM only decides what the
+   *bootloader* tries, so an installed drive stays inert until
+   [Enable NVMe boot](#raspberry-pi-5--enable-nvme-boot) after Part 2 below.
 
 **Don't have the NVMe drive yet?** Skip step 2 above and do everything through Post-setup on
 the SD card alone — see
@@ -143,78 +143,160 @@ You don't need the NVMe drive in hand to get started — flash and set up the SD
 (steps above minus step 2), work all the way through Part 2 → Post-setup on it, and validate
 everything works. When the NVMe drive arrives:
 
-1. Shut down, remove the SD card, and image it on your Mac using the
-   [backup commands](#backup-sd-card--compressed-file) (the `navigator-RaspberryPi5-SD-...img.gz`
-   line). Re-insert the SD card and boot the Pi 5 normally again.
-2. Connect the new NVMe drive to the Pi 5 itself (not the Mac) via a USB-to-M.2 enclosure,
-   using a spare USB port — not the internal M.2 HAT yet. It'll show up as an external disk;
-   confirm the device name before touching anything:
-   ```bash
-   lsblk    # e.g. /dev/sda — do NOT run the following against mmcblk0, the live SD card!
-   ```
-3. Write the SD image onto it directly from the running Pi 5 (all the Linux partition tools
-   you'll need next are already there, so it's simpler than round-tripping through the Mac):
-   ```bash
-   gunzip -c navigator-RaspberryPi5-SD-YYYY-MM-DD.img.gz | sudo dd of=/dev/sda bs=4M status=progress
-   sync
-   ```
-   This is now a byte-for-bit copy of the SD card.
-4. **De-duplicate identifiers before the two ever run together.** A straight clone means the
-   NVMe has the exact same MBR disk signature (and therefore `PARTUUID`s), filesystem UUIDs,
-   machine-id, and SSH host keys as the SD card. With both physically installed at once —
-   which is the whole point of the fallback design — that's not cosmetic: the kernel/udev/blkid
-   can't reliably tell the two partitions apart and may mount the wrong one. Fix it now, while
-   the clone is still just an external disk (adjust `/dev/sda1`/`/dev/sda2` below if `lsblk`
-   showed different partition numbers):
+1. **Back up the SD card first.** Shut down, remove the SD card, and image it on your Mac using
+   the [backup commands](#backup-sd-card--compressed-file) (the
+   `navigator-RaspberryPi5-SD-...img.gz` line). This is the only rollback if the clone goes
+   wrong. Re-insert the SD card and boot the Pi 5 normally again.
 
-   a. **MBR disk signature** — this is what each partition's `PARTUUID` is derived from
+2. **Install the NVMe drive in the M.2 HAT** — no USB-to-M.2 enclosure needed. `BOOT_ORDER`
+   still points at the SD card, so the Pi keeps booting from it while the NVMe shows up as an
+   ordinary block device you can clone onto locally. Boot from the SD card and confirm:
+
+   ```bash
+   lsblk -o NAME,SIZE,TYPE,FSTYPE,LABEL,LOG-SEC,MOUNTPOINTS
+   ```
+
+   Check three things: the drive is `nvme0n1` at the expected size, the live system is on
+   `mmcblk0`, and `LOG-SEC` reads `512`. A namespace formatted 4Kn needs a different approach —
+   the SD image's partition table uses 512-byte offsets, so a straight `dd` clone onto it would
+   produce a broken layout.
+
+   If `nvme0n1` doesn't appear at all, the PCIe port isn't enabled. The official Raspberry Pi
+   M.2 HAT+ enables it automatically via its HAT EEPROM; third-party boards (Pimoroni NVMe Base,
+   Geekworm, Waveshare) generally don't. Add `dtparam=pciex1` under `[all]` in
+   `/boot/firmware/config.txt` and reboot.
+
+3. **Wipe the drive if it has ever been used for anything else** (skip only for a genuinely
+   factory-fresh drive — and copy off anything you still want first, all of it is destroyed
+   here).
+
+   This is not just tidiness. A drive formatted by macOS or Windows carries a **GPT**: a primary
+   header at LBA 1 and a backup header in the *last sector of the drive*. Cloning a 32 GB SD
+   image onto a 1 TB NVMe overwrites the primary but leaves the backup untouched, so the disk
+   ends up carrying both a valid MBR and a valid backup GPT. `parted` and `gdisk` then report
+   the GPT as corrupt and offer to rebuild it from the backup — which discards the MBR you just
+   cloned — and `sfdisk`/`growpart` in step 5 can auto-detect the wrong label type entirely.
+
+   ```bash
+   lsblk -no MOUNTPOINTS /dev/nvme0n1   # unmount anything listed before continuing
+   sudo blkdiscard -f /dev/nvme0n1      # TRIM the whole drive: seconds, vs hours to zero-fill
+   sudo wipefs -a /dev/nvme0n1          # this is what kills the backup GPT
+   sudo partprobe /dev/nvme0n1
+   ```
+
+   `blkdiscard` alone is not enough — not every controller guarantees discarded blocks read back
+   as zeros, so `wipefs` removes the signatures explicitly rather than assuming.
+
+4. **Quiesce the system and clone.** Dropping to `multi-user.target` stops the desktop and
+   OpenCPN writing during the copy:
+
+   ```bash
+   sudo systemctl isolate multi-user.target
+   sudo dd if=/dev/mmcblk0 of=/dev/nvme0n1 bs=4M status=progress conv=fsync
+   sudo partprobe /dev/nvme0n1
+   ```
+
+   Cloning a mounted root filesystem means files written during the copy (in practice, logs) can
+   land inconsistent; the `e2fsck` in step 5b resolves the metadata side, and this is what
+   `rpi-clone` and similar tools do anyway. To write the pristine image instead, put the
+   `.img.gz` from step 1 on a USB stick and
+   `gunzip -c /media/…/navigator-RaspberryPi5-SD-*.img.gz | sudo dd of=/dev/nvme0n1 bs=4M status=progress`.
+
+5. **Give the clone its own identity, and grow it into the drive.** A straight clone leaves the
+   NVMe with the same MBR disk signature (and therefore `PARTUUID`s), the same filesystem UUIDs,
+   **the same filesystem labels**, the same machine-id and the same SSH host keys as the SD card.
+   With both physically installed at once — which is the whole point of the fallback design —
+   that's not cosmetic: the kernel, udev and blkid can't reliably tell the two apart and may
+   resolve to the wrong one.
+
+   **The labels matter most, because this image boots by label.** `boot/firmware/cmdline.txt` in
+   this repo has `root=LABEL=writable`, and `/etc/fstab` mounts `LABEL=writable` and
+   `LABEL=system-boot`. Leave the clone's labels alone and `root=LABEL=writable` is ambiguous with
+   both media installed — you can end up with a Pi that boots the NVMe's firmware but runs the SD
+   card's filesystem. Relabelling the NVMe fixes both directions at once: the SD's `writable` then
+   matches only the SD, and the NVMe's `writable-nvme` matches only the NVMe.
+
+   Do all of this with the NVMe unmounted, in this order (adjust partition numbers if `lsblk`
+   showed something other than `p1`/`p2`):
+
+   a. **New MBR disk signature** — this is what each partition's `PARTUUID` is derived from
       (`<disk-id>-<partition-number>`):
       ```bash
-      sudo sfdisk --disk-id /dev/sda 0x$(openssl rand -hex 4)
-      sudo partprobe /dev/sda
-      sudo blkid /dev/sda1 /dev/sda2     # note the new PARTUUIDs, you'll need them in (d)
+      sudo sfdisk --disk-id /dev/nvme0n1 0x$(openssl rand -hex 4)
+      sudo partprobe /dev/nvme0n1
       ```
-   b. **ext4 root filesystem UUID** (the root partition — normally `sda2`):
+   b. **Grow the root partition to fill the drive.** Without this a clone of a 32 GB card onto a
+      1 TB drive is still a 32 GB system — cloud-init's first-boot auto-resize already ran on the
+      SD card and won't run again. `growpart` comes from `cloud-guest-utils`:
       ```bash
-      sudo tune2fs -U random /dev/sda2
+      sudo growpart /dev/nvme0n1 2
+      sudo e2fsck -f /dev/nvme0n1p2
+      sudo resize2fs /dev/nvme0n1p2
       ```
-   c. **FAT32 boot partition volume ID** (the boot partition — normally `sda1`). `dosfstools`
-      has no in-place command for this, so patch the 4-byte `BS_VolID` field directly at its
-      fixed offset (67) in the boot sector instead of reformatting:
+   c. **New root filesystem UUID:**
       ```bash
-      sudo dd if=/dev/urandom of=/dev/sda1 bs=1 count=4 seek=67 conv=notrunc
+      sudo tune2fs -U random /dev/nvme0n1p2
       ```
-   d. **Update `cmdline.txt` / `fstab` on the clone to match** — mount the clone's partitions
-      and check which scheme your image actually uses before assuming (Ubuntu Raspberry Pi
-      images have used both `PARTUUID=` and `LABEL=` across releases):
+   d. **New labels** — see above, this is the one that decides whether it boots the right root:
       ```bash
-      sudo mkdir -p /mnt/nvme-boot /mnt/nvme-root
-      sudo mount /dev/sda1 /mnt/nvme-boot
-      sudo mount /dev/sda2 /mnt/nvme-root
-      grep -H root= /mnt/nvme-boot/cmdline.txt
-      grep -H -E "PARTUUID|LABEL" /mnt/nvme-root/etc/fstab
+      sudo e2label /dev/nvme0n1p2 writable-nvme
+      sudo fatlabel /dev/nvme0n1p1 SYSTEM-NVME
       ```
-      If either references `PARTUUID=`, replace the old value with the matching new one from
-      (a)'s `blkid` output. If it references `LABEL=` instead, there's nothing to change —
-      labels weren't touched by any of this.
-   e. **machine-id and SSH host keys** — not partition-related, but the same "identical clone"
-      problem: both media would otherwise claim the same machine identity on the network.
+      The FAT label must be uppercase and at most 11 characters — dosfstools 4.2 refuses lowercase
+      labels, and `SYSTEM-NVME` is exactly 11. ext4 allows 16, so `writable-nvme` fits.
+   e. **New FAT32 volume ID.** `dosfstools` has no in-place command for this, so patch the 4-byte
+      `BS_VolID` field directly at its fixed offset (67) in the boot sector instead of
+      reformatting:
       ```bash
-      sudo rm /mnt/nvme-root/etc/machine-id
-      sudo systemd-machine-id-setup --root=/mnt/nvme-root
-      sudo rm /mnt/nvme-root/etc/ssh/ssh_host_*
-      sudo ssh-keygen -A -f /mnt/nvme-root
-      sudo umount /mnt/nvme-boot /mnt/nvme-root
+      sudo dd if=/dev/urandom of=/dev/nvme0n1p1 bs=1 count=4 seek=67 conv=notrunc
       ```
-5. Shut down, move the NVMe drive from the USB enclosure into the internal M.2 HAT slot, and
-   pick up at step 3 of [Enable NVMe boot](#raspberry-pi-5--enable-nvme-boot) below (EEPROM
-   update → `BOOT_ORDER` → verify it actually boots from `nvme0n1`).
+   f. **Confirm the two media now look nothing alike:**
+      ```bash
+      sudo blkid /dev/mmcblk0p1 /dev/mmcblk0p2 /dev/nvme0n1p1 /dev/nvme0n1p2
+      ```
+      All four labels and all four UUIDs should be distinct before you go any further.
 
-> I haven't verified the exact partition numbering or the `PARTUUID`-vs-`LABEL` scheme against
-> the specific Ubuntu 24.04 RPi image — the `lsblk`/`blkid`/`grep` checks above are there so you
-> confirm against your actual clone rather than trusting the device names as gospel. If
-> something looks off, the SD card image from step 1 is your safety net — you can always
-> re-run steps 2–4 from scratch on the NVMe.
+6. **Point the clone's boot config at its own labels.** Both `sed` patterns below are idempotent —
+   the replacement text no longer matches the pattern, so re-running them is harmless.
+
+   ```bash
+   sudo mkdir -p /mnt/nvme-boot /mnt/nvme-root
+   sudo mount /dev/nvme0n1p1 /mnt/nvme-boot
+   sudo mount /dev/nvme0n1p2 /mnt/nvme-root
+
+   sudo sed -i 's|root=LABEL=writable |root=LABEL=writable-nvme |' /mnt/nvme-boot/cmdline.txt
+   sudo sed -i 's|LABEL=writable\([[:space:]]\)|LABEL=writable-nvme\1|; s|LABEL=system-boot\([[:space:]]\)|LABEL=SYSTEM-NVME\1|' /mnt/nvme-root/etc/fstab
+
+   # Read both back — this is the step that decides whether it boots at all
+   cat /mnt/nvme-boot/cmdline.txt /mnt/nvme-root/etc/fstab
+   ```
+
+   Then **machine-id and SSH host keys** — not partition-related, but the same "identical clone"
+   problem: both media would otherwise claim the same machine identity on the network.
+
+   ```bash
+   sudo rm /mnt/nvme-root/etc/machine-id
+   sudo systemd-machine-id-setup --root=/mnt/nvme-root
+   sudo rm /mnt/nvme-root/etc/ssh/ssh_host_*
+   sudo ssh-keygen -A -f /mnt/nvme-root
+
+   # Normally a symlink to /etc/machine-id; if it's a real file, copy the new one over it
+   ls -l /mnt/nvme-root/var/lib/dbus/machine-id
+
+   sudo umount /mnt/nvme-boot /mnt/nvme-root
+   ```
+
+   Expect two harmless side effects on first NVMe boot: your Mac refuses to connect until you run
+   `ssh-keygen -R navigator.local`, and the Pi may take a different DHCP lease because the
+   machine-id changed.
+
+7. Pick up at step 2 of [Enable NVMe boot](#raspberry-pi-5--enable-nvme-boot) below — the drive is
+   already installed, so all that's left is the EEPROM update, `BOOT_ORDER`, and verifying it
+   actually boots from `nvme0n1`.
+
+> Nothing in steps 2–6 touches the SD card, so it stays a working system throughout. If the clone
+> misbehaves, re-run steps 3–6 from scratch on the NVMe; the image from step 1 is the backstop if
+> the SD card itself is ever damaged.
 
 ---
 
@@ -245,44 +327,72 @@ to run while still booted from the SD card.
 
 ### Raspberry Pi 5 — enable NVMe boot
 
-> Do this once, right after the SD card's first boot/update/reboot above, and before
-> installing the NVMe drive in the M.2 HAT.
+> Do this once, after the SD card's first boot/update/reboot above. Arriving from
+> [clone to NVMe later](#set-up-on-the-sd-card-now-clone-to-nvme-later)? The drive is already
+> installed — start at step 2.
 
-1. Update the EEPROM bootloader to the latest version (older units shipped without NVMe boot
+1. Install the NVMe drive in the M.2 HAT and confirm the Pi sees it. Installing it before
+   `BOOT_ORDER` is set is fine — the EEPROM only decides what the bootloader *tries*, so the Pi
+   keeps booting from the SD card until step 3 takes effect.
+   ```bash
+   lsblk           # nvme0n1 should be listed
+   ```
+   If it isn't, the PCIe port isn't enabled: the official M.2 HAT+ does it automatically via its
+   HAT EEPROM, most third-party boards don't. Add `dtparam=pciex1` under `[all]` in
+   `/boot/firmware/config.txt` and reboot.
+2. Update the EEPROM bootloader to the latest version (older units shipped without NVMe boot
    support):
    ```bash
    sudo apt update && sudo apt install -y rpi-eeprom
    sudo rpi-eeprom-update -a
    sudo reboot
    ```
-2. After reboot, set the boot order to try NVMe first and fall back to the SD card:
+3. After reboot, set the boot order to try NVMe first and fall back to the SD card:
    ```bash
    sudo -E rpi-eeprom-config --edit
    ```
-   Set (or add) this line, then save and exit the editor:
+   That opens `nano`. Set this line — replacing any existing one, don't end up with two — then
+   `^X`, `Y`, and **Enter** at the "File Name to Write" prompt:
    ```
    BOOT_ORDER=0xf16
    ```
-   (Reading right-to-left: `6`=NVMe tried first, `1`=SD card fallback, `f`=retry the sequence
-   forever rather than giving up.) Confirm with `sudo rpi-eeprom-config` — the new config is
-   written to the EEPROM and takes effect after the next power cycle.
-3. Shut down, install the NVMe drive in the M.2 HAT, and power back on:
+   Reading right-to-left: `6`=NVMe tried first, `1`=SD card fallback, `f`=retry the sequence
+   forever rather than giving up.
+
+   **Don't verify with `sudo rpi-eeprom-config` yet — it will still show the old value, and that
+   does not mean the edit failed.** The EEPROM can only be written by the bootloader at boot, so
+   `--edit` builds a new bootloader image with the config baked in and *stages* it on the boot
+   partition, while plain `rpi-eeprom-config` reads back the **currently running** EEPROM. Confirm
+   it was staged instead:
    ```bash
-   sudo shutdown -h now
+   sudo rpi-eeprom-update                                       # should report an update pending
+   ls -l /boot/firmware/pieeprom.upd /boot/firmware/pieeprom.sig
    ```
-4. If the NVMe drive isn't detected reliably (PCIe signal integrity issues are common with
-   longer ribbon cables), force Gen 3 speed by adding this to `/boot/firmware/config.txt` and
-   rebooting:
+   If nothing was staged, skip the editor entirely — extract the config, edit the file directly,
+   and apply it:
+   ```bash
+   sudo rpi-eeprom-config --out /tmp/bootconf.txt
+   nano /tmp/bootconf.txt
+   sudo rpi-eeprom-config --apply /tmp/bootconf.txt
+   ```
+4. Reboot, then verify both the config and where you actually booted from:
+   ```bash
+   sudo reboot
+   ```
+   ```bash
+   sudo rpi-eeprom-config      # BOOT_ORDER=0xf16 should be there now
+   vcgencmd bootloader_config  # reads the live EEPROM directly, independent of the tooling
+   findmnt /                   # source should be /dev/nvme0n1p2, not /dev/mmcblk0p2
+   df -h /                     # should show the full NVMe capacity, not the old SD size
+   lsblk                       # mmcblk0 present, but nothing mounted from it
+   ```
+   If it still booted from the SD card, re-check `BOOT_ORDER` and that `nvme0n1p1` actually
+   contains a `config.txt`.
+5. If the NVMe drive isn't detected reliably (PCIe signal integrity issues are common with longer
+   ribbon cables), force Gen 3 speed by adding this to `/boot/firmware/config.txt` and rebooting:
    ```
    dtparam=pciex1_gen=3
    ```
-5. Verify you're actually running from NVMe:
-   ```bash
-   lsblk           # rootfs should be on nvme0n1, not mmcblk0
-   df -h /
-   ```
-   If it still booted from the SD card, double check `BOOT_ORDER` with
-   `sudo rpi-eeprom-config` and that the NVMe drive was flashed correctly in Part 1.
 
 From here on, log in and do all further setup (networking, `apt full-upgrade`, Claude Code
 bootstrap) on the **NVMe-booted** system — the SD card just sits in the slot as a cold
@@ -509,6 +619,15 @@ sudo cp ~/dev/AutoPilot/navigator/etc/systemd/system/wifi-keepalive.service \
      /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now wifi-keepalive.service
+```
+
+To confirm telemetry is actually arriving (and watch it live), run the monitor
+script checked into this repo at `navigator/usr/local/bin/apdat-monitor.py` — it
+listens on UDP 8888 and redraws a single, continuously-updating snapshot of the
+latest `~APDAT` packet, the same fields as the controller's telnet `p` command:
+
+```bash
+python3 ~/dev/AutoPilot/navigator/usr/local/bin/apdat-monitor.py
 ```
 
 ---
@@ -763,7 +882,7 @@ sudo apt update && sudo apt full-upgrade
 
 ### autopilot_pi plugin
 
-Full details and build prerequisites are in `opencpn_plugin/autopilot_pi/README.md`.
+Full details and build prerequisites are in `navigator/opencpn_plugin/autopilot_pi/README.md`.
 
 ```bash
 # Build prerequisites (run once)
@@ -771,7 +890,7 @@ sudo apt install -y flatpak-builder
 flatpak install --user flathub org.freedesktop.Sdk//25.08
 
 # Build and install the plugin
-cd ~/dev/AutoPilot/opencpn_plugin/autopilot_pi
+cd ~/dev/AutoPilot/navigator/opencpn_plugin/autopilot_pi
 flatpak-builder --user --install --force-clean \
     build-dir flatpak/org.opencpn.OpenCPN.Plugin.autopilot.yaml
 ```

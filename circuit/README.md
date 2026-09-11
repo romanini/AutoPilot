@@ -1,190 +1,208 @@
 # AutoPilot circuit boards
 
 This directory holds the **EasyEDA exports** for every custom PCB in the
-AutoPilot project. There are four boards, grouped by the unit they belong to:
+AutoPilot project. There are seven boards, one directory each:
 
 ```
-circuit/
-├── Controller/
-│   ├── Controller/      AP-Controller   — the autopilot brain
-│   └── 12-volt-power/   12-volt-power   — power + NMEA interconnect board
-└── Display/
-    ├── Display/         AP-Display-2.1  — cockpit head-unit mainboard
-    └── Button/          AP-Button-LED-V2 — button + TFT pass-through board
+circuit/                                                                     unit
+├── Controller/                 The Autopilot brain          rev 2.1  ─┐
+├── Controller-12-volt-power/   power + NMEA interconnect    rev 1.0  ─┘─ controller
+├── Display/                    cockpit head-unit mainboard  rev 2.2  ─┐
+├── Display-Button/             buttons + TFT pass-through   rev 1.0   ├─ display
+├── Display-LCD/                ST7365P panel carrier        rev 1.0  ─┘
+├── Sensor-Rudder/              Inticator of rudder postion  rev 1.0  ─── rudder sensor
+├── Sensor-Wind/                Wind speed and direction     rev 1.0  ─── wind sensor
+└── tools/                      export automation (see tools/README.md)
 ```
 
-These PCBs implement the hardware described in [`../Arduino/README.md`](../Arduino/README.md):
-the **controller** reads the sensors and drives the steering motor; the
-**display** is the cockpit head unit with an LCD and buttons. Both are built
-around the **Arduino Nano ESP32**, and they talk to each other over the
-`SoberPilot` Wi-Fi network.
+These PCBs implement the hardware described in [`../firmware/Arduino/README.md`](../firmware/Arduino/README.md):
+the **controller** reads the sensors and drives the steering motor, the
+**display** is the cockpit head unit with an LCD and buttons, and the **rudder**
+and **wind** sensors are standalone boards that report to the controller. All
+four units are built around the **Arduino Nano ESP32** and talk to each other
+over the `SoberPilot` Wi-Fi network.
+
+## Seven boards, four enclosures
+
+The directories are flat — one per EasyEDA project — but the boards are not
+independent. They stack up into **four physical units**, and only the four
+units talk to each other, over Wi-Fi:
+
+| Unit | Boards inside it | Enclosure | Interconnect | Power |
+|------|------------------|-----------|--------------|-------|
+| **Controller** | [`Controller`](Controller/README.md) + [`Controller-12-volt-power`](Controller-12-volt-power/README.md) | [`cad/controller/`](../cad/controller/README.md) | 2×10 ribbon, board to board | 12 V into the power board, fused there |
+| **Display** (cockpit head unit) | [`Display`](Display/README.md) + [`Display-Button`](Display-Button/README.md) + [`Display-LCD`](Display-LCD/README.md) | [`cad/display/`](../cad/display/README.md) | 2×10 ribbon mainboard→button board, then 8-pin JST-XH button board→panel | 12 V, or its own LiPo when 12 V is absent |
+| **Rudder sensor** | [`Sensor-Rudder`](Sensor-Rudder/README.md) | [`cad/rudder/`](../cad/rudder/README.md) | — (single board) | 12 V into its own terminal block |
+| **Wind sensor** | [`Sensor-Wind`](Sensor-Wind/README.md) | [`cad/wind/`](../cad/wind/README.md) | — (single board) | 12 V from the masthead light circuit |
+
+So the two controller boards share one case, the three display boards share
+another, and each sensor is a sealed one-board unit with nothing running to it
+but a 12 V pair — which is the point of putting them on Wi-Fi rather than
+wiring them back to the controller. [`Display-LCD`](Display-LCD/README.md) is
+optional: it is only fitted when the ST7365P panel is used instead of an HX8357
+module.
+
+The case each unit lives in is designed in [`../cad/`](../cad/) — one directory
+per unit, linked in the table above. Only the
+[wind sensor](../cad/wind/README.md) is built; the other three are placeholders
+that so far only record the constraints.
 
 ## What's in each folder
 
-Every board was exported from EasyEDA with the full set of files:
+Every board is exported from EasyEDA with the same 13 files, produced by
+[`tools/`](tools/README.md) (`npm run export`) rather than by hand. Filenames
+follow `<SCH|PCB>_<board>_<type>.<ext>`. The `README.md` alongside them is the
+one hand-written file in each directory; the exporter only ever adds, so a
+re-export leaves it alone:
 
 | File | What it is |
 |------|------------|
-| `SCH_*.png` | Schematic, as a quick-look image |
+| `SCH_*_PNG.png` / `SCH_*_SVG.svg` | Schematic, as a quick-look image |
 | `SCH_*_EasyEDA.json` | Editable schematic source (open in EasyEDA) |
 | `SCH_*_Altium.schdoc` | Schematic exported for Altium Designer |
-| `PCB_*.png` | PCB layout, top view |
+| `PCB_*_PNG.png` / `PCB_*_SVG.svg` | PCB layout, top view |
 | `PCB_*_EasyEDA.json` | Editable PCB source (open in EasyEDA) |
 | `PCB_*_Gerber.zip` | **Gerbers — send this to the board house to fabricate** |
-| `PCB_*.dxf` | Board outline / layers as DXF (CAD, enclosures) |
+| `PCB_*_DXF.dxf` | Board outline / layers as DXF (CAD, enclosures) |
 | `PCB_*_OBJ.zip` | 3D model of the assembled board (.obj) |
-| `PCB_*_Photo-View.svg` | Photo-realistic render of the populated board |
+| `PCB_*_PhotoView-Top.svg` / `*-Bottom.svg` | Photo-realistic render of the populated board |
 | `PCB_*_Autorouter.dsn` | Specctra DSN for external auto-routing |
 
 To fabricate a board, upload its `*_Gerber.zip` to a PCB house (JLCPCB, PCBWay,
 OSH Park, etc.). To edit a board, import the `*_EasyEDA.json` files back into
-EasyEDA.
+EasyEDA. To re-export everything after a change, see
+[`tools/README.md`](tools/README.md).
 
 ---
 
-## 1. Controller board — `Controller/Controller/` (`AP-Controller`, rev 2.0)
+## The seven boards
 
-The main board of the autopilot. It carries the Arduino Nano ESP32 and all of
-its sensors, and breaks out the steering-motor and power connections.
+Each board directory has its own README with the schematic, the PCB image, a
+component table and the design notes for that board:
 
-![Controller schematic](Controller/Controller/SCH_AP-Controller.png)
-
-### Components
-
-| Ref | Part | Role |
-|-----|------|------|
-| **U1** | **Arduino Nano ESP32** | The brain — runs the controller firmware, the PID steering loop, and the `SoberPilot` Wi-Fi access point |
-| **U6** | **Adafruit BNO085** (BNO08x 9-DOF IMU) | Fused compass / heading, pitch and roll, plus motion "stability" — connected over I²C (SCL/SDA) |
-| **U4 / V3** | **Adafruit GPS Breakout** | GPS position, speed and course, NMEA over the ESP32 UART (TX/RX) |
-| **U3** | **Adafruit MPM3610 5 V module** | 12 V → 5 V buck regulator that powers the board; gated by an `ENABLE` line |
-| **U2** | **CD4010BE** hex buffer (TI) | "Receive Buffer" — level-shifts/buffers the incoming serial line |
-| **U5** | **CD4010BE** hex buffer (TI) | "Transmit Buffer" — level-shifts/buffers the outgoing serial line |
-| **R1** | 47 Ω | Current limit for the on-board **Debug LED** |
-| **R2** | 5.1 kΩ | USB-C `CC` pull-down on the Arduino USB connector |
-| — | HDR-M 2×4 | **Motor Control** header (out to the steering-motor driver) |
-| — | JST-XH 2-pin | **Kill Switch** input |
-| — | HDR-M 2×10 | **Power Distribution** header (12 V in / interconnect to the 12-volt-power board) |
-| — | JST-XH 1×3/1×4 | Sensor + USB break-out connectors |
-
-The two **CD4010 hex buffers** sit between the ESP32's 3.3 V logic and the
-external 5 V / NMEA serial world, buffering the receive and transmit lines so the
-Garmin / GPS serial signals are cleanly level-matched before they reach the
-microcontroller.
-
----
-
-## 2. 12-volt power board — `Controller/12-volt-power/` (`12-volt-power`, rev 1.0)
-
-A passive **power-distribution and interconnect board** that lives next to the
-controller. It brings the boat's 12 V supply, the Garmin NMEA feed and a USB port
-onto one board, fuses them, and hands them off to the controller through a single
-ribbon header.
-
-![12 V power schematic](Controller/12-volt-power/SCH_12-volt-power.png)
-
-### Components
-
-| Ref | Part | Role |
-|-----|------|------|
-| **U2** | **DBT50G-9.5-6P** terminal/power connector | Main 12 V power entry block |
-| — | **Garmin In** connector | Garmin NMEA-0183 feed — Tx/A (blue), Rx/A (yellow), Tx/B (violet), Rx/B (green), Alarm (white), Ground (black), 12 V (red) |
-| — | **USB-C** connector | USB-In break-out (Vin / D− / D+ / GND / CC) |
-| — | 5×20 mm fuse holder (BLX-A) | **Acc Fuse** — protects the 12 V accessory rail |
-| — | 5×20 mm fuse holder (BLX-A) | **Garmin Fuse** — protects the Garmin 12 V feed |
-| **R2** | 10 kΩ (with test point **TP1**) | Pull / sense resistor on the interconnect |
-| — | HDR-M 2×10 | **Control Board** header — ribbon to the controller's Power Distribution header |
-
-Everything here is wiring and protection: it consolidates power and the Garmin
-NMEA wiring, fuses the 12 V rails, and routes them to the controller over the
-2×10 ribbon so the controller board itself stays clean.
-
----
-
-## 3. Display mainboard — `Display/Display/` (`AP-Display-2.1`, rev 2.0)
-
-The cockpit head-unit board. It carries a second Arduino Nano ESP32, drives the
-**HX8357 TFT** over SPI, and includes an on-board **LiPo battery + charger** so
-the display can run with or without 12 V present. It also measures both the 12 V
-input and the battery voltage.
-
-![Display schematic](Display/Display/SCH_AP-Display-2.1.png)
-
-### Components
-
-| Ref | Part | Role |
-|-----|------|------|
-| **U1** | **Arduino Nano ESP32** | Runs the display firmware; SPI to the TFT (D/C, CS, MOSI, MISO, CLK) |
-| **U3** | **TP5100 module** | 1–2 A Li-ion/LiPo battery charger (IN+/IN−, BAT+/BAT−, CHRG/STDBY status) |
-| **TPS61023** | **Adafruit MiniBoost 5 V @ 1 A** | Boost converter — steps the LiPo up to 5 V to run the board (`+5V switched`) |
-| **D1 / D2** | **1N5817** Schottky diodes | Power-OR the 12 V input and USB 5 V so either source can run the display |
-| **Q1** | **2N2222A** NPN transistor | Drives the buzzer from a GPIO |
-| **P1** | Buzzer | Audible alert |
-| **R (BUZZER-R1)** | 1 kΩ | Base resistor for Q1 |
-| **V_IN_R1 / V_IN_R2** | 10 kΩ / 2.2 kΩ | Voltage divider — measures the **12 V input** on an ADC pin |
-| **BATTERY_R1 / BATTERY_R2** | 10 kΩ / 22 kΩ | Voltage divider — measures the **LiPo battery** on an ADC pin |
-| **USB_CC1** | 5.1 kΩ | USB-C `CC` pull-down |
-| — | JST-PH 2-pin (**BATT**) | LiPo battery connection |
-| — | HDR-M 2×10 (**Button Board**) | Ribbon to the button / TFT pass-through board |
-| — | JST-XH 1×3 / 1×5 | USB + power break-outs |
-
-The two voltage dividers are what the firmware's `volt_meter.ino` reads to show
-input and battery voltage on the LCD.
-
----
-
-## 4. Button / LED board — `Display/Button/` (`AP-Button-LED-V2`, rev 1.0)
-
-The board behind the cockpit buttons. It hosts the physical buttons, their
-backlight LEDs, and **passes the TFT's SPI bus through** to the HX8357 display.
-
-![Button board schematic](Display/Button/SCH_AP-Button-LED-V2.png)
-
-### Components
-
-| Ref | Part | Role |
-|-----|------|------|
-| 5 × | **K2-1107ST** SMD tactile switches | The cockpit buttons: **Port**, **Enable** (compass), **Mode** (GPS), **Starboard**, **Tack** |
-| **U3** | JST-XH 8-pin | Connector to the **HX8357 TFT** — passes D/C, CS, MOSI, MISO, CLK, Vin, GND |
-| **CN2** | **XY2500R-T-2.5-4P** | Button **backlight LED** connection (5 V, 5 V-switched, LED+, LED−) |
-| — | HDR-M 2×10 (**Display Board**) | Ribbon back to the display mainboard |
-
-Functionally this board sits between the display mainboard and the TFT: the
-2×10 ribbon brings the button signals and SPI bus over from the mainboard, the
-buttons tie into the matching net labels (`PORT`, `ENABLE`, `MODE`, `STARBOARD`,
-`TACK`), and the SPI bus continues out of U3 to the TFT. CN2 powers the button
-backlights.
+| # | Board | EasyEDA project | What it is |
+|---|-------|-----------------|------------|
+| 1 | [`Controller/`](Controller/README.md) | `SM AP Controller` rev 2.1 | The autopilot brain — Nano ESP32, BNO085 IMU, GPS, CD4010 serial buffers, motor and kill-switch headers |
+| 2 | [`Controller-12-volt-power/`](Controller-12-volt-power/README.md) | `SM AP Power` rev 1.0 | Passive power and NMEA interconnect — 12 V entry, Garmin feed, USB-C, two fuses, ribbon to the controller |
+| 3 | [`Display/`](Display/README.md) | `SM AP Display` rev 2.2 | Head-unit mainboard — Nano ESP32, LiPo + TP5100 charger, TPS61023 boost, voltage dividers |
+| 4 | [`Display-Button/`](Display-Button/README.md) | `SM Button board V2` rev 1.0 | Five cockpit buttons, illuminated power switch, SPI pass-through to the panel |
+| 5 | [`Display-LCD/`](Display-LCD/README.md) | `AutoPilot LCD Carrier` v1.0 | Optional ST7365P panel carrier — 3V3 LDO, backlight FET, 40-pin FPC |
+| 6 | [`Sensor-Rudder/`](Sensor-Rudder/README.md) | `SM AP Rudder Sensor` rev 1.0 | Rudder angle — Nano ESP32 + AS5600L magnetic encoder, 12 V in |
+| 7 | [`Sensor-Wind/`](Sensor-Wind/README.md) | `SM AP Wind Sensor` rev 1.0 | Masthead unit — AS5600L vane, SS40AF Hall cup sensor, DS18B20 air temperature |
 
 ---
 
 ## How the boards fit together
 
-```
-        12 V boat supply ── Acc/Garmin fuses ──┐
-        Garmin NMEA ───────────────────────────┤
-        USB ───────────────────────────────────┤  12-volt-power board
-                                                │  (fuse + interconnect)
-                                                │
-                                  2×10 ribbon ──┘
-                                       │
-                                ┌──────▼───────┐        steering motor
-        BNO085 IMU ── I²C ──────│  CONTROLLER  │── 2×4 ──▶ (motor driver)
-        Adafruit GPS ── UART ──│  Nano ESP32  │
-        Kill switch ───────────│  + CD4010 ×2  │
-                                └──────┬───────┘
-                                       │  Wi-Fi  "SoberPilot"  (UDP)
-                                       ▼
-                                ┌──────────────┐
-                                │   DISPLAY    │  LiPo + TP5100 charger
-                                │  Nano ESP32  │  + TPS61023 5 V boost
-                                └──────┬───────┘
-                                       │ 2×10 ribbon
-                                ┌──────▼───────┐
-                                │ BUTTON board │── SPI ──▶ HX8357 TFT
-                                │  5 buttons   │
-                                └──────────────┘
-```
+The units talk to each other over Wi-Fi and nothing else. The controller hosts
+the **SoberPilot** access point; the display, the two sensors and the navigator
+(a Raspberry Pi 5 running OpenCPN) all join it as stations. Each sensor reports
+on its own port and is commanded back on the next one up, while the display and
+the navigator receive the telemetry broadcast and send commands to the
+controller.
+
+![How the boards fit together](../assets/circuit/system-overview.svg)
+
+What is inside the controller and the display units follows below.
+
+### Inside the controller unit
+
+Everything from the outside world lands on the **12-volt-power** board, which
+fuses it and hands it to the **controller** over one ribbon. The controller's
+only outgoing connection is the motor header — the motor driver itself is a
+bought part and is not one of these boards.
+
+![Inside the controller unit](../assets/circuit/controller-unit.svg)
+
+### Inside the display unit
+
+Note the power path: **12 V and USB charge the battery and nothing else.** The
+LiPo is the only thing that actually powers the display board, which then feeds
+the button board and the panel.
+
+![Inside the display unit](../assets/circuit/display-unit.svg)
 
 For the firmware that runs on these boards, the pin assignments, and build
-instructions, see [`../Arduino/README.md`](../Arduino/README.md). For the
+instructions, see [`../firmware/Arduino/README.md`](../firmware/Arduino/README.md). For the
 overall system architecture and the UDP protocol, see the
-[top-level README](../README.md).
+[top-level README](../README.md). For re-exporting these files from EasyEDA,
+see [`tools/README.md`](tools/README.md).
+
+---
+
+## Review notes (open items)
+
+From a pass over all seven schematics, checked against the firmware. Nothing
+here is a short or a crossed power rail — no net on any board carries two
+different rail labels. These are the things to settle before the new boards go
+out, roughly in order of how much they hurt.
+
+**Board fix — confirmed**
+
+1. **USB `D+`/`D−` are crossed on the display mainboard.** The USB connector's
+   `D−` (pin 4) goes to the CH224K's `DP` *and* to the "Arduino USB" header's
+   `D+`; `D+` (pin 5) goes to `DM` and to `D−`. The controller board wires the
+   same 3-pin header straight through, so the two boards contradict each other.
+   Confirmed as a genuine error — being fixed in EasyEDA; this export still has
+   it. Re-export once corrected.
+
+**Firmware TODO — next revision, once the new hardware is in hand**
+
+Both of these are deferred deliberately: they are code changes that want the
+real boards on the bench, not schematic changes.
+
+2. **Display voltage dividers disagree with the firmware.** The schematic fits
+   10 k/1.8 k (0.1525) and 10 k/12 k (0.5455); `display/volt_meter.ino` assumes
+   0.1803 and 0.6875, i.e. 2.2 k and 22 k. Left as-is, the battery reads ~21 %
+   low and the 12 V input ~15 % low.
+3. **Nothing ever drives the LCD carrier's backlight.** `BL_PWM` runs from the
+   mainboard's `D8` through the ribbon and the button board to the carrier's
+   FET gate, and no code in `display/` touches `D8`. R5's 100 kΩ holds the gate
+   low, so the panel lights up black. HX8357 modules hard-wire their backlight,
+   which is why this has not bitten yet.
+
+**Marginal / out of spec**
+
+4. **The Transmit Buffer is a level shifter pointed the wrong way.** U5 has
+   `VCC` = `VDD` = 5 V with 3.3 V ESP32 inputs; at `VDD` = 5 V the CD4010B needs
+   `VIH` ≥ 3.5 V. It typically works at room temperature but is not guaranteed.
+   The CD4010 only converts *down* — U2 (Receive) is wired correctly at
+   `VDD` = 5 V, `VCC` = 3.3 V. A 74LVC part or a real NMEA driver is the fix.
+5. **Indicator LEDs with no ballast.** The controller's kill-switch LED sits
+   between +5 V and a saturated 2N2222 (the 1 kΩ is in the *base*), and the
+   display's switch LED runs straight to the TP5100's `LED+`/`STDBY`. Both rely
+   on the switch having an internal resistor.
+6. **Power-switch polarity.** CN2's contacts bridge GND and the TPS61023's `EN`,
+   which Adafruit's MiniBoost pulls high — so closing the switch turns the
+   display *off*. Needs a normally-closed switch, or `EN` pulled down and
+   switched to 5 V.
+
+**Verify against datasheets**
+
+7. **LCD backlight drive.** Three cathodes, each through 51 Ω, anodes on +5 V.
+   That only works if each string is a single ~3.2 V LED; series strings cannot
+   run from 5 V and would need a boost driver. Biggest unknown on the carrier.
+8. **CH224K `CFG1` = 56 kΩ** selects a PD voltage that then lands on the
+   TP5100's input through D2. The TP5100 is a 5–18 V part, so confirm both the
+   CFG table and that more than 5 V is wanted here at all.
+9. **USB-C `CC`.** The controller path terminates one `CC` pin with a single
+   5.1 kΩ; if the receptacle brings out `CC1` and `CC2`, the cable will only
+   work one way up. (The display is fine — the CH224K terminates both.)
+
+**Housekeeping**
+
+10. Ribbon conductors driven at one end and unconnected at the other:
+    controller↔power pins 7 (USB VBUS) and 8 (Garmin alarm) into the controller,
+    14 (Garmin 12 V) likewise, and 17–20 (motor rails) out of it. Running motor
+    drive down the same ribbon as Garmin serial is also an EMI risk.
+11. Neither Nano gets USB `VBUS` — both "Arduino USB" headers carry `D+`/`D−`
+    and ground only.
+12. No decoupling anywhere on the controller (neither CD4010, nor the 5 V rail);
+    the display has only the CH224K's 1 µF. No reverse-polarity or transient
+    protection on any 12 V input, and the masthead board has no fuse; the
+    1N5817s are 20 V parts on a boat rail.
+13. The GPS's `VBat` is unconnected, so it cold-starts every power-up.
+14. `controller/garmin.ino`'s pin comment swaps the names of the Receive and
+    Transmit buffers. The pin numbers are right.
+15. The Display schematic's title block says "Sheet 1/3", but the project
+    exports as a single sheet.

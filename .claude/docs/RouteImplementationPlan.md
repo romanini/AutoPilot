@@ -19,8 +19,8 @@ There are two Claude working environments, and the split is deliberate:
 
 | Machine | Owns | Toolchain present | Builds / tests |
 |---|---|---|---|
-| **Mac** (this repo checkout) | `Arduino/controller/*` firmware **and** the new Python Garmin emulator + test harness | `arduino-cli`, USB-serial to the ESP32, Python | compile + flash controller; **serial** debug over the ESP32 USB-CDC; run emulator over a USB-serial tap at the **Garmin connector (5 V side)** — see §4 |
-| **Navigator** (OrangePi, OpenCPN box) | `opencpn_plugin/autopilot_pi/*` | `flatpak-builder`, a real OpenCPN with the route API + chart picture | build + load the plugin; exercise route create/activate; **all telnet + UDP testing** (`~APTX`/`~APRX`/`~APDAT`, telnet `g` inject) — it is the SoberPilot Wi-Fi client |
+| **Mac** (this repo checkout) | `firmware/Arduino/controller/*` firmware **and** the new Python Garmin emulator + test harness | `arduino-cli`, USB-serial to the ESP32, Python | compile + flash controller; **serial** debug over the ESP32 USB-CDC; run emulator over a USB-serial tap at the **Garmin connector (5 V side)** — see §4 |
+| **Navigator** (Raspberry Pi 5, OpenCPN box) | `navigator/opencpn_plugin/autopilot_pi/*` | `flatpak-builder`, a real OpenCPN with the route API + chart picture | build + load the plugin; exercise route create/activate; **all telnet + UDP testing** (`~APTX`/`~APRX`/`~APDAT`, telnet `g` inject) — it is the SoberPilot Wi-Fi client |
 
 > ⚠️ **Network topology (easy to get wrong):** the **Mac is NOT on the SoberPilot
 > Wi-Fi.** Its only links to the controller are (a) the ESP32 **USB-CDC serial**
@@ -32,7 +32,7 @@ There are two Claude working environments, and the split is deliberate:
 > + the FTDI read-back), never over the network.
 
 **Why this matters for the plan:** the controller and the plugin talk only
-through the UDP protocol, and the emulator/plugin/controller all independently
+through the UDP protocol, and the firmware/emulator/plugin/controller all independently
 generate or parse the *same* NMEA. So the **one thing that must be agreed before
 either side writes code is the wire contract in §1.** Both Claude instances
 implement to §1 as the single source of truth. After that, the two tracks
@@ -91,9 +91,9 @@ Append **one** field, `nav_source`, to the end of `~APDAT` (0=NONE, 1=GARMIN,
 
 > ⚠️ **Hard rule (from the autopilot skill):** APDAT is parsed *positionally* in
 > three places. Adding a field means editing **all three in the same change**:
-> - `Arduino/controller/publish.ino` (the `sprintf`)
-> - `opencpn_plugin/.../AutoPilotLink.cpp` `ParsePacket()` + the `AutoPilotState` struct in `AutoPilotLink.h`
-> - `Arduino/display/AutoPilot.cpp::parseAPDAT` (the physical TFT — do not forget it)
+> - `firmware/Arduino/controller/publish.ino` (the `sprintf`)
+> - `navigator/opencpn_plugin/.../AutoPilotLink.cpp` `ParsePacket()` + the `AutoPilotState` struct in `AutoPilotLink.h`
+> - `firmware/Arduino/display/AutoPilot.cpp::parseAPDAT` (the physical TFT — do not forget it)
 >
 > Append at the end so existing field offsets don't shift. This is the one change
 > that touches both machines *and* the display sketch; coordinate it as a single
@@ -103,7 +103,7 @@ Append **one** field, `nav_source`, to the end of `~APDAT` (0=NONE, 1=GARMIN,
 
 ## 2. Controller firmware plan (Mac)
 
-Files: `Arduino/controller/{garmin.ino, subscribe.ino, publish.ino, pid.ino,
+Files: `firmware/Arduino/controller/{garmin.ino, subscribe.ino, publish.ino, pid.ino,
 controller.ino, telnet.ino, AutoPilot.h, AutoPilot.cpp}`.
 
 ### 2.1 Garmin UART: real line assembly + parse (`garmin.ino`)
@@ -196,7 +196,7 @@ relay filter), while the serial console shows `Garmin A:` for *every* line.
 > two-source/liveness/failover skeleton here still applies.
 
 Implement the §7.3 state machine in the controller. Suggested new unit
-`Arduino/controller/navsource.ino` + state on the `AutoPilot` class.
+`firmware/Arduino/controller/navsource.ino` + state on the `AutoPilot` class.
 
 - **Two sources, each with {active, last_update_ms}:**
   - GARMIN: active when RMB status=`A`; updated each RMB; dest = RMB lat/lon.
@@ -263,7 +263,7 @@ regenerate with an XOR of the chars between `$` and `*` if you edit a line.)
 
 ## 3. OpenCPN plugin plan (Navigator)
 
-Files: `opencpn_plugin/autopilot_pi/{src/AutoPilotLink.cpp,
+Files: `navigator/opencpn_plugin/autopilot_pi/{src/AutoPilotLink.cpp,
 include/AutoPilotLink.h, src/AutoPilotPanel.cpp, src/autopilot_pi.cpp}`.
 
 ### 3.1 NMEA serialize / parse (in the plugin, where the route API + debugger live)
@@ -347,7 +347,7 @@ The spike result is recorded as a comment on `AutoPilotLink::SendRoute()` in
 
 ## 4. Python Garmin emulator + test harness (Mac) — ask #3
 
-New top-level dir, e.g. `emulator/` (sibling to `experiments/pid/`). It stands in
+New top-level dir, e.g. `firmware/emulator/` (sibling to `firmware/experiments/pid/`). It stands in
 for a **serial NMEA device**, not an IP endpoint (research §9): it talks to the
 controller over the same 4800-8N1 UART the real 276c uses, via a USB-serial tap at
 the **Garmin connector — the 5 V side, in front of the controller's on-board
@@ -480,4 +480,4 @@ during 1c so it doesn't block later.
 | Route serialize/parse, push button, ingest + de-dup | `autopilot_pi` (`AutoPilotLink`, `AutoPilotPanel`, `autopilot_pi.cpp`) | Nav |
 | OpenCPN active-leg `w` heartbeat + `X` stop | `autopilot_pi` (`SetActiveLegInfo`) | Nav |
 | `nav_source` telemetry | `publish.ino` + plugin `ParsePacket` + display `parseAPDAT` | both + display |
-| Garmin emulator + test scenarios + OpenCPN source stub | `emulator/` | Mac |
+| Garmin emulator + test scenarios + OpenCPN source stub | `firmware/emulator/` | Mac |

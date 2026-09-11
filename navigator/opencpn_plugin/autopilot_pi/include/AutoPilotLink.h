@@ -1,0 +1,203 @@
+#pragma once
+
+#include <wx/wx.h>
+#include <wx/socket.h>
+#include <wx/timer.h>
+#include "ocpn_plugin.h"
+#include <map>
+#include <utility>
+#include <vector>
+
+// Mirrors the ~APDAT field layout from controller/publish.ino.
+// All fields default to zero/false; "connected" is separate.
+struct AutoPilotState {
+    int  year, month, day, hour, minute;
+    bool fix;
+    int  fixquality, satellites;
+    bool nav_enabled;
+    int  mode;             // 0=off, 1=compass-hold, 2=waypoint-navigate
+    bool waypoint_set;
+    double wp_lat, wp_lon;
+    double heading_desired;
+    double heading;
+    double bearing, bearing_correction;
+    double speed, distance, course;
+    double location_lat, location_lon;
+    int    nav_source;  // 0=NONE, 1=GARMIN, 2=OPENCPN (Phase B)
+    // Damped/trust-gated GPS track (controller's gpstracktrim.ino), appended
+    // after autoTuneState (which this plugin has no use for and skips over
+    // during parsing). Only meaningful while cog_damped_valid is true.
+    double cog_damped;
+    bool   cog_damped_valid;
+    // Rudder sensor board (firmware/Arduino/rudder/), relayed by the controller
+    // (controller/rudder.ino) and appended after the damped-track fields on
+    // ~APDAT. rudder_angle is degrees off the AS5600's dead-center calibration
+    // (180 = center, see the autopilot skill's rudder calibration section);
+    // rudder_ok mirrors the controller's isRudderOk() (magnet detected AND
+    // received within its 1s timeout), so a disconnected/powered-off rudder
+    // board reads as "no data" rather than a frozen stale value - same meaning
+    // as display/AutoPilot.cpp's isRudderOk().
+    double rudder_angle;
+    bool   rudder_ok;
+    // Masthead wind sensor board (firmware/Arduino/wind/), relayed by the
+    // controller (controller/wind.ino) and appended after the rudder fields.
+    // Only the display-facing subset is on the wire - the m/s, Beaufort and raw
+    // rev/s forms stay controller-side (see controller/publish.ino).
+    //
+    // Angles are 0-360 clockwise from the bow, speeds are knots. wind_ok is the
+    // controller's isWindOk() (vane magnet detected AND heard from within its
+    // 1s timeout), so a powered-off masthead reads as "no data" instead of a
+    // frozen value - same meaning as display/AutoPilot.cpp's isWindOk().
+    double wind_angle;        // apparent
+    double wind_speed;        // apparent
+    bool   wind_ok;
+    // True wind is computed on the controller (its AutoPilot::getTrueWind())
+    // rather than here, so the plugin and the TFT head units can never disagree
+    // about it. It is derived from SOG, not speed through water - this boat has
+    // no paddlewheel - so it carries current and leeway with it: fine to
+    // display, wrong to treat as polar data. true_wind_ok is the controller's
+    // isTrueWindOk(): wind_ok AND a GPS fix, since without a fix there is no
+    // boat speed to subtract.
+    double true_wind_angle;
+    double true_wind_speed;
+    bool   true_wind_ok;
+    // Separate flag: a dead DS18B20 costs nothing that matters, so it must not
+    // take the wind reading down with it, nor read as a real 0 C.
+    double air_temperature;   // degrees C
+    bool   air_temperature_ok;
+};
+
+class AutoPilotPanel;
+
+class AutoPilotLink : public wxEvtHandler {
+public:
+    explicit AutoPilotLink(AutoPilotPanel* panel);
+    ~AutoPilotLink();
+
+    void SetPanel(AutoPilotPanel* panel) { m_panel = panel; }
+
+    bool Start();
+    void Stop();
+
+    bool IsConnected() const;
+    const AutoPilotState& State() const { return m_state; }
+
+    void SendMode(int mode);
+    void SendAdjust(float degrees);
+    void SendWaypoint(double lat, double lon);
+    void SendStopFollow();   // emits ~APCMD,X$ to clear OPENCPN source immediately
+    // Emits ~APCMD,z$ - relayed by the controller to the rudder sensor board,
+    // which takes a fresh raw reading and persists it as the new dead-center
+    // offset (see the autopilot skill's rudder calibration section, and
+    // controller/subscribe.ino's case 'z'). No ack; the caller confirms via
+    // the next ~APRUD-derived rudder_angle settling near 180.
+    void SendZeroRudder();
+
+    // Wind vane calibration - see the autopilot skill's masthead wind sensor
+    // section for what "v"/"d"/"k" each mean on the wire. All three are
+    // fire-and-forget, same as SendZeroRudder: no ack exists, so the caller
+    // confirms via the next ~APWND-derived reading.
+    //
+    // Emits ~APCMD,v$ - relayed to the wind board, which zeroes the vane at
+    // its current physical position (bench calibration, needs a hand on the
+    // vane aligned to the bow).
+    void SendVaneZero();
+    // Emits ~APCMD,d<±degrees>$ - relayed to the wind board, which nudges the
+    // stored vane offset by this amount. Requests accumulate on the board
+    // side, so repeated taps are the expected usage, not a bug.
+    void SendVaneNudge(float degrees);
+    // Emits ~APCMD,k<slope>,<offset>$ - relayed to the wind board, which
+    // overwrites its speed calibration outright (not incremental, unlike the
+    // vane trim above).
+    void SendWindSpeedCal(float slope, float offset);
+
+    // §1c — wrap a single NMEA sentence as ~APTX and unicast to controller
+    void SendNmea(const wxString& nmea_line);
+
+    // §1c — serialize route → WPL+RTE → SendNmea each line.
+    // short_id is the route identifier embedded in the RTE sentence (≤6 chars).
+    //
+    // §3.3 route-activation spike result (confirmed in ocpn_plugin.h):
+    //   HostApi121::ActivateRoutePI(wxString guid, bool activate) is the supported
+    //   call.  GetHostApi() returns an owning unique_ptr<HostApi> by value, so
+    //   keep it alive in a named local — the temporary is destroyed at the
+    //   semicolon if you call .get() inline, leaving a dangling pointer:
+    //     auto host = GetHostApi();                           // owns HostApi for this scope
+    //     auto* api = dynamic_cast<HostApi121*>(host.get()); // valid as long as host lives
+    //     if (api) api->ActivateRoutePI(guid, true);
+    //   Also available: api->IsRouteActive(guid) to guard against re-activation.
+    //   De-dup logic (step 5) calls this from FlushInboundRoute() after matching
+    //   the received route to an existing one.
+    void SendRoute(const PlugIn_Route* route, const wxString& short_id = "OCPN01");
+
+private:
+    void OnTimer(wxTimerEvent& event);
+    void DrainSocket();
+    void ParsePacket(char* data);
+    void ParseApdat(char* data);           // extracted body of old ParsePacket
+    void ParseAprx(const char* nmea_line); // handle ~APRX frame contents
+
+    // Per-sentence-type parsers called from ParseAprx
+    bool ParseWplLine(const char* sentence);
+    bool ParseRteLine(const char* sentence);
+    void ParseRmbLine(const char* sentence);
+
+    // Called when all RTE messages for one route have arrived
+    void FlushInboundRoute();
+
+    void SendCommand(const wxString& cmd);
+
+    static char*  AdvanceField(char* p);
+    static double NormalizeDegrees(double d);
+    static double CourseCorrection(double bearing, double heading);
+    static double GeodesicBearing(double lat1, double lon1, double lat2, double lon2);
+
+    // NMEA helpers (§3.1 serialize path)
+    static unsigned char NmeaXorChecksum(const wxString& body);
+    static wxString      FormatWPL(const wxString& name, double lat, double lon);
+    static wxArrayString FormatRTE(const wxString& id, const wxArrayString& names);
+    static wxString      MakeShortId(const wxString& name, int index);
+
+    // NMEA helpers (§3.1 parse path)
+    static bool VerifyNmeaChecksum(const char* sentence);
+    static void SplitNmeaFields(const char* sentence, std::vector<wxString>& out);
+
+    AutoPilotPanel*    m_panel;
+    wxDatagramSocket*  m_recv_sock;
+    wxDatagramSocket*  m_send_sock;
+    wxTimer            m_timer;
+    AutoPilotState     m_state;
+    wxLongLong         m_last_receive_ms;
+    wxLongLong         m_suppress_until_ms;
+    wxIPV4address      m_controller_addr;
+
+    // Inbound WPL/RTE assembly (§3.1 parse path)
+    struct InboundWpt { wxString name; double lat, lon; };
+    std::map<wxString, InboundWpt>  m_wpl_buffer;  // name → position, from WPL lines
+    std::vector<wxString>            m_rte_order;   // waypoint names in route order, from RTE
+    wxString                         m_rte_id;      // route identifier from RTE field 4
+    int                              m_rte_total;   // total RTE messages expected
+    int                              m_rte_count;   // RTE messages received so far
+    wxString                         m_rmb_dest;    // active dest name from last RMB A sentence
+
+    // Phase C de-dup: sent-route registry (§3.3)
+    struct SentRoute {
+        wxString                              guid;
+        std::vector<std::pair<double,double>> positions;  // lat/lon in decimal degrees
+        wxLongLong                            sent_ms;
+    };
+    std::map<wxString, SentRoute>    m_sent_routes;  // short_id → info recorded at SendRoute time
+
+    // Returns GUID of a local route whose waypoint sequence matches pts within
+    // ROUTE_MATCH_EPSILON, or an empty string if none found.
+    wxString FindMatchingLocalRoute(const std::vector<std::pair<double,double>>& pts) const;
+
+    static const int TIMEOUT_MS        = 10000;
+    static const int POLL_INTERVAL_MS  = 250;
+    static const int RECV_BUF_SIZE     = 512;
+    static const int LOCAL_SUPPRESS_MS = 2000;
+    // Geometry tolerance for inbound WPL position matching (~55 m, well above NMEA ddmm.mmm rounding).
+    static constexpr double ROUTE_MATCH_EPSILON = 5e-4;
+
+    wxDECLARE_EVENT_TABLE();
+};

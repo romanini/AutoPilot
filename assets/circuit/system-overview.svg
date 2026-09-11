@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 770" width="1240" height="770" role="img" aria-label="The units on the SoberPilot network. The controller hosts the SoberPilot access point. Above it, the navigator — a Raspberry Pi 5 running OpenCPN — receives the APDAT telemetry on UDP 8888 and sends APCMD on 8889. Below it, the rudder sensor sends APRUD on UDP 8890 and receives APCMD on 8891, the display receives APDAT on 8888 and sends APCMD on 8889, and the wind sensor sends APWND on UDP 8892 and receives APCMD on 8893.">
+  <defs>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+      .ttl  { font-size: 15px; font-weight: 700; fill: #0f172a; letter-spacing: .5px; }
+      .sub  { font-size: 12.5px; fill: #475569; }
+      .lbl  { font-size: 12px; fill: #475569; }
+      .apt  { font-size: 15px; font-weight: 700; fill: #92400e; letter-spacing: .5px; }
+      .aps  { font-size: 12.5px; fill: #b45309; }
+      .cmd  { font-size: 12px; fill: #c2410c; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .dat  { font-size: 12px; fill: #0369a1; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .cline { stroke: #ea580c; stroke-width: 1.8; fill: none; marker-end: url(#ac); }
+      .dline { stroke: #0369a1; stroke-width: 1.8; fill: none; marker-end: url(#ad); }
+    </style>
+    <marker id="ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#ea580c"/>
+    </marker>
+    <marker id="ad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#0369a1"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1240" height="770" fill="#f8fafc"/>
+  <rect x="0.5" y="0.5" width="1239" height="769" fill="none" stroke="#e2e8f0"/>
+
+  <!-- navigator -->
+  <rect x="490" y="40" width="260" height="110" rx="9" fill="#eef2f7" stroke="#475569" stroke-width="1.8"/>
+  <text class="ttl" x="620" y="80"  text-anchor="middle">NAVIGATOR</text>
+  <text class="sub" x="620" y="106" text-anchor="middle">Raspberry Pi 5 · OpenCPN</text>
+  <text class="sub" x="620" y="128" text-anchor="middle">autopilot_pi plugin</text>
+
+  <!-- controller, with the access point it hosts drawn inside it -->
+  <rect x="330" y="258" width="580" height="146" rx="9" fill="#e8f0fe" stroke="#2563eb" stroke-width="1.8"/>
+  <text class="ttl" x="354" y="312">CONTROLLER</text>
+  <text class="sub" x="354" y="337">Arduino Nano ESP32</text>
+  <text class="sub" x="354" y="359">the autopilot brain</text>
+
+  <rect x="494" y="276" width="252" height="110" rx="10" fill="#fef6e7" stroke="#f59e0b" stroke-width="1.8"/>
+  <text class="apt" x="620" y="312" text-anchor="middle">SoberPilot</text>
+  <text class="aps" x="620" y="336" text-anchor="middle">Wi-Fi access point</text>
+  <text class="aps" x="620" y="358" text-anchor="middle">everything else joins</text>
+
+  <!-- navigator links -->
+  <path class="cline" d="M600,150 V272"/>
+  <path class="dline" d="M640,276 V154"/>
+  <text class="cmd" x="588" y="200" text-anchor="end">UDP 8889 · ~APCMD,…$</text>
+  <text class="dat" x="652" y="200">UDP 8888 · ~APDAT,…$</text>
+
+  <!-- rudder sensor -->
+  <path class="cline" d="M510,386 V440 H200 V560"/>
+  <path class="dline" d="M240,560 V468 H534 V386"/>
+  <text class="cmd" x="355" y="432" text-anchor="middle">UDP 8891 · ~APCMD,z$</text>
+  <text class="dat" x="350" y="492" text-anchor="middle">UDP 8890 · ~APRUD,…$</text>
+
+  <!-- display -->
+  <path class="cline" d="M600,560 V390"/>
+  <path class="dline" d="M624,386 V560"/>
+  <text class="cmd" x="588" y="530" text-anchor="end">UDP 8889 · ~APCMD,…$</text>
+  <text class="dat" x="636" y="530">UDP 8888 · ~APDAT,…$</text>
+
+  <!-- wind sensor -->
+  <path class="cline" d="M724,386 V440 H1040 V560"/>
+  <path class="dline" d="M1000,560 V468 H700 V386"/>
+  <text class="cmd" x="890" y="432" text-anchor="middle">UDP 8893 · ~APCMD,v$ · k$</text>
+  <text class="dat" x="870" y="492" text-anchor="middle">UDP 8892 · ~APWND,…$</text>
+
+  <!-- the stations -->
+  <rect x="90" y="560" width="260" height="110" rx="9" fill="#e7f6ef" stroke="#059669" stroke-width="1.8"/>
+  <text class="ttl" x="220" y="600" text-anchor="middle">RUDDER SENSOR</text>
+  <text class="sub" x="220" y="626" text-anchor="middle">Nano ESP32</text>
+  <text class="sub" x="220" y="648" text-anchor="middle">rudder angle</text>
+
+  <rect x="490" y="560" width="260" height="110" rx="9" fill="#f3ecfe" stroke="#7c3aed" stroke-width="1.8"/>
+  <text class="ttl" x="620" y="600" text-anchor="middle">DISPLAY</text>
+  <text class="sub" x="620" y="626" text-anchor="middle">Nano ESP32</text>
+  <text class="sub" x="620" y="648" text-anchor="middle">cockpit head unit</text>
+
+  <rect x="890" y="560" width="260" height="110" rx="9" fill="#e7f6ef" stroke="#059669" stroke-width="1.8"/>
+  <text class="ttl" x="1020" y="600" text-anchor="middle">WIND SENSOR</text>
+  <text class="sub" x="1020" y="626" text-anchor="middle">Nano ESP32</text>
+  <text class="sub" x="1020" y="648" text-anchor="middle">angle · speed · air temp</text>
+
+  <!-- key -->
+  <path d="M90,716 H136" stroke="#ea580c" stroke-width="1.8" fill="none" marker-end="url(#ac)"/>
+  <text class="lbl" x="148" y="720">UDP Unicast — commands</text>
+  <path d="M450,716 H496" stroke="#0369a1" stroke-width="1.8" fill="none" marker-end="url(#ad)"/>
+  <text class="lbl" x="508" y="720">UDP Broadcast — Data</text>
+</svg>
