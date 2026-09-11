@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=OpenCPN
+Exec=/usr/local/bin/opencpn-autostart.sh
+NoDisplay=true
+X-XFCE-Autostart-Phase=Applications

@@ -1,0 +1,15 @@
+[Unit]
+Description=Gracefully stop OpenCPN before shutdown
+DefaultDependencies=no
+Before=shutdown.target reboot.target halt.target
+Conflicts=shutdown.target reboot.target halt.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/true
+ExecStop=/usr/local/bin/opencpn-graceful-stop.sh
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
