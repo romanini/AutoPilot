@@ -6,12 +6,16 @@
 #define TFT_NVS_NAMESPACE "display"
 #define TFT_NVS_KEY "tft"
 
-// The strap is sampled repeatedly rather than once.  An unstrapped line is
-// held only by the ESP32's weak internal pull-up, so a single read says
-// nothing about margin; the count does.  Measured 16/16 on the carrier and
-// 0/16 on an HX8357 unit, so the threshold has enormous room either side.
-#define STRAP_SAMPLES 16
-#define STRAP_LOW_THRESHOLD 14
+// STRAP_SAMPLES / STRAP_LOW_THRESHOLD now live in tft.h - see the note there.
+
+// What the last detection saw, kept so report_panel() can print it long after
+// the boot-time log line has been lost.  On native USB CDC that is the normal
+// case, not an edge case: nothing written before the host enumerates is ever
+// seen, and setup_screen() runs a couple of seconds before a laptop plugged in
+// at the bench has opened a monitor.
+static TftStrap strap = {TFT_AUTO, TFT_AUTO, 0, 0};
+
+const TftStrap &tft_strap() { return strap; }
 
 const char *tft_name(TftType type) {
   switch (type) {
@@ -38,9 +42,15 @@ TftType detect_tft() {
   uint8_t forced = prefs.getUChar(TFT_NVS_KEY, TFT_AUTO);
   prefs.end();
 
+  strap.stored = TFT_AUTO;
+  strap.lows = 0;
+  strap.samples = 0;
+
   if (forced == TFT_HX8357 || forced == TFT_ST7365) {
     DEBUG_PRINT("Panel: forced by NVS override to ");
     DEBUG_PRINTLN(tft_name((TftType)forced));
+    strap.stored = (TftType)forced;
+    strap.detected = (TftType)forced;
     return (TftType)forced;
   }
 
@@ -56,6 +66,9 @@ TftType detect_tft() {
   pinMode(SPI_MISO, INPUT);
 
   TftType type = (lows >= STRAP_LOW_THRESHOLD) ? TFT_ST7365 : TFT_HX8357;
+  strap.lows = lows;
+  strap.samples = STRAP_SAMPLES;
+  strap.detected = type;
 
   DEBUG_PRINT("Panel: strap ");
   DEBUG_PRINT(lows);

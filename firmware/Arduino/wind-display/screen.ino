@@ -28,6 +28,11 @@ static void draw_text(int16_t left, int16_t top, int16_t w, int16_t h,
                       bool centered);
 static void initialize_displayed_values();
 static void reset_damping();
+#ifndef SETUP_SCREEN_REPLACED
+static void run_test_pattern();
+static void advance_bus_test();
+static void reinit_panel();
+#endif
 
 // Per-panel SPI clock, same values and same reasoning as the display unit: the
 // HX8357 has always run at 24 MHz here, and the ST7365P is held to its
@@ -40,6 +45,28 @@ static constexpr uint32_t ST7365_SPI_HZ_ACTUAL = 15000000;
 // panel - both drivers are Adafruit_SPITFT subclasses.
 Adafruit_SPITFT *tft = nullptr;
 TftType fittedTft = TFT_AUTO;
+
+// Kept for report_panel(). The clock is chosen per panel below, so seeing it
+// echoed back is how you confirm which branch actually ran.
+static uint32_t tftSpiHz = 0;
+static bool backlightOn = false;
+
+// Set from the serial console on the loop task and consumed by display() on
+// the display task. Same rule as the sensor boards' UDP callbacks: the
+// requesting side only ever sets a flag, because the work belongs to whichever
+// task already owns the resource - here, the SPI bus.
+static volatile bool testPatternRequested = false;
+// A count, not a flag: display() consumes one step per tick, and a bool would
+// silently merge keypresses that arrive inside the same 50 ms - so a fast
+// operator (or a script) would see steps vanish rather than advance.
+static volatile uint8_t busTestPending = 0;
+static volatile bool reinitRequested = false;
+
+// True while the bus test owns the pins. display() draws nothing at all in
+// this state - it would be fighting the test for the same GPIOs, and the SPI
+// peripheral is not even attached to them.
+static bool busTestActive = false;
+static uint8_t busTestStep = 0;
 
 // What the screen last painted, so nothing is redrawn unnecessarily.
 static struct {
@@ -92,6 +119,7 @@ void setup_screen() {
     tft = new Adafruit_HX8357(&SPI, TFT_CS, TFT_DC, TFT_RST);
     freq = HX8357_SPI_HZ;
   }
+  tftSpiHz = freq;
 
   tft->begin(freq);
   delay(20);
@@ -106,7 +134,7 @@ void setup_screen() {
   // having on a cockpit unit, but it needs a way to ask for it, and this unit
   // deliberately has no buttons.
   pinMode(TFT_BL, OUTPUT);
-  digitalWrite(TFT_BL, HIGH);
+  set_backlight(true);
 
   // Portrait: 320 wide, 480 tall. This is the one place the wind display
   // differs from the head unit, which runs the same panel at setRotation(1).
@@ -117,6 +145,247 @@ void setup_screen() {
   draw_status_chrome();
   draw_dial_chrome();
 }
+
+// SETUP_SCREEN_REPLACED is defined by the host renderer
+// (firmware/experiments/wind-display-render/main.cpp), which substitutes a
+// framebuffer for the panel. Everything below reaches for tft.h and real GPIO,
+// so it is firmware-only - the renderer strips setup_screen() textually but
+// cannot strip a function that sits outside it.
+#ifndef SETUP_SCREEN_REPLACED
+
+// ---------------------------------------------------------------------------
+// diagnostics
+//
+// A dark panel produces no error anywhere: detection picks a driver, that
+// driver's init sequence goes out over SPI, every call returns, and the sketch
+// carries on drawing a dial nobody can see. So the only way to tell the three
+// causes apart - wrong driver, backlight off, bus not reaching the glass - is
+// to ask for what was decided and then to paint something that uses none of
+// the layout code.
+// ---------------------------------------------------------------------------
+
+void set_backlight(bool on) {
+  backlightOn = on;
+  digitalWrite(TFT_BL, on ? HIGH : LOW);
+}
+
+bool backlight_on() { return backlightOn; }
+
+void report_panel() {
+  const TftStrap &strap = tft_strap();
+
+  DEBUG_PRINTLN("--- Panel ---");
+
+  DEBUG_PRINT("NVS override:   ");
+  if (strap.stored == TFT_AUTO) {
+    DEBUG_PRINTLN("none - detecting from the strap");
+  } else {
+    DEBUG_PRINT(tft_name(strap.stored));
+    DEBUG_PRINTLN(" (forced; '0' clears it)");
+  }
+
+  DEBUG_PRINT("MISO strap D12: ");
+  if (strap.samples == 0) {
+    DEBUG_PRINTLN("not sampled - the override above short-circuited it");
+  } else {
+    DEBUG_PRINT(strap.lows);
+    DEBUG_PRINT("/");
+    DEBUG_PRINT(strap.samples);
+    DEBUG_PRINT(" low - ");
+    if (strap.lows >= STRAP_LOW_THRESHOLD) {
+      DEBUG_PRINTLN("pulled down, so R10 is present: LCD carrier");
+    } else if (strap.lows > 2) {
+      // Neither cleanly pulled nor cleanly floating. Worth shouting about: it
+      // is the one reading that means the verdict below is a coin toss.
+      DEBUG_PRINTLN("MARGINAL - check R10 (10k) and the MISO joint");
+    } else {
+      DEBUG_PRINTLN("floating, so no R10: HX8357 breakout");
+    }
+  }
+
+  DEBUG_PRINT("Driver:         ");
+  DEBUG_PRINT(tft_name(fittedTft));
+  if (tft == NULL) {
+    DEBUG_PRINTLN(" - NOT CONSTRUCTED, setup_screen() has not run");
+    return;
+  }
+  DEBUG_PRINT(" at ");
+  DEBUG_PRINT(tftSpiHz / 1000000);
+  DEBUG_PRINT(" MHz, ");
+  DEBUG_PRINT(tft->width());
+  DEBUG_PRINT("x");
+  DEBUG_PRINT(tft->height());
+  DEBUG_PRINT(" rotation ");
+  DEBUG_PRINTLN(tft->getRotation());
+
+  DEBUG_PRINT("Backlight D8:   ");
+  DEBUG_PRINTLN(backlightOn ? "on" : "OFF");
+
+  // The carrier reaching the wrong verdict is the failure this whole report
+  // exists for, and it has exactly one cheap test, so say so rather than
+  // leaving it to be worked out with a dark screen in hand.
+  if (fittedTft == TFT_HX8357) {
+    DEBUG_PRINTLN("If this board IS the LCD carrier, press '2' then 'r' to force ST7365P.");
+  }
+}
+
+void request_test_pattern() { testPatternRequested = true; }
+
+// Full-screen flat colours, then a repaint from scratch.
+//
+// This is the one test that separates "the panel never initialised" from "the
+// drawing code is painting something wrong": it touches nothing but
+// fillScreen, so if the glass stays black through it the fault is below the
+// dial entirely - driver, bus or panel - and no amount of reading dial.ino
+// will find it.
+//
+// Runs on the display task, never on the caller's, because it drives SPI and
+// the display task is already on that bus at 20 Hz from the other core.
+static void run_test_pattern() {
+  static const struct {
+    uint16_t color;
+    const char *name;
+  } steps[] = {
+      {COLOR_RED, "red"},     {COLOR_GREEN, "green"}, {COLOR_BLUE, "blue"},
+      {COLOR_WHITE, "white"}, {COLOR_BLACK, "black"},
+  };
+
+  DEBUG_PRINTLN("Test pattern: 5 full-screen fills, ~700 ms each");
+  for (uint8_t i = 0; i < sizeof(steps) / sizeof(steps[0]); i++) {
+    DEBUG_PRINT("  fillScreen ");
+    DEBUG_PRINTLN(steps[i].name);
+    tft->fillScreen(steps[i].color);
+    delay(700);
+  }
+
+  // Every cache now describes pixels that are gone, so this has to be a full
+  // repaint and not just a state change - including the ring, which is drawn
+  // once at boot and would otherwise never come back.
+  initialize_displayed_values();
+  reset_damping();
+  draw_status_chrome();
+  draw_dial_chrome();
+  DEBUG_PRINTLN("Test pattern done");
+}
+
+void request_reinit() { reinitRequested = true; }
+
+// Re-run the panel's bring-up without a reboot.
+//
+// Worth having separately from 'r' because the interesting experiments are
+// physical - reseat the FPC, reflow a joint, re-strap IM - and each one
+// otherwise costs a power cycle and a fresh Wi-Fi join to find out whether it
+// helped. tft->begin() issues SWRESET, so this is a real re-initialisation of
+// the panel and not just a repaint.
+static void reinit_panel() {
+  DEBUG_PRINT("Re-initialising panel: ");
+  DEBUG_PRINTLN(tft_name(fittedTft));
+
+  SPI.begin(SPI_SCLK, SPI_MISO, SPI_MOSI, TFT_CS);
+  tft->begin(tftSpiHz);
+  delay(20);
+  set_backlight(true);
+  tft->setRotation(0);
+  tft->fillScreen(COLOR_BLACK);
+
+  initialize_displayed_values();
+  reset_damping();
+  draw_status_chrome();
+  draw_dial_chrome();
+  DEBUG_PRINTLN("Re-init done");
+}
+
+// ---------------------------------------------------------------------------
+// bus test
+//
+// The panel is write-only in practice - the ST7365P does not drive SDO for the
+// status registers - so no amount of talking to it proves the wires are there.
+// This drives each signal to a static level instead, one at a time, so every
+// net can be metered with a DMM at the JST-XH and again at the FPC while the
+// board is powered. Static, not a square wave: a meter averages a square wave
+// into a meaningless mid-rail number.
+//
+// It is stepped by hand, one keypress per step, because the operator needs
+// both hands and an unhurried probe, not a timer.
+// ---------------------------------------------------------------------------
+
+static const struct {
+  int8_t pin;
+  const char *name;
+  const char *where;
+} BUS_PINS[] = {
+    {TFT_CS, "CS", "U3 pin 3 -> FPC 9"},
+    {TFT_DC, "D/C", "U3 pin 2 -> FPC 11"},
+    {SPI_SCLK, "SCK", "U3 pin 6 -> FPC 10"},
+    {SPI_MOSI, "MOSI", "U3 pin 4 -> FPC 13"},
+    {TFT_BL, "BL_PWM", "U3 pin 1 -> R4 -> Q1 gate"},
+};
+static const uint8_t BUS_PIN_COUNT = sizeof(BUS_PINS) / sizeof(BUS_PINS[0]);
+
+// One step past the last "all" step exits and restores the screen.
+#define BUS_STEP_ALL_HIGH BUS_PIN_COUNT
+#define BUS_STEP_ALL_LOW (BUS_PIN_COUNT + 1)
+#define BUS_STEP_EXIT (BUS_PIN_COUNT + 2)
+
+static void bus_drive(int8_t high_pin, bool all_high, bool all_low) {
+  for (uint8_t i = 0; i < BUS_PIN_COUNT; i++) {
+    bool level = all_high || (!all_low && BUS_PINS[i].pin == high_pin);
+    digitalWrite(BUS_PINS[i].pin, level ? HIGH : LOW);
+  }
+}
+
+void request_bus_test_step() { busTestPending++; }
+
+static void advance_bus_test() {
+  if (!busTestActive) {
+    // The SPI peripheral has SCK/MOSI/MISO claimed; digitalWrite on a pin it
+    // owns does nothing at all, silently. Hand them back first.
+    SPI.end();
+    for (uint8_t i = 0; i < BUS_PIN_COUNT; i++) {
+      pinMode(BUS_PINS[i].pin, OUTPUT);
+      digitalWrite(BUS_PINS[i].pin, LOW);
+    }
+    busTestActive = true;
+    busTestStep = 0;
+    DEBUG_PRINTLN("--- Bus test ---");
+    DEBUG_PRINTLN("One signal HIGH (3.3V) at a time, everything else LOW.");
+    DEBUG_PRINTLN("Meter each at the JST-XH and again at the FPC; 'w' steps on.");
+  } else {
+    busTestStep++;
+  }
+
+  if (busTestStep == BUS_STEP_EXIT) {
+    busTestActive = false;
+    DEBUG_PRINTLN("Bus test finished - restoring the panel");
+    reinit_panel();
+    return;
+  }
+
+  if (busTestStep == BUS_STEP_ALL_HIGH) {
+    bus_drive(-1, true, false);
+    DEBUG_PRINTLN("  ALL HIGH  - every signal above should read 3.3V");
+  } else if (busTestStep == BUS_STEP_ALL_LOW) {
+    bus_drive(-1, false, true);
+    DEBUG_PRINTLN("  ALL LOW   - every signal above should read 0V");
+  } else {
+    bus_drive(BUS_PINS[busTestStep].pin, false, false);
+    DEBUG_PRINT("  HIGH: ");
+    DEBUG_PRINT(BUS_PINS[busTestStep].name);
+    DEBUG_PRINT("  at ");
+    DEBUG_PRINTLN(BUS_PINS[busTestStep].where);
+  }
+
+  // MISO is an input throughout, so it can be watched for free - and it is the
+  // one net already known to be wrong. With the internal pull-up against R10
+  // (10k to GND) a healthy carrier reads LOW here.
+  pinMode(SPI_MISO, INPUT_PULLUP);
+  delay(2);
+  DEBUG_PRINT("    MISO (FPC 14) now reads ");
+  DEBUG_PRINTLN(digitalRead(SPI_MISO) == LOW ? "LOW  (R10 present)"
+                                             : "HIGH (no pull-down seen)");
+}
+
+#endif  // !SETUP_SCREEN_REPLACED
 
 // True if this field now reads differently from what is on the glass, and
 // records the new state as painted.
@@ -454,6 +723,25 @@ static void display_dial(ScreenState state, bool stateChanged,
 // ---------------------------------------------------------------------------
 
 void display() {
+#ifndef SETUP_SCREEN_REPLACED
+  // Every one of these drives SPI, so they run here, on the task that already
+  // owns the bus, rather than on the console's task on the other core.
+  if (busTestPending > 0) {
+    busTestPending--;
+    advance_bus_test();
+  }
+  if (busTestActive) return;  // the test owns the pins; draw nothing
+
+  if (reinitRequested) {
+    reinitRequested = false;
+    reinit_panel();
+  }
+  if (testPatternRequested) {
+    testPatternRequested = false;
+    run_test_pattern();
+  }
+#endif
+
   ScreenState state = current_state();
   bool stateChanged = (state != disp.state);
   if (stateChanged) {

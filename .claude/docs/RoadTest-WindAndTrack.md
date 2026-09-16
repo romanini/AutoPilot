@@ -56,10 +56,21 @@ A sign error in the trim is invisible until the day it steers a boat the wrong w
   about to drive around with a 1.5 m mast. No garages, no drive-thrus, no low
   branches. This kills the "test GPS loss in a parking garage" idea — see W6/T6 for
   the alternative.
-- **Speed ceiling 45 mph.** That is ~39 kn of apparent wind through 3D-printed cups.
-  It is inside the electronics' range (the firmware's sanity limit is 100 rev/s ≈
-  175 kn) but not obviously inside the *plastic's*. Inspect the cups for cracks at
-  each stop.
+- **Speed ceiling 45 mph.** That is ~39 kn of apparent wind, comfortably inside the
+  electronics (the firmware's sanity limit is 100 rev/s ≈ 175 kn) and probably inside
+  the cups too — a masthead unit has to survive a gale to be worth fitting. **The
+  binding limit is the pole and its mount**, not the anemometer: a 1.5 m lever arm
+  with mass on top, in turbulent roof air, with road vibration. That is the failure
+  mode that puts plastic into traffic. Inspect cups and clamps at every stop.
+
+- **⚠ Mount the pole once and leave it.** The vane calibration in §6 measures the
+  *total* alignment error, which includes how the pole sits relative to the van
+  centreline. Remove and refit the pole and that term changes — so a `d` value
+  fitted before a remount is worthless afterwards.
+
+  **This dictates the order of the day:** if you want to run the track test without
+  the pole (see T0), do it **first**, then fit the pole, then do the wind runs.
+  Never the other way round.
 
 **Motor:** confirm the steering motor is **disconnected**. Navigation will be enabled
 during the track test and `motor_control_loop()` drives the H-bridge pins regardless
@@ -152,10 +163,68 @@ apcmd() { echo -n "~APCMD,$1\$" | nc -u -w1 10.20.1.1 8889; }
 
 ## 5. Part 1 — Track test
 
+### T0 · How much road do you need?
+
+**Minutes, not miles.** The outer loop ticks every 10 s
+(`GPS_TRACK_TRIM_PERIOD_MS`), so road length only matters as a way of buying trim
+ticks.
+
+- **T3 (the null) wants 15–20 ticks — 2.5–3.5 minutes.** That is what separates a
+  real bias from COG noise: a systematic drift accumulates linearly while jitter
+  random-walks as √N, so by 10 ticks a 1°/tick bias shows as ~10° against ~2.5° of
+  wander. Under ~10 ticks the two are indistinguishable.
+- **T4 (the sign test) needs 60–90 s.** The van never follows `heading_command`, so
+  the error never closes and Target simply ramps at up to 10° per tick. Three or four
+  consistent steps settle the question.
+
+Distance for a 3-minute leg:
+
+| Speed | Road needed |
+|---|---|
+| 25 mph | 1.25 mi / 2.0 km |
+| 35 mph | 1.75 mi / 2.8 km |
+| 45 mph | 2.25 mi / 3.6 km |
+| 55 mph | 2.75 mi / 4.4 km |
+| 65 mph | 3.25 mi / 5.2 km |
+
+**~2 miles minimum, 3–4 comfortable.** A slower road is easier, not harder.
+
+Three things that matter more than the raw length:
+
+- **Forget the freeway — you don't need it.** 2.5–3.5 minutes of straight, stop-free
+  driving is 1.75 miles at 35 mph. Rural two-lane roads and **frontage roads** have
+  that routinely, and a frontage road is the best fit of all: straight, few stops,
+  and 45 mph is its legal limit rather than a compromise you're making against
+  traffic.
+
+  (If you do want a freeway leg, the pole has to come off first — freeway speed is
+  past the 45 mph mount ceiling in §1. The track test needs no wind head at all, so
+  that is perfectly valid, but see the remount warning in §1 before you plan a day
+  around it.)
+- **Set a waypoint at each end and swap at the turnaround** (T8 does the swapping).
+  Otherwise the return leg is a 180° error and the trim just slams at maximum rate —
+  fine as a T7 rehearsal, useless as a null test.
+- **Straight = heading steady within ~5°, and no stops.** A red light drops COG below
+  the 0.8 kn trust gate and freezes the trim: good for T5, disruptive for T3.
+
+If you want one road for both halves of the day, size it for this test — the wind
+runs in §6 only need ~1.5 km usable each way.
+
 ### T1 · Set the destination (stationary, engine off)
 
-Pick a waypoint **5–15 km down a long straight road you will actually drive**. Google
-Maps → right-click → click the coordinates to copy.
+**The waypoint does not have to be on the road, or reachable.** Put it **10 km out
+along the road's extended centreline** — in a field, across a river, wherever. The
+autopilot has no concept of roads.
+
+Distance is deliberate: bearing sensitivity to your lateral position goes as 1/range.
+At 10 km, sitting 20 m off the line moves the bearing 0.1°; at 1 km the same 20 m
+moves it 1.1°. A far waypoint is what makes the T3 null clean instead of noisy.
+
+In Google Maps: right-click → *Measure distance*, click along the road and keep
+extending past the end, then right-click the far point to copy its coordinates.
+
+Set up **two** waypoints while you are here — one on the extended centreline (T3) and
+one 15–20° off it (T4) — and swap between passes with `w`.
 
 ```
 telnet 10.20.1.1
@@ -203,9 +272,14 @@ bias — the thing this test exists to catch.
 
 ### T4 · The sign test ★★ the most valuable thing you can do today
 
-Now drive a road that runs at a **clear angle** to the waypoint — 30–60° off is ideal.
+Now drive with the waypoint at a **clear angle** to the road — **15–20° off the road's
+bearing.**
 
-Every 10 s the outer loop applies `0.4 × error`, clamped to 10°.
+That number is chosen, not arbitrary. Every 10 s the outer loop applies
+`0.4 × error`, clamped to 10°, so beyond about **25°** of error the trim is *always*
+clamped and you only ever measure the clamp. At 20° you get 8° per tick — safely
+unclamped — which tests the sign **and** the gain. (Set up a second waypoint 45° off
+if you also want to confirm the clamp, but treat it as a separate check.)
 
 **Watch the display's Target between ticks:**
 
@@ -275,16 +349,27 @@ concentrate on while driving.
 
 Drive this, logging continuously. Nothing to type, nothing to mark.
 
-| Leg | Speed | Duration |
-|---|---|---|
-| 1 | 15 mph | 60 s steady |
-| 2 | 15 mph, **reciprocal** | 60 s steady |
-| 3 | 25 mph | 60 s |
-| 4 | 25 mph reciprocal | 60 s |
-| 5 | 35 mph | 60 s |
-| 6 | 35 mph reciprocal | 60 s |
-| 7 | 45 mph | 60 s |
-| 8 | 45 mph reciprocal | 60 s |
+On a road of about 2.5 miles or more, drive an **ascending speed ladder** in one pass
+and take all four speeds at once — then repeat it in the opposite direction. Two
+passes, ~5 minutes each, four reciprocal pairs:
+
+| Segment | Distance |
+|---|---|
+| accelerate to 15 | 20 m |
+| **60 s @ 15 mph** | 402 m |
+| → 25 | 54 m |
+| **60 s @ 25 mph** | 671 m |
+| → 35 | 80 m |
+| **60 s @ 35 mph** | 939 m |
+| → 45 | 125 m |
+| **60 s @ 45 mph** | 1207 m |
+| **total** | **3498 m = 2.17 mi** |
+
+No need to stop between speeds: each acceleration blows past the detector's 0.8 kn
+spread tolerance, so the plateaus separate themselves.
+
+On a shorter road, split it — 15+25 on one pass each way, 35+45 on another — or drop
+to one speed per leg (8 passes).
 
 **Every speed must be driven in both directions.** Reciprocal pairs are what cancel
 the ambient wind — it deflects the vane one way on the outbound leg and the other way

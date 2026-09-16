@@ -38,13 +38,20 @@
 #define SPI_MOSI D11
 #define SPI_SCLK D13
 
-// TODO (next hardware rev): D8 is BL_PWM - it runs through the button board's
-// 2x10 ribbon to the LCD carrier's backlight FET gate (circuit/Display-LCD/).
-// Nothing drives it yet, and the carrier's 100k pull-down holds the gate low,
-// so an ST7365P panel comes up backlit-off. Drive it (ledcAttach + ledcWrite
-// for dimming, or just digitalWrite HIGH) once the carrier is on the bench.
-// HX8357 modules are unaffected - their backlight is hard-wired on.
-// #define TFT_BL D8
+// D8 is BL_PWM - it runs through the button board's 2x10 ribbon to the LCD
+// carrier's backlight FET gate (circuit/Display-LCD/). The carrier's 100k
+// pull-down (R5) holds that gate low, so an ST7365P panel comes up backlit-OFF
+// unless something drives this pin; setup_backlight() in screen.ino does.
+//
+// Driven as PWM rather than a plain digitalWrite, because this unit has the
+// AUX button and can therefore offer night dimming - which is the thing the
+// wind display's copy of this file notes it cannot do, having no buttons.
+//
+// HX8357 modules are unaffected either way: their backlight is hard-wired on,
+// so on those units the AUX button is inert. That is not worth special-casing
+// on fittedTft - driving D8 is harmless there, and the alternative is a button
+// whose behaviour depends on which panel is fitted.
+#define TFT_BL D8
 
 // Values are deliberately non-zero so 0 can mean "not set" in NVS.
 enum TftType {

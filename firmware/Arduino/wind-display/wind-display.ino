@@ -90,7 +90,100 @@ void setup() {
 #endif
 }
 
+// ---------------------------------------------------------------------------
+// serial console
+//
+// This unit has no buttons and no telnet, so USB is the only way to ask it
+// anything. Everything here is about the panel, because the panel is the one
+// part of this sketch that can fail completely silently: detection picks a
+// driver, the init sequence goes out over SPI, every call returns, and the
+// dial is drawn perfectly onto glass that never lights up. The log looks
+// healthy throughout.
+//
+// Anything that touches SPI is handed to the display task as a flag rather
+// than run from here - this runs on the loop task, on the other core, and two
+// tasks driving one bus corrupts both. Same rule as the sensor boards' UDP
+// callbacks.
+// ---------------------------------------------------------------------------
+
+static void print_console_help() {
+  DEBUG_PRINTLN("--- Console ---");
+  DEBUG_PRINTLN("  p  panel report");
+  DEBUG_PRINTLN("  t  full-screen colour test (red/green/blue/white/black)");
+  DEBUG_PRINTLN("  b  toggle backlight (D8)");
+  DEBUG_PRINTLN("  w  bus test - step one signal HIGH at a time, for a DMM");
+  DEBUG_PRINTLN("  i  re-initialise the panel (after reseating anything)");
+  DEBUG_PRINTLN("  0  clear panel override, go back to the strap");
+  DEBUG_PRINTLN("  1  force HX8357      (takes effect on reboot)");
+  DEBUG_PRINTLN("  2  force ST7365P     (takes effect on reboot)");
+  DEBUG_PRINTLN("  r  reboot");
+}
+
+static void handle_console(char c) {
+  switch (c) {
+    case 'p':
+      report_panel();
+      break;
+    case 't':
+      // Deferred to the display task - see the note above.
+      request_test_pattern();
+      break;
+    case 'w':
+      request_bus_test_step();
+      break;
+    case 'i':
+      request_reinit();
+      break;
+    case 'b':
+      set_backlight(!backlight_on());
+      DEBUG_PRINT("Backlight: ");
+      DEBUG_PRINTLN(backlight_on() ? "on" : "off");
+      break;
+    case '0':
+    case '1':
+    case '2':
+      // The panel is constructed once in setup(), so the override cannot take
+      // effect until the next boot - say so rather than leaving the operator
+      // watching an unchanged screen and concluding the override is broken.
+      set_tft_override((TftType)(c - '0'));
+      DEBUG_PRINTLN("Stored. Press 'r' to reboot and apply it.");
+      break;
+    case 'r':
+      DEBUG_PRINTLN("Rebooting...");
+      delay(50);  // let the line above reach the host before USB drops
+      ESP.restart();
+      break;
+    case '?':
+    case 'h':
+      print_console_help();
+      break;
+    default:
+      break;  // newlines and stray bytes from the terminal
+  }
+}
+
 void loop() {
+  // The panel report is printed from here, on a fresh USB connection, and not
+  // only from setup(). On native USB CDC nothing written before the host
+  // enumerates is ever seen - which is why the boot log at the bench starts
+  // part-way through the Wi-Fi join, with setup_screen()'s detection line
+  // already gone. Reprinting it whenever a monitor opens puts it in front of
+  // whoever just went looking for it.
+  static bool serialWasConnected = false;
+  bool serialIsConnected = (bool)Serial;
+  if (serialIsConnected && !serialWasConnected) {
+    delay(200);  // let the terminal finish opening the port
+    DEBUG_PRINTLN();
+    report_panel();
+    print_console_help();
+  }
+  serialWasConnected = serialIsConnected;
+
+  while (Serial.available() > 0) {
+    handle_console((char)Serial.read());
+  }
+
+  delay(10);
 }
 
 // 10 Hz is far faster than the 1 Hz telemetry, and all three reasons matter:

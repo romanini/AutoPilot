@@ -9,18 +9,13 @@
 #define ADJUSTMENT_AMOUNT_TACK 90.0
 #define TACK_REQUEST_TIMEOUT 30000
 
-// Hold MODE for this long while navigation is disabled to arm relay
-// auto-tune (autotune.ino); release before AUTOTUNE_READY_TIMEOUT to start it
-// with the enable/disable button, same pattern as TACK above.
-#define AUTOTUNE_ARM_HOLD_TIME 5000
-#define AUTOTUNE_READY_TIMEOUT 30000
-
 #define PORT_ADJUST_BUTTON_PIN D3
 #define STARBORD_ADJUST_BUTTON_PIN D2
-// D4 used to be the navigation enable/disable button. Navigation is now set
-// only by the motor-enable switch on the controller (controller/motorenable.ino),
-// so this button no longer touches it and is free to be repurposed (screen
-// backlight). It still carries auto-tune start/abort - see its case below.
+// D4 was the navigation enable/disable button, then briefly auto-tune
+// start/abort. Navigation moved to the controller's motor-enable switch
+// (controller/motorenable.ino) and auto-tune moved to the OpenCPN Settings
+// dialog, so this button is now the screen backlight and nothing else:
+// click cycles brightness, hold toggles it off and on (screen.ino).
 #define AUX_BUTTON_PIN D4
 #define MODE_BUTTON_PIN D5
 #define TACK_BUTTON_PIN D6
@@ -45,7 +40,6 @@ bool button_pressed_states[num_buttons];
 
 bool beep_short_triggered[num_buttons];
 bool beep_long_triggered[num_buttons];
-bool autotune_armed_triggered[num_buttons];  // has the 5s arm-hold beep already fired for this press?
 
 void setup_button() {
   for (int pin = 0; pin < num_buttons; pin++) {
@@ -54,7 +48,6 @@ void setup_button() {
     button_pressed_states[pin] = false;
     beep_short_triggered[pin] = false;
     beep_long_triggered[pin] = false;
-    autotune_armed_triggered[pin] = false;
   }
 
   pinMode(BEEP_PIN, OUTPUT);
@@ -90,22 +83,13 @@ void update_tack() {
   }
 }
 
-// Local (display-side) copy of the "ready" arm timeout - the controller runs
-// its own independent watchdog (autotune_check_ready_timeout in autotune.ino)
-// in case this packet never arrives, but we don't wait to hear back before
-// reverting the display's own optimistic state, same as every other command.
-void update_autotune_ready() {
-  unsigned long currentTime = millis();
-  unsigned long readyAt = autoPilot.getAutoTuneReadyAt();
-  if (autoPilot.getAutoTuneState() == 1 && readyAt > 0 && currentTime >= readyAt + AUTOTUNE_READY_TIMEOUT) {
-    autoPilot.cancelAutoTune();
-    DEBUG_PRINTLN("Auto-tune ready timed out, reverting");
-  }
-}
-
 void button_pressed(int pin) {
-  // if we are not connected then buttons are useless
-  if (autoPilot.isConnected()) {
+  // AUX is exempt from the connection check on purpose. Every other button
+  // asks the controller for something, so with no link they genuinely are
+  // useless - but the backlight is local to this unit, and a lost link at
+  // night is precisely when you still want to be able to dim or kill the
+  // glare. Handled by falling straight through to the press bookkeeping.
+  if (button_pins[pin] == AUX_BUTTON_PIN || autoPilot.isConnected()) {
     switch (button_pins[pin]) {
       case PORT_ADJUST_BUTTON_PIN:
       case STARBORD_ADJUST_BUTTON_PIN:
@@ -117,10 +101,10 @@ void button_pressed(int pin) {
         }
         break;
       case MODE_BUTTON_PIN:
-        // Normally mode-toggle needs navigation on. The one exception: holding
-        // MODE while disabled (and idle) arms relay auto-tune, so let that
-        // press register too - but not if a tune is already armed/running.
-        if (!autoPilot.isNavigationEnabled() && autoPilot.getAutoTuneState() != 0) {
+        // Mode-toggle needs navigation on. The exception that used to live
+        // here - hold MODE while disabled to arm auto-tune - went with the
+        // rest of auto-tune to the OpenCPN Settings dialog.
+        if (!autoPilot.isNavigationEnabled()) {
           // the button press didn't happen
           return;
         }
@@ -139,7 +123,6 @@ void button_release(int pin) {
   button_pressed_states[pin] = false;
   beep_short_triggered[pin] = false;
   beep_long_triggered[pin] = false;
-  autotune_armed_triggered[pin] = false;
 
   unsigned long press_duration = current_time - button_press_times[pin];
 
@@ -212,34 +195,23 @@ void button_release(int pin) {
         }
       }
       break;
-    case AUX_BUTTON_PIN: {
-      // Auto-tune start/abort only. The navigation enable/disable that used to
-      // live here is gone: that is the controller's motor-enable switch now.
-      // Outside a tune this button currently does nothing - it is the one
-      // reserved for the screen backlight.
-      int atState = autoPilot.getAutoTuneState();
-      if (atState == 2) {
-        // Auto-tuning: this button is the abort switch.
-        DEBUG_PRINTLN("Aborting auto-tune");
-        send_autotune(0);
-      } else if (atState == 1) {
-        // Ready/armed: this button fires the tune.
-        DEBUG_PRINTLN("Starting auto-tune");
-        send_autotune(2);
+    case AUX_BUTTON_PIN:
+      // Backlight, and nothing else. Click cycles brightness, hold toggles.
+      // Both act on release, so the hold beep from
+      // check_button_press_diuration() is what tells the operator the hold has
+      // registered and they can let go.
+      if (press_duration >= BUTTON_HOLD_TIME) {
+        backlight_toggle();
+      } else {
+        backlight_next_level();
       }
       DEBUG_PRINTLN("Aux Button Pressed");
       break;
-    }
     case MODE_BUTTON_PIN:
-      if (!autoPilot.isNavigationEnabled()) {
-        // Disabled: the only thing a MODE press can do here is arm auto-tune,
-        // and only if it was held the full AUTOTUNE_ARM_HOLD_TIME (the beep in
-        // check_button_press_diuration told the operator to release now).
-        if (press_duration >= AUTOTUNE_ARM_HOLD_TIME && autoPilot.getAutoTuneState() == 0) {
-          DEBUG_PRINTLN("Arming auto-tune");
-          send_autotune(1);
-        }
-      } else {
+      // With navigation disabled a MODE press now does nothing at all - it is
+      // already filtered out in button_pressed() above, so this is belt and
+      // braces rather than a second behaviour.
+      if (autoPilot.isNavigationEnabled()) {
         if (autoPilot.getMode() == 1) {
           if (autoPilot.isWaypointSet()) {
             set_mode(2);
@@ -285,7 +257,11 @@ void button_release(int pin) {
 void check_button_press_diuration(int pin) {
   unsigned long press_duration = millis() - button_press_times[pin];
 
-  if (button_pins[pin] == PORT_ADJUST_BUTTON_PIN || button_pins[pin] == STARBORD_ADJUST_BUTTON_PIN) {
+  // AUX joins the adjust buttons here purely for the hold beep: holding it
+  // toggles the backlight, and the whole point of that is a screen you cannot
+  // read afterwards, so the beep is the only confirmation available.
+  if (button_pins[pin] == PORT_ADJUST_BUTTON_PIN || button_pins[pin] == STARBORD_ADJUST_BUTTON_PIN ||
+      button_pins[pin] == AUX_BUTTON_PIN) {
     if (press_duration >= BUTTON_HOLD_TIME && !beep_long_triggered[pin]) {
       DEBUG_PRINT("Button ");
       DEBUG_PRINT(pin);
@@ -298,15 +274,6 @@ void check_button_press_diuration(int pin) {
       // DEBUG_PRINTLN(" Pressed <>");
       // set_beep(BEEP_INTERVAL);
       // beep_short_triggered[pin] = true;
-    }
-  } else if (button_pins[pin] == MODE_BUTTON_PIN && !autoPilot.isNavigationEnabled()) {
-    // Holding MODE for AUTOTUNE_ARM_HOLD_TIME while disabled arms relay
-    // auto-tune - beep once (same as the adjust buttons' hold-to-beep above)
-    // to tell the operator to release now, which is what fires the action.
-    if (press_duration >= AUTOTUNE_ARM_HOLD_TIME && !autotune_armed_triggered[pin]) {
-      DEBUG_PRINTLN("MODE held while disabled - release to arm auto-tune");
-      set_beep(BEEP_HOLD_INTERVAL);
-      autotune_armed_triggered[pin] = true;
     }
   } else {
     if (press_duration >= 25 && !beep_short_triggered[pin]) {
@@ -323,7 +290,6 @@ void check_button_press_diuration(int pin) {
 void check_button() {
   update_beep();
   update_tack();
-  update_autotune_ready();
   for (uint8_t pin = 0; pin < num_buttons; pin++) {
     int buttonState = digitalRead(button_pins[pin]);
 

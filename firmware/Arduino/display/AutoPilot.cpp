@@ -79,7 +79,6 @@ void AutoPilot::init() {
   connected = false;
   tackRequested = 0;
   autoTuneState = 0;
-  autoTuneReadyAt = 0;
   localCommandTime = 0;
   this->unlock();
 }
@@ -521,45 +520,10 @@ int AutoPilot::getAutoTuneState() {
   return value;
 }
 
-unsigned long AutoPilot::getAutoTuneReadyAt() {
-  this->lock();
-  unsigned long value = this->autoTuneReadyAt;
-  this->unlock();
-  return value;
-}
-
-// Optimistic local update (mirrors setMode): applied immediately so the screen
-// reacts on the button press, then suppressed in the parsed telemetry for
-// LOCAL_COMMAND_SUPPRESS_MS so the next APDAT frame (still reflecting the
-// pre-command controller state) doesn't clobber it.
-void AutoPilot::armAutoTune() {
-  this->lock();
-  this->localCommandTime = millis();
-  this->autoTuneState = 1;
-  this->autoTuneReadyAt = millis();
-  this->modeChanged = true;
-  this->destinationChanged = true;
-  this->unlock();
-}
-
-void AutoPilot::startAutoTune() {
-  this->lock();
-  this->localCommandTime = millis();
-  this->autoTuneState = 2;
-  this->modeChanged = true;
-  this->destinationChanged = true;
-  this->unlock();
-}
-
-void AutoPilot::cancelAutoTune() {
-  this->lock();
-  this->localCommandTime = millis();
-  this->autoTuneState = 0;
-  this->autoTuneReadyAt = 0;
-  this->modeChanged = true;
-  this->destinationChanged = true;
-  this->unlock();
-}
+// There is deliberately no armAutoTune/startAutoTune/cancelAutoTune here any
+// more. Those were optimistic local setters for buttons this unit no longer
+// has: auto-tune is commanded from the OpenCPN Settings dialog now, so the
+// display only ever mirrors autoTuneState out of ~APDAT.
 
 void AutoPilot::printAutoPilot() {
   serial->print("Date&Time: ");
@@ -906,11 +870,16 @@ void AutoPilot::parseAPDAT(char *sentence) {
     this->nav_source = 0;
   }
 
-  // autoTuneState (autotune.ino): operator-controlled like mode/navigation, so
-  // it goes through the same suppression window and change-detection. Tolerant
-  // of absence so an older controller (no trailing field) parses as idle.
+  // autoTuneState (autotune.ino): read-only here, and so deliberately OUTSIDE
+  // the suppressLocalFields guard - the same call made for nav_enabled above
+  // and for the same reason. The display can no longer start, arm or abort a
+  // tune (that moved to the OpenCPN Settings dialog), so there is never a
+  // local value worth protecting and the controller's word is always the
+  // current one. Suppressing it would only delay the screen catching up with a
+  // tune somebody else started. Tolerant of absence so an older controller (no
+  // trailing field) parses as idle.
   p = advance_field(p);  // Advance to the next field; NULL if none remain.
-  if (!suppressLocalFields) {
+  {
     int currentAutoTuneState = this->autoTuneState;
     if (!isEmpty(p)) {
       this->autoTuneState = atoi(p);

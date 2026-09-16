@@ -28,9 +28,11 @@ the battery voltage.
 | — | JST-XH 1×3 / 1×5 | USB + power break-outs |
 
 The two voltage dividers are what the firmware's `volt_meter.ino` reads to show
-input and battery voltage on the LCD. **The ratios in that file (0.1803 and
-0.6875, i.e. 2.2 kΩ and 22 kΩ) do not match the resistors on this schematic** —
-see the [review notes](../README.md#review-notes-open-items).
+input and battery voltage on the LCD. It now carries this board's ratios —
+0.1525 (10 kΩ/1.8 kΩ) on v-in and 0.5455 (10 kΩ/12 kΩ) on the battery, with
+correction factors calibrated against a multimeter on 2026-09-13 (1.00487 on
+the battery, 1.01333 on v-in — both under 1.5 %, as expected once the ratios
+match the fitted resistors).
 
 **The display always runs off its battery.** 12 V and USB are *charging* inputs
 only: both feed `V_in` through their Schottky diodes, `V_in` goes to the

@@ -59,19 +59,13 @@ void set_mode(int mode) {
 // so sending one would only produce an optimistic local flicker that the next
 // telemetry frame undoes.
 
-// Relay auto-tune (autotune.ino): 1 = arm ("ready"), 2 = start running, 0 = abort.
-void send_autotune(int state) {
-#ifndef MOCK_SEND
-  sprintf(command, "t%d", state);
-  send_command(command);
-  if (state == 1) {
-    autoPilot.armAutoTune();
-  } else if (state == 2) {
-    autoPilot.startAutoTune();
-  } else {
-    autoPilot.cancelAutoTune();
-  }
-  DEBUG_PRINT("autotune ");
-  DEBUG_PRINTLN(state);
-#endif
-}
+// No send_autotune() here any more either, for the same shape of reason as
+// set_navigation() above: auto-tune is armed, started and aborted from the
+// OpenCPN Settings dialog now. Arming it needed a five-second hold on MODE and
+// starting it needed a second button, which is a lot of ceremony to hang off a
+// five-button head unit for something done once a season on a flat calm day.
+// The display still shows autoTuneState from ~APDAT, so a tune started from
+// OpenCPN is visible here - it just cannot be commanded from here.
+//
+// The controller keeps its 't' verb on both command surfaces; this display is
+// simply no longer one of the things that sends it.

@@ -148,13 +148,14 @@ out, roughly in order of how much they hurt.
 
 **Firmware TODO — next revision, once the new hardware is in hand**
 
-Both of these are deferred deliberately: they are code changes that want the
-real boards on the bench, not schematic changes.
+Deferred deliberately: a code change that wants the real board on the bench,
+not a schematic change.
 
-2. **Display voltage dividers disagree with the firmware.** The schematic fits
-   10 k/1.8 k (0.1525) and 10 k/12 k (0.5455); `display/volt_meter.ino` assumes
-   0.1803 and 0.6875, i.e. 2.2 k and 22 k. Left as-is, the battery reads ~21 %
-   low and the 12 V input ~15 % low.
+2. ~~**Display voltage dividers disagree with the firmware.**~~ **Fixed.**
+   `display/volt_meter.ino` now uses this board's ratios, 0.1525 (10 k/1.8 k)
+   on v-in and 0.5455 (10 k/12 k) on the battery, with correction factors
+   calibrated against a multimeter on 2026-09-13 (1.00487 battery, 1.01333
+   v-in). Closed.
 3. **Nothing ever drives the LCD carrier's backlight.** `BL_PWM` runs from the
    mainboard's `D8` through the ribbon and the button board to the carrier's
    FET gate, and no code in `display/` touches `D8`. R5's 100 kΩ holds the gate

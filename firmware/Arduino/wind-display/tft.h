@@ -11,11 +11,21 @@
  * than at compile time - otherwise every unit needs its own build and the
  * binaries are easy to mix up in the field.
  *
- * Detection is a hardware strap.  R12 (4k7) on the carrier pulls MISO to
+ * Detection is a hardware strap.  R10 (10k) on the carrier pulls MISO to
  * ground; the HX8357 breakout has no such resistor.  Both panels leave SDO
  * high-Z when CS is high (measured with firmware/Arduino/panel_probe), so with the
  * ESP32's internal pull-up enabled the carrier reads LOW and the HX8357 reads
  * HIGH.  The old units therefore need no modification at all.
+ *
+ * That divider is tighter than it looks and it is worth knowing which way it
+ * fails.  The ESP32-S3's internal pull-up is specified only as a range - 45k
+ * typical, but as low as 10k - so R10 holds MISO anywhere from 0.6 V (typical,
+ * comfortably under the 0.825 V VIL) to 1.65 V (worst case, a solid HIGH).  A
+ * carrier therefore mis-reads as an HX8357 rather than the other way round,
+ * and the failure is total: the wrong driver's init sequence leaves the panel
+ * dark with no error anywhere.  If a board with R10 fitted reports HX8357, the
+ * strap is the first suspect, not the panel - report_panel() prints the raw
+ * sample count so it can be told apart from a broken MISO joint.
  *
  * A MADCTL write/readback cross-check was tried and abandoned: the ST7365P
  * does not appear to drive SDO for the status registers, so the check returned
@@ -73,6 +83,35 @@ void set_tft_override(TftType type);
 
 /*! @brief  Human-readable name, for the boot log. */
 const char *tft_name(TftType type);
+
+// The strap is sampled repeatedly rather than once.  An unstrapped line is
+// held only by the ESP32's weak internal pull-up, so a single read says
+// nothing about margin; the count does.  Measured 16/16 on the carrier and
+// 0/16 on an HX8357 unit, so the threshold has enormous room either side.
+//
+// These live here rather than in tft.ino because screen.ino's report_panel()
+// prints against them, and .ino files are concatenated in alphabetical order -
+// screen before tft - so a #define in tft.ino is invisible to it.
+#define STRAP_SAMPLES 16
+#define STRAP_LOW_THRESHOLD 14
+
+/*!
+ * @brief  What detect_tft() actually saw, as opposed to what it concluded.
+ *
+ * The verdict on its own is half an answer when the glass is dark: it cannot
+ * distinguish a healthy strap from a marginal one, nor either of those from an
+ * NVS override left over from a previous experiment.  All three lead to the
+ * same symptom and to completely different fixes.
+ */
+struct TftStrap {
+  TftType stored;   ///< NVS override in force, or TFT_AUTO if none
+  TftType detected; ///< what detect_tft() returned
+  uint8_t lows;     ///< samples that read LOW
+  uint8_t samples;  ///< samples taken; 0 if an override short-circuited them
+};
+
+/*! @brief  The last detect_tft() result.  Meaningful only after it has run. */
+const TftStrap &tft_strap();
 
 // RGB565.  The HX8357_* and ST7365 colour constants are identical values, so
 // the drawing code uses one neutral set and does not care which panel is

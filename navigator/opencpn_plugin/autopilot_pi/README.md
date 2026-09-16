@@ -129,6 +129,10 @@ None of `z`/`v`/`d`/`k` have an ack, so the dialog shows *live readings*
 offset/slope is currently stored on either board — same limitation the rest
 of this project's calibration commands already live with.
 
+**PID auto-tune belongs in this dialog too, and is not built yet** — see
+[Planned work: PID auto-tune controls](#planned-work-pid-auto-tune-controls) at
+the end of this file for the full specification.
+
 ### Optimistic UI
 
 Button presses update the panel **immediately** (before the controller confirms),
@@ -310,3 +314,154 @@ With the Raspberry Pi 5 on the SoberPilot network and the controller running:
     that amount on the next `~APWND`/`~APDAT` tick.
 12. Click **Zero Rudder** with nav disabled — confirm dialog appears; after
     confirming, the rudder-angle readout should settle near 0° (dead-center).
+
+
+---
+
+## Planned work: PID auto-tune controls
+
+**Status: specified, not implemented.** This section is a work order — build it
+in this dialog and test it on the boat.
+
+### Why this is now urgent
+
+Auto-tune used to be driven from the physical display unit: hold **MODE** for
+5 s while navigation was disabled to arm it, then press the **AUX** button to
+start. Both were removed from `firmware/Arduino/display/` when AUX became the
+screen backlight, and `send_autotune()` went with them.
+
+So right now **nothing can start or abort a tune.** Telnet's `pat`
+(`controller/telnet.ino`) arms only — there is no telnet verb for start or
+abort — and this plugin has never had auto-tune at all; it explicitly skips the
+field in `ParseApdat()`. The controller's `t` verb is untouched and fully
+working on the UDP surface (`case 't'` in `controller/subscribe.ino`), so this
+is purely a missing UI, but the capability is unreachable until it exists.
+
+### What the controller actually does
+
+From `controller/autotune.ino`. `autoTuneState` is `0 = idle`, `1 = ready
+(armed)`, `2 = running`, and it is published in `~APDAT`.
+
+| Command | Verb | Accepted only when | Effect |
+|---|---|---|---|
+| Arm | `~APCMD,t1$` | navigation **disabled** AND state `0` | state → `1`, starts a 30 s watchdog |
+| Start | `~APCMD,t2$` | state `1` | state → `2`, captures the current heading as the tune setpoint |
+| Abort | `~APCMD,t0$` | state `1` or `2` | state → `0`, motor stopped |
+
+Every one of these is a **silent no-op** if the transition is not valid from
+the current state — `autotune_try_arm()` and `autotune_try_start()` just return
+`false`. Like every other `~APCMD` there is no ack.
+
+Running, the relay bangs the rudder to a fixed ±10°
+(`AUTOTUNE_RELAY_AMPLITUDE_DEG`) either side of the heading it started at,
+measures the resulting oscillation, and computes new Kp/Ki by Tyreus-Luyben.
+It ends on its own after 6 half-cycles, or aborts at 90 s
+(`AUTOTUNE_MAX_DURATION_MS`) or if the heading strays 60°
+(`AUTOTUNE_ABORT_ERROR_DEG`). On success the new gains are applied and written
+to flash immediately by `set_pid_gains()`.
+
+### The operator flow, including the step that is easy to get wrong
+
+1. Motor-enable switch **OFF** (navigation disabled) — arming is refused otherwise.
+2. **Arm.** State → `1`. A 30 s watchdog (`AUTOTUNE_READY_TIMEOUT_MS`) now runs.
+3. **Flip the motor-enable switch ON.** This is the non-obvious step: that
+   switch is what puts +5 V on `Motor5V` and therefore on the motor
+   (`controller/motorenable.ino`), so with it off the relay has nothing to
+   swing the helm with and the tune would measure a boat that never turns.
+   Arming requires the switch off; *running* requires it on.
+4. **Start**, within the 30 s window. `control_task` (`controller.ino`) hands
+   the wheel to `autotune_loop()` whenever state is `2`, ahead of and instead
+   of the normal navigate path, regardless of navigation state.
+5. It finishes or aborts by itself; **Abort** is available throughout.
+
+**Verify step 3 early in testing.** It follows directly from the code — the
+autotune branch in `control_task` sits before the `navigating` check, and the
+motor is dead without the switch — but this sequence has never actually been
+run, because the display flow it replaces was never exercised on the water
+either. If arming turns out to be refused or the tune to abort when the switch
+is flipped, that is the first thing to re-read.
+
+**Safety note for the end of a tune.** `autotune_finish()` stops the motor and
+sets state back to `0`, after which `control_task` falls straight through to
+the normal navigating branch — and navigation is *enabled* at that point,
+because step 3 turned it on. So the boat resumes autopilot steering to
+`heading_desired` the instant the tune ends, with the brand-new gains. Make
+sure the test is run somewhere that is safe for, and the operator is expecting.
+
+### What to build
+
+**`include/AutoPilotLink.h` / `src/AutoPilotLink.cpp`**
+
+- Add `int autotune_state;` to `AutoPilotState`, next to `nav_source`.
+- In `ParseApdat()`, replace
+  `nextInt();  // autoTuneState — not used by this plugin, skip over`
+  with `s.autotune_state = nextInt();`. Field position is unchanged — this is
+  reading a field that is already on the wire, not adding one.
+- Add `void SendAutoTune(int state);`, implemented as
+  `SendCommand(wxString::Format("t%d", state));` — same one-liner shape as
+  `SendZeroRudder()` and friends.
+
+**Do NOT give `autotune_state` the optimistic-update treatment.** Every other
+command in this plugin updates `m_state` locally and suppresses the field for
+2 s, and that is wrong here: the controller *validates* these transitions and
+silently refuses invalid ones, so an optimistic "ARMED" would be a confident
+lie for two full seconds in exactly the case where the operator most needs the
+truth — with a helm about to swing. Parse it straight through, outside
+`m_suppress_until_ms`, and let the controller's own state drive the UI. This is
+the same call already made for `autoTuneState` in
+`firmware/Arduino/display/AutoPilot.cpp`, for the same reason.
+
+**`include/AutoPilotSettingsDialog.h` / `src/AutoPilotSettingsDialog.cpp`**
+
+A "PID Auto-Tune" section below the wind-speed calibration:
+
+| Widget | Behaviour |
+|---|---|
+| Status text | `Idle` / `ARMED — start within Ns` / `RUNNING…` / `No link` |
+| **Arm** button | Enabled when connected AND `!nav_enabled` AND state `0`. No confirmation — arming alone moves nothing |
+| **Start** button | Enabled when connected AND state `1`. **Confirm** — this is the one that throws the helm ±10° |
+| **Abort** button | Enabled when connected AND state ≠ `0`. No confirmation — never make someone confirm a stop |
+
+Mirror the enable/disable rules on the controller's own guards rather than
+inventing new ones, so a greyed button and a silent no-op can never disagree.
+
+The countdown in the ARMED status is display-only: derive it from a local
+timestamp taken when the state was first seen to go `0` → `1`. **The plugin
+must not expire the arm itself** — `autotune_check_ready_timeout()` on the
+controller owns that, and a second timer here would only create a window where
+the two disagree. Show the count reaching zero and wait for the controller to
+say `0`.
+
+`UpdateFromState()` is already forwarded to this dialog every telemetry tick by
+`AutoPilotPanel`, so no new plumbing is needed for the refresh.
+
+### Testing
+
+Add to the live verification checklist above:
+
+13. Open **Settings** with the motor-enable switch **off**. Auto-tune status
+    reads `Idle`; **Arm** is enabled, **Start** and **Abort** greyed.
+14. Turn the motor-enable switch **on**. **Arm** greys out within ~1 s
+    (arming needs navigation disabled). Turn it back off.
+15. Click **Arm**. Status goes to `ARMED` with a countdown; **Start** enables.
+16. Leave it alone for 30 s. The controller expires the arm — status returns to
+    `Idle` on its own, with no help from the plugin.
+17. **Arm** again, flip the motor-enable switch **on**, then click **Start** and
+    confirm. Status goes to `RUNNING…` and the helm should begin swinging.
+18. Click **Abort** mid-tune — motor stops, status returns to `Idle` within ~1 s.
+19. A full tune (steps 17 without aborting): expect it to end by itself after
+    roughly 3 oscillation periods, and the boat to resume steering immediately
+    on the new gains. Confirm the new Kp/Ki over telnet (`p`).
+
+Steps 17-19 need open water and a hand on the motor-enable switch.
+
+### Adjacent cleanup, optional and separate
+
+`ParseApdat()` currently includes `s.nav_enabled` in its
+`m_suppress_until_ms` block. That looks like a leftover: this plugin has no
+Nav On/Off button and cannot author the field, so there is no local value to
+protect, and suppressing it only adds up to 2 s of lag to the kill-switch
+indicator — the one field the operator most needs promptly. The display sketch
+already parses `nav_enabled` outside its suppression window with exactly that
+reasoning written next to it (`firmware/Arduino/display/AutoPilot.cpp`). Worth
+matching, but it is not part of the auto-tune change and should land on its own.

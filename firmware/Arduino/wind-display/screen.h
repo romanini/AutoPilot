@@ -127,4 +127,15 @@ struct WindReading {
 void setup_screen();
 void display();
 
+// Diagnostics, driven from the serial console in wind-display.ino. This unit
+// has no buttons and no telnet, so the USB port is the only way to ask it
+// anything - and the panel is the one part of it that can fail completely
+// silently, with a dark screen and a perfectly healthy log.
+void report_panel();
+void request_test_pattern();
+void request_bus_test_step();
+void request_reinit();
+void set_backlight(bool on);
+bool backlight_on();
+
 #endif  // WIND_DISPLAY_SCREEN_H

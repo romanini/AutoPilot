@@ -167,10 +167,91 @@ void setup_screen() {
   // reads are capped at 6.6 MHz anyway (TSCYCR 150 ns), so they would have
   // needed a clock change to be attempted at all.
 
+  setup_backlight();
+
   tft->setRotation(1);
   tft->fillScreen(COLOR_BLACK);
   initialize_display();
   initialize_displayed_values();
+}
+
+// ---------------------------------------------------------------------------
+// backlight
+//
+// Driven from the AUX button (button.ino): a click cycles brightness, a hold
+// toggles the backlight off and back on. Local to this unit - it does not
+// touch the controller and keeps working with no link, which is deliberate:
+// losing Wi-Fi is not a reason to lose the ability to see, or to dim, the
+// screen at night.
+//
+// Only the ST7365P carrier responds. HX8357 breakouts hard-wire their
+// backlight on, so on those units the button is simply inert - see tft.h for
+// why that is not special-cased.
+// ---------------------------------------------------------------------------
+
+// LEDC channel 0: nothing else in this sketch uses LEDC (the beeper is a plain
+// digitalWrite), so there is no allocation to coordinate.
+#define BACKLIGHT_LEDC_CHANNEL 0
+
+// 5 kHz, 8-bit. Above the audible range, so no whine out of the carrier's
+// inductance, and far above any flicker the eye or a phone camera will catch.
+#define BACKLIGHT_LEDC_FREQ 5000
+#define BACKLIGHT_LEDC_BITS 8
+
+// The levels a click walks through, brightest first. No "off" step here - that
+// is what the hold is for, and a cycle that passes through darkness makes the
+// button feel broken halfway round.
+static const uint8_t BACKLIGHT_LEVELS[] = {255, 153, 64}; // 100%, 60%, 25%
+static const uint8_t BACKLIGHT_LEVEL_COUNT =
+    sizeof(BACKLIGHT_LEVELS) / sizeof(BACKLIGHT_LEVELS[0]);
+
+static uint8_t backlightLevel = 0;  // index into BACKLIGHT_LEVELS
+static bool backlightIsOn = true;
+
+static void apply_backlight() {
+  ledcWrite(BACKLIGHT_LEDC_CHANNEL,
+            backlightIsOn ? BACKLIGHT_LEVELS[backlightLevel] : 0);
+}
+
+void setup_backlight() {
+  ledcSetup(BACKLIGHT_LEDC_CHANNEL, BACKLIGHT_LEDC_FREQ, BACKLIGHT_LEDC_BITS);
+  ledcAttachPin(TFT_BL, BACKLIGHT_LEDC_CHANNEL);
+  backlightLevel = 0;
+  backlightIsOn = true;
+  apply_backlight();
+  DEBUG_PRINTLN("Backlight on, full");
+}
+
+// A click. Cycles brightness while the backlight is on, and does NOTHING while
+// it is off - only the deliberate hold turns it back on.
+//
+// That asymmetry is the important part, and it is about the panel being
+// transflective. In daylight the screen is perfectly readable with the
+// backlight off, and a lit backlight is invisible in that same light - so a
+// stray click (a sheet, a knee, a sleeve) would switch it on at full
+// brightness with no visible sign at all, and it would sit there drawing
+// current until somebody noticed at dusk. A click that does nothing is the
+// safe failure; the level is left untouched too, so it is exactly where it was
+// when the hold brings it back.
+void backlight_next_level() {
+  if (!backlightIsOn) {
+    DEBUG_PRINTLN("Backlight off - click ignored, hold to turn it on");
+    return;
+  }
+  backlightLevel = (backlightLevel + 1) % BACKLIGHT_LEVEL_COUNT;
+  apply_backlight();
+  DEBUG_PRINT("Backlight level ");
+  DEBUG_PRINTLN(BACKLIGHT_LEVELS[backlightLevel]);
+}
+
+// A hold. Off and back on at the same level, so it works as a blackout for
+// night vision without losing the dimming you set for it - and it is the only
+// way back on, for the reason above.
+void backlight_toggle() {
+  backlightIsOn = !backlightIsOn;
+  apply_backlight();
+  DEBUG_PRINT("Backlight ");
+  DEBUG_PRINTLN(backlightIsOn ? "on" : "off");
 }
 
 // On the dual-core ESP32 the display runs on its own task (Core 0) so we no
